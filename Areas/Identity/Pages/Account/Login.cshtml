@@ -1,0 +1,68 @@
+﻿@page
+@model LoginModel
+@{
+    ViewData["Title"] = "Log in";
+}
+
+<div class="sentinel-auth-wrapper">
+    <div class="sentinel-auth-card">
+        <div class="sentinel-auth-header">
+            <h1 class="sentinel-auth-title">Welcome back</h1>
+            <p class="sentinel-auth-subtitle">
+                Sign in to your Sentinel Manufacturing Suite.
+            </p>
+        </div>
+
+        <form id="account" method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
+
+            <div class="mb-3">
+                <label asp-for="Input.Email" class="form-label sentinel-label"></label>
+                <input asp-for="Input.Email"
+                       class="form-control sentinel-input"
+                       autocomplete="username"
+                       aria-required="true" />
+                <span asp-validation-for="Input.Email" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Input.Password" class="form-label sentinel-label"></label>
+                <input asp-for="Input.Password"
+                       class="form-control sentinel-input"
+                       autocomplete="current-password"
+                       aria-required="true" />
+                <span asp-validation-for="Input.Password" class="text-danger"></span>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="form-check">
+                    <input class="form-check-input" asp-for="Input.RememberMe" />
+                    <label class="form-check-label sentinel-label" asp-for="Input.RememberMe">
+                        @Html.DisplayNameFor(m => m.Input.RememberMe)
+                    </label>
+                </div>
+
+                <a asp-page="./ForgotPassword" class="sentinel-auth-link">
+                    Forgot your password?
+                </a>
+            </div>
+
+            <button id="login-submit"
+                    type="submit"
+                    class="btn btn-sentinel-nav-primary w-100">
+                Log in
+            </button>
+        </form>
+
+        <div class="sentinel-auth-footer mt-4">
+            <span>New to Sentinel?</span>
+            <a asp-page="./Register" asp-route-returnUrl="@Model.ReturnUrl" class="sentinel-auth-link">
+                Register as a new user
+            </a>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

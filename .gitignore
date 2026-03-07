@@ -1,0 +1,27 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build output
+bin/
+obj/
+
+# ASP.NET / logs
+logs/
+*.log
+
+# Rider / ReSharper
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+# Node
+node_modules/
+
+# Publish output
+publish/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,108 @@
+﻿@model SentinelMfgSuite.Web.Models.TierCardViewModel
+
+@{
+    // Base sentinel tier card class (no Bootstrap card classes)
+    var cardClasses = "sentinel-tier glass-card h-100 d-flex flex-column position-relative";
+    if (!string.IsNullOrWhiteSpace(Model.CssModifier))
+    {
+        cardClasses += " " + Model.CssModifier;
+    }
+
+    var priceMonthlyIdAttr = Model.MonthlyPrice.ToString("0");
+
+    // Optional: used for a subtle top glow on primary tier
+    var primaryAttr = Model.Primary ? "true" : "false";
+}
+
+<div class="@cardClasses" data-primary="@primaryAttr">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <span class="sentinel-chip">@Model.TierLabel</span>
+
+        @if (!string.IsNullOrWhiteSpace(Model.TierBadge))
+        {
+            <span class="sentinel-chip sentinel-chip--accent">@Model.TierBadge</span>
+        }
+    </div>
+
+    <h3 class="sentinel-tier-title mb-2">@Model.Title</h3>
+
+    <p class="sentinel-muted mb-3" style="font-size:.95rem;">
+        @Model.Description
+    </p>
+
+    <div class="sentinel-tier-price mb-3">
+        <div class="d-flex align-items-baseline gap-2">
+            <span class="sentinel-price-amount price-monthly" data-price="@priceMonthlyIdAttr">
+                @Model.MonthlyPrice.ToString("$#,0")
+            </span>
+            <span class="sentinel-muted" style="font-size:.9rem;">/ month</span>
+        </div>
+
+        @if (Model.AnnualPrice.HasValue)
+        {
+            <div class="sentinel-muted price-annual d-none" style="font-size:.85rem;">
+                Billed annually at <strong>@Model.AnnualPrice.Value.ToString("$#,0")</strong>
+                <span style="opacity:.85;">(approx. 15% savings)</span>
+            </div>
+        }
+    </div>
+
+    @if (Model.Features?.Any() == true)
+    {
+        <ul class="sentinel-tier-features sentinel-list flex-grow-1 mb-4">
+            @foreach (var feature in Model.Features)
+            {
+                <li>@feature</li>
+            }
+        </ul>
+    }
+    else
+    {
+        <div class="flex-grow-1"></div>
+    }
+
+    @* Button (Sentinel styles) *@
+    @{
+        var btnClass = Model.Primary ? "btn-sentinel-primary w-100" : "btn-sentinel-ghost w-100";
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ButtonRouteTopic))
+    {
+        <a asp-controller="@Model.ButtonController"
+           asp-action="@Model.ButtonAction"
+           asp-route-topic="@Model.ButtonRouteTopic"
+           class="@btnClass">
+            @Model.ButtonText
+        </a>
+    }
+    else
+    {
+        <a asp-controller="@Model.ButtonController"
+           asp-action="@Model.ButtonAction"
+           class="@btnClass">
+            @Model.ButtonText
+        </a>
+    }
+</div>
+
+@* Optional: if you want tier-specific “primary glow” without touching site.css, leave this off and handle in global CSS *@
+<style>
+    /* Keep this tiny; main styling should be in your sentinel CSS bundle */
+    .sentinel-tier-title {
+        font-weight: 750;
+        font-size: 1.35rem;
+        letter-spacing: .01em;
+    }
+
+    .sentinel-price-amount {
+        font-weight: 800;
+        font-size: 2rem;
+        line-height: 1;
+    }
+
+    /* A little extra signal for the “primary” card */
+    .sentinel-tier[data-primary="true"] {
+        border-color: rgba(79,225,255,.55) !important;
+        box-shadow: 0 0 30px rgba(77,184,255,.65) !important;
+    }
+</style>

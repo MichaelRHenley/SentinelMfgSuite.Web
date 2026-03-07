@@ -1,0 +1,772 @@
+﻿@using SentinelMfgSuite.Web.Models
+
+@{
+    ViewData["Title"] = "Tiers & Pricing · Sentinel Manufacturing Suite";
+}
+
+@section Styles {
+    <style>
+        /* Page background (scope via sentinel-main) */
+        body {
+            background: radial-gradient(circle at top left, #131b3a 0, #050713 35%, #050b16 100%);
+            color: #f4f7ff;
+        }
+
+            /* Optional: kill global watermark if you use one site-wide */
+            body::before {
+                content: none !important;
+                display: none !important;
+            }
+
+        /* =========================
+               Sentinel primitives
+               ========================= */
+        .sentinel-section {
+            padding: 3.5rem 0;
+        }
+
+        .sentinel-kicker {
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            font-size: .8rem;
+            font-weight: 650;
+            color: #7ea8ff;
+            margin-bottom: .6rem;
+        }
+
+        .sentinel-hero-title {
+            font-size: clamp(2.2rem, 2.6vw + 1.4rem, 3.2rem);
+            font-weight: 750;
+            line-height: 1.1;
+        }
+
+        .sentinel-hero-sub {
+            color: rgba(219,229,255,.78);
+            font-size: 1.05rem;
+        }
+
+        .sentinel-muted {
+            color: rgba(219,229,255,.70);
+        }
+
+        .tm-mark {
+            font-size: .85em;
+            opacity: .85;
+        }
+
+        .glass-card {
+            background: radial-gradient(circle at top left, rgba(77,184,255,.14), rgba(4,8,26,.92));
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            border: 1px solid rgba(130,189,255,.38);
+            box-shadow: 0 0 28px rgba(36,112,212,.50);
+            backdrop-filter: blur(18px);
+        }
+
+        .glass-card--soft {
+            background: radial-gradient(circle at top left, rgba(24,38,94,.55), rgba(4,9,30,.96));
+            border: 1px solid rgba(133,176,255,.28);
+            box-shadow: 0 0 22px rgba(20,73,185,.40);
+        }
+
+        .glass-label {
+            font-size: .75rem;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: #8fb6ff;
+            margin-bottom: .75rem;
+        }
+
+        .sentinel-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .45rem;
+        }
+
+        .sentinel-chip {
+            padding: .25rem .7rem;
+            border-radius: 999px;
+            background: rgba(11,23,66,.85);
+            border: 1px solid rgba(132,170,255,.55);
+            color: #cdd8ff;
+            font-size: .75rem;
+        }
+
+        .sentinel-chip--accent {
+            background: rgba(7, 40, 58, .65);
+            border-color: rgba(79, 225, 255, .55);
+            color: rgba(196, 246, 255, .95);
+        }
+
+        /* Buttons */
+        .btn-sentinel-primary {
+            border-radius: 999px;
+            padding: .75rem 1.6rem;
+            font-weight: 650;
+            border: none;
+            background: radial-gradient(circle at top left, #4ef0ff 0, #2d8cff 30%, #1742ff 100%);
+            color: #050713;
+            box-shadow: 0 0 18px rgba(77,184,255,.55);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+            .btn-sentinel-primary:hover {
+                filter: brightness(1.05);
+                box-shadow: 0 0 24px rgba(77,184,255,.85);
+                color: #020308;
+            }
+
+        .btn-sentinel-ghost {
+            border-radius: 999px;
+            padding: .75rem 1.45rem;
+            font-weight: 560;
+            border: 1px solid rgba(132,170,255,.55);
+            background: rgba(4,10,32,.55);
+            color: #d3deff;
+            text-decoration: none;
+            backdrop-filter: blur(14px);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+            .btn-sentinel-ghost:hover {
+                background: rgba(12,24,66,.85);
+                color: #fff;
+            }
+
+        /* Billing toggle */
+        .billing-toggle {
+            display: flex;
+            gap: .5rem;
+            align-items: center;
+            justify-content: center;
+            padding: .45rem .55rem;
+            border-radius: 999px;
+            border: 1px solid rgba(132,170,255,.35);
+            background: rgba(4,10,32,.45);
+            backdrop-filter: blur(14px);
+            max-width: fit-content;
+            margin: 1.25rem auto 0;
+        }
+
+            .billing-toggle .label {
+                font-size: .8rem;
+                color: rgba(219,229,255,.7);
+                padding: 0 .25rem;
+            }
+
+            .billing-toggle .toggle-btn {
+                border-radius: 999px;
+                padding: .35rem .8rem;
+                font-size: .85rem;
+                border: 1px solid rgba(132,170,255,.45);
+                background: rgba(11,23,66,.55);
+                color: rgba(219,229,255,.9);
+                cursor: pointer;
+            }
+
+                .billing-toggle .toggle-btn.is-active {
+                    border-color: rgba(79,225,255,.55);
+                    background: radial-gradient(circle at top left, rgba(78,240,255,.35), rgba(45,140,255,.25));
+                    color: #f4f7ff;
+                    box-shadow: 0 0 18px rgba(77,184,255,.35);
+                }
+
+        /* Forms (ROI) */
+        .sentinel-input, .sentinel-select {
+            width: 100%;
+            border-radius: .9rem;
+            border: 1px solid rgba(132,170,255,.28);
+            background: rgba(0,0,0,.28);
+            color: rgba(244,247,255,.95);
+            padding: .55rem .75rem;
+            outline: none;
+        }
+
+            .sentinel-input:focus, .sentinel-select:focus {
+                border-color: rgba(79,225,255,.55);
+                box-shadow: 0 0 0 .18rem rgba(77,184,255,.18);
+            }
+
+        .sentinel-label {
+            font-size: .75rem;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: rgba(219,229,255,.65);
+            margin-bottom: .35rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sentinel-range {
+            width: 100%;
+        }
+
+        /* Included grid */
+        .included-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .col-4 {
+            grid-column: span 4;
+        }
+
+        .col-6 {
+            grid-column: span 6;
+        }
+        @@media (max-width: 992px) {
+            .col-4, .col-6
+
+        {
+            grid-column: span 12;
+        }
+
+        }
+
+        .sentinel-list {
+            margin: .6rem 0 0;
+            padding-left: 1.05rem;
+            color: rgba(219,229,255,.75);
+        }
+
+            .sentinel-list li {
+                margin: .25rem 0;
+            }
+
+        /* FAQ */
+        .faq-item {
+            border-radius: 1.1rem;
+            border: 1px solid rgba(132,170,255,.22);
+            background: rgba(4,10,32,.35);
+            backdrop-filter: blur(14px);
+            overflow: hidden;
+            margin-bottom: .75rem;
+        }
+
+        .faq-btn {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: rgba(244,247,255,.95);
+            padding: 1rem 1rem;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 650;
+        }
+
+        .faq-body {
+            padding: 0 1rem 1rem;
+            color: rgba(219,229,255,.75);
+        }
+    </style>
+}
+
+<main class="sentinel-main">
+
+    <!-- HERO -->
+    <section class="sentinel-section" style="padding-top:4.5rem;">
+        <div class="container-xl">
+            <div class="row align-items-center g-4">
+                <div class="col-lg-7">
+                    <div class="sentinel-kicker">Tiers &amp; Pricing</div>
+                    <h1 class="sentinel-hero-title mb-3">Tiered to grow with your factory.</h1>
+                    <p class="sentinel-hero-sub mb-3">
+                        Start where you are today with EM, production, quality, safety, and AI on a single platform —
+                        then layer in multi-site rollups, deeper integrations, and predictive capabilities as your
+                        digital roadmap matures. No seven-figure “digital transformation” project required.
+                    </p>
+                    <p class="sentinel-muted mb-0">
+                        All tiers include secure cloud hosting, upgrades, and support. You focus on the plant;
+                        Sentinel keeps the platform running.
+                    </p>
+                </div>
+
+                <div class="col-lg-5">
+                    <div class="glass-card h-100">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <img src="~/img/branding/favicon_64.png" alt="Sentinel logo" style="width:28px;height:28px;border-radius:.6rem;" />
+                                <span class="glass-label mb-0">
+                                    Sentinel Manufacturing Suite<span class="tm-mark">™</span>
+                                </span>
+                            </div>
+                            <span class="sentinel-chip sentinel-chip--accent">No long-term contracts</span>
+                        </div>
+
+                        <div style="font-size:1.35rem;font-weight:750;margin-bottom:.6rem;">Predictable pricing. Real ROI.</div>
+                        <ul class="sentinel-list">
+                            <li>Cloud hosting, updates, and security included</li>
+                            <li>Unlimited viewers on all tiers</li>
+                            <li>Role-based access for maintenance, operations, and leadership</li>
+                        </ul>
+
+                        <div class="mt-3">
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="site-conversation" class="btn-sentinel-ghost">
+                                Talk to us about your site
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Billing toggle (UI only; prices show both) -->
+            <div class="billing-toggle">
+                <span class="label">Factory Core billing</span>
+                <button type="button" class="toggle-btn is-active" id="billingToggleMonthly">Monthly</button>
+                <button type="button" class="toggle-btn" id="billingToggleAnnual">Annual (save ~15%)</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- TIERS -->
+    <section class="sentinel-section" style="padding-top:0;">
+        <div class="container-xl">
+
+            @await Html.PartialAsync("_SectionHeader",
+            new SectionHeaderModel
+            {
+                Title = "Tiered to grow with your factory.",
+                Subtitle = "Start where you are today with EM, production, quality, safety, and AI — then add multi-site and predictive capabilities as your roadmap matures."
+            })
+
+            <div class="row g-4 align-items-stretch">
+                <div class="col-md-6 col-xl-4">
+                    @await Html.PartialAsync("_TierCard", new TierCardViewModel
+                                        {
+                        TierLabel = "Tier 1 · Standard",
+                                        Title = "Factory Core",
+                                        Description = "For plants that want EM, production, quality, safety, and AI in one modern hub — without multi-site rollups or advanced predictive layers.",
+                                        MonthlyPrice = 499,
+                                        AnnualPrice = 5085,
+                                        ButtonText = "Start with Standard",
+                                        ButtonController = "Home",
+                                        ButtonAction = "Contact",
+                                        ButtonRouteTopic = "pilot-rollout",
+                                        CssModifier = "glass-card--soft",
+                                        Features = new[]
+                                        {
+                                        "Introductory pricing at $499/month until Tier 2 launches (planned standard price $699/month).",
+                                        "Emergency Maintenance board with live status",
+                                        "Production & downtime tracking for key lines / work centers",
+                                        "Lightweight quality & safety tracking on the same platform",
+                                        "Baseline AI-assisted suggestions and search",
+                                        "Core dashboards for response time, volume, and trends",
+                                        "Email support during business hours"
+                                        }
+                                        })
+                </div>
+
+                <div class="col-md-6 col-xl-4">
+                    @await Html.PartialAsync("_TierCard", new TierCardViewModel
+                                        {
+                        TierLabel = "Tier 2 · Advanced",
+                                        TierBadge = "Coming Spring 2026",
+                                        Title = "Advanced Ops & Performance",
+                                        Description = "For plants that want deeper KPIs, loss breakdowns, and leadership-ready views built on top of the Factory Core.",
+                                        MonthlyPrice = 1999,
+                                        AnnualPrice = 20385,
+                                        ButtonText = "Join the Advanced tier waitlist",
+                                        ButtonController = "Home",
+                                        ButtonAction = "AdvancedWaitlist",
+                                        Primary = true,
+                                        CssModifier = "", // leave blank, and use Model.Primary = true
+                                        Features = new[]
+                                        {
+                                        "Planned availability: Spring 2026",
+                                        "Everything in Factory Core",
+                                        "Production & downtime tracking by line / work center",
+                                        "OEE-style KPIs and detailed loss breakdowns",
+                                        "Integrated EM + PM + production views",
+                                        "Role-based dashboards for ops and leadership",
+                                        "Annual & multi-year agreements only (no month-to-month)",
+                                        "3-year commitment: save ~15% versus annual"
+                                        }
+                                        })
+                </div>
+
+                <div class="col-md-12 col-xl-4">
+                    @await Html.PartialAsync("_TierCard", new TierCardViewModel
+                                        {
+                        TierLabel = "Tier 3 · Premium",
+                                        TierBadge = "Coming Fall 2026",
+                                        Title = "Predictive & Multi-Site",
+                                        Description = "For larger plants or multi-site operations that want predictive insights, customization, and deeper integrations.",
+                                        MonthlyPrice = 5499,
+                                        AnnualPrice = 56085,
+                                        ButtonText = "Talk about the Premium roadmap",
+                                        ButtonController = "Home",
+                                        ButtonAction = "Contact",
+                                        ButtonRouteTopic = "enterprise-multi-site",
+                                        CssModifier = "glass-card--soft",
+                                        Features = new[]
+                                        {
+                                        "Planned availability: Fall 2026",
+                                        "Everything in Advanced",
+                                        "AI-assisted suggestions for fixes and parts",
+                                        "Early-warning / recurrence and risk signals",
+                                        "Multi-site rollups and benchmarking",
+                                        "API / integration options for CMMS, ERP, historian, and MES",
+                                        "Premium support with success reviews",
+                                        "Annual & multi-year agreements only (no month-to-month)",
+                                        "3-year commitment: save ~15% versus annual"
+                                        }
+                                        })
+                </div>
+            </div>
+
+            <p class="sentinel-muted small mt-3 mb-0">
+                Tier 1 · Standard is available today. Advanced and Premium tiers are in active development with planned
+                availability in 2026. All prices are in USD and subject to taxes where applicable. Final pricing may vary
+                based on site complexity, integrations, and deployment scope.
+            </p>
+        </div>
+    </section>
+
+    <!-- ROI -->
+    <section id="roi" class="sentinel-section" style="padding-top:0;">
+        <div class="container-xl">
+            <div class="glass-card">
+                <div class="row g-4 align-items-start">
+                    <div class="col-lg-5">
+                        <div class="glass-label">ROI estimator</div>
+                        <div style="font-size:1.25rem;font-weight:750;margin-bottom:.6rem;">
+                            What is downtime really costing you?
+                        </div>
+                        <p class="sentinel-muted mb-3">
+                            Estimate what an hour of downtime is worth at your site, and how quickly a Sentinel tier could pay for itself.
+                        </p>
+                        <ul class="sentinel-list">
+                            <li>Rough numbers are fine — this is directional.</li>
+                            <li>Adjust expected reduction as you learn more.</li>
+                            <li>We’ll refine the model with you during a live conversation.</li>
+                        </ul>
+                    </div>
+
+                    <div class="col-lg-7">
+                        <div class="included-grid">
+                            <div class="col-6">
+                                <div class="sentinel-label">Downtime hours per month</div>
+                                <input type="number" class="sentinel-input" id="roiHours" min="0" step="1" value="20" />
+                            </div>
+                            <div class="col-6">
+                                <div class="sentinel-label">Cost per hour of downtime (USD)</div>
+                                <input type="number" class="sentinel-input" id="roiCostPerHour" min="0" step="100" value="3000" />
+                            </div>
+
+                            <div class="col-6">
+                                <div class="sentinel-label">
+                                    <span>Expected downtime reduction</span>
+                                    <span id="roiReductionLabel" style="color:#7ea8ff;font-weight:650;">20%</span>
+                                </div>
+                                <input type="range" class="sentinel-range" id="roiReduction" min="5" max="60" step="5" value="20" />
+                            </div>
+
+                            <div class="col-6">
+                                <div class="sentinel-label">Compare against tier</div>
+                                <select id="roiTier" class="sentinel-select">
+                                    <option value="499">Tier 1 · Standard ($499/mo)</option>
+                                    <option value="1999">Tier 2 · Advanced (planned, $1,999/mo equivalent)</option>
+                                    <option value="5499">Tier 3 · Premium (planned, $5,499/mo equivalent)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr style="border-color: rgba(132,170,255,.18); margin: 1.25rem 0;" />
+
+                        <div class="included-grid">
+                            <div class="col-4">
+                                <div class="glass-label">Estimated monthly savings</div>
+                                <div id="roiMonthlySavings" style="font-size:1.35rem;font-weight:750;">$0</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="glass-label">Estimated annual savings</div>
+                                <div id="roiAnnualSavings" style="font-size:1.35rem;font-weight:750;">$0</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="glass-label">12-month ROI vs tier</div>
+                                <div id="roiMultiplier" style="font-size:1.35rem;font-weight:750;">–</div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 small sentinel-muted" id="roiSummaryLine">
+                            Enter your numbers to see a quick payback estimate.
+                        </div>
+
+                        <div class="mt-3 d-flex flex-wrap gap-2">
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="pricing-conversation" class="btn-sentinel-primary">
+                                Share your numbers
+                            </a>
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="site-conversation" class="btn-sentinel-ghost">
+                                Talk to a human
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- INCLUDED -->
+    <section class="sentinel-section" style="padding-top:0;">
+        <div class="container-xl">
+            <div class="glass-card glass-card--soft">
+                <div class="glass-label">Included on every tier</div>
+                <div style="font-size:1.25rem;font-weight:750;margin-bottom:.9rem;">What’s included on every tier</div>
+
+                <div class="included-grid">
+                    <div class="col-4">
+                        <div style="font-weight:700;margin-bottom:.35rem;">Platform &amp; security</div>
+                        <ul class="sentinel-list">
+                            <li>Secure cloud hosting</li>
+                            <li>Automatic updates and new features</li>
+                            <li>Single sign-on options</li>
+                            <li>Environment separation for test / prod</li>
+                        </ul>
+                    </div>
+
+                    <div class="col-4">
+                        <div style="font-weight:700;margin-bottom:.35rem;">Users &amp; access</div>
+                        <ul class="sentinel-list">
+                            <li>Unlimited viewer users</li>
+                            <li>Role-based permissions by team</li>
+                            <li>Mobile-friendly web experience</li>
+                            <li>Audit logs for key actions</li>
+                        </ul>
+                    </div>
+
+                    <div class="col-4">
+                        <div style="font-weight:700;margin-bottom:.35rem;">Support &amp; onboarding</div>
+                        <ul class="sentinel-list">
+                            <li>Guided onboarding call</li>
+                            <li>Configuration of sites, areas, and work centers</li>
+                            <li>Access to best-practice playbooks</li>
+                            <li>Email support &amp; knowledge base</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ + CTA -->
+    <section class="sentinel-section" style="padding-top:0;">
+        <div class="container-xl">
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="glass-label">FAQ</div>
+                    <div style="font-size:1.25rem;font-weight:750;margin-bottom:.9rem;">Pricing questions</div>
+
+                    <div class="faq-item">
+                        <button class="faq-btn" type="button" data-bs-toggle="collapse" data-bs-target="#faqOne" aria-expanded="false">
+                            How long does it take to get live?
+                            <span style="opacity:.75;">+</span>
+                        </button>
+                        <div id="faqOne" class="collapse">
+                            <div class="faq-body">
+                                Most single-site deployments start showing value within a few weeks.
+                                We focus first on EM and maintenance visibility, then layer on production
+                                and AI as your team is ready.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-btn" type="button" data-bs-toggle="collapse" data-bs-target="#faqTwo" aria-expanded="false">
+                            What if we already have a CMMS or MES?
+                            <span style="opacity:.75;">+</span>
+                        </button>
+                        <div id="faqTwo" class="collapse">
+                            <div class="faq-body">
+                                Sentinel is designed to sit alongside systems you already use.
+                                We can pull or push data where it makes sense, but the goal is to give
+                                your teams a unified operational view without ripping anything out.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-btn" type="button" data-bs-toggle="collapse" data-bs-target="#faqThree" aria-expanded="false">
+                            Can we start small and expand later?
+                            <span style="opacity:.75;">+</span>
+                        </button>
+                        <div id="faqThree" class="collapse">
+                            <div class="faq-body">
+                                Yes. Many customers start with a single line or plant on the Standard
+                                tier and expand once they see the impact. We’ll work with you to plan a roadmap
+                                that matches your budget and resources.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-btn" type="button" data-bs-toggle="collapse" data-bs-target="#faqFour" aria-expanded="false">
+                            Do you offer pilots or proof-of-concepts?
+                            <span style="opacity:.75;">+</span>
+                        </button>
+                        <div id="faqFour" class="collapse">
+                            <div class="faq-body">
+                                For qualified sites we can structure a paid pilot focused on a specific
+                                area or problem, with clear success metrics before you roll out more broadly.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-5">
+                    <div class="glass-card h-100">
+                        <div class="glass-label">Next step</div>
+                        <div style="font-size:1.25rem;font-weight:750;margin-bottom:.6rem;">Not sure which tier fits?</div>
+                        <p class="sentinel-muted mb-3">
+                            Share a bit about your site — size, lines, and current tools — and we’ll recommend
+                            a path that makes sense, including expected ROI and rollout options.
+                        </p>
+
+                        <ul class="sentinel-list">
+                            <li>Quick discovery call with someone who knows plants</li>
+                            <li>Live walk-through of the platform</li>
+                            <li>A no-nonsense recommendation on tier and rollout</li>
+                        </ul>
+
+                        <div class="mt-3 d-flex flex-wrap gap-2">
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="pricing-conversation" class="btn-sentinel-primary">
+                                Book a pricing conversation
+                            </a>
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="site-conversation" class="btn-sentinel-ghost">
+                                Talk about your site
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+@section Scripts {
+    <script>
+        (function () {
+            // =========================
+            // Billing toggle
+            // =========================
+            const btnMonthly = document.getElementById('billingToggleMonthly');
+            const btnAnnual = document.getElementById('billingToggleAnnual');
+            const annualEls = document.querySelectorAll('.price-annual');
+            const monthlyEls = document.querySelectorAll('.price-monthly');
+
+            function setActive(btn, active) {
+                if (!btn) return;
+                btn.classList.toggle('is-active', !!active);
+            }
+
+            function showMonthly() {
+                setActive(btnMonthly, true);
+                setActive(btnAnnual, false);
+
+                annualEls.forEach(el => el.classList.add('d-none'));
+                monthlyEls.forEach(el => el.classList.remove('text-success'));
+            }
+
+            function showAnnual() {
+                setActive(btnMonthly, false);
+                setActive(btnAnnual, true);
+
+                annualEls.forEach(el => el.classList.remove('d-none'));
+                monthlyEls.forEach(el => el.classList.add('text-success'));
+            }
+
+            if (btnMonthly && btnAnnual) {
+                btnMonthly.addEventListener('click', showMonthly);
+                btnAnnual.addEventListener('click', showAnnual);
+            }
+            showMonthly();
+
+            // =========================
+            // ROI Calculator
+            // =========================
+            const hoursInput = document.getElementById('roiHours');
+            const costInput = document.getElementById('roiCostPerHour');
+            const reductionInput = document.getElementById('roiReduction');
+            const reductionLabel = document.getElementById('roiReductionLabel');
+            const tierSelect = document.getElementById('roiTier');
+
+            const monthlyOut = document.getElementById('roiMonthlySavings');
+            const annualOut = document.getElementById('roiAnnualSavings');
+            const multiplierOut = document.getElementById('roiMultiplier');
+            const summaryLine = document.getElementById('roiSummaryLine');
+
+            const fmtCurrency = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                maximumFractionDigits: 0
+            });
+
+            const fmtNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
+            function updateReductionLabel() {
+                if (!reductionInput || !reductionLabel) return;
+                reductionLabel.textContent = reductionInput.value + '%';
+            }
+
+            function updateRoi() {
+                if (!hoursInput || !costInput || !reductionInput || !tierSelect) return;
+
+                const hours = Math.max(0, Number(hoursInput.value) || 0);
+                const costPerHour = Math.max(0, Number(costInput.value) || 0);
+                const reductionPct = Math.max(0, Number(reductionInput.value) || 0);
+                const tierPrice = Math.max(0, Number(tierSelect.value) || 0);
+
+                const baselineMonthlyLoss = hours * costPerHour;
+                const monthlySavings = baselineMonthlyLoss * (reductionPct / 100);
+                const annualSavings = monthlySavings * 12;
+
+                if (monthlyOut) monthlyOut.textContent = fmtCurrency.format(monthlySavings || 0);
+                if (annualOut) annualOut.textContent = fmtCurrency.format(annualSavings || 0);
+
+                let multiplierText = '–';
+                if (tierPrice > 0 && annualSavings > 0) {
+                    const roiMultiple = annualSavings / (tierPrice * 12);
+                    multiplierText = roiMultiple < 0.1 ? '<1×' : fmtNumber.format(roiMultiple) + '×';
+                }
+                if (multiplierOut) multiplierOut.textContent = multiplierText;
+
+                if (summaryLine) {
+                    if (monthlySavings > 0 && tierPrice > 0) {
+                        const netPerMonth = monthlySavings - tierPrice;
+                        summaryLine.textContent =
+                            `At these numbers, Sentinel would save about ${fmtCurrency.format(monthlySavings)} per month ` +
+                            `against roughly ${fmtCurrency.format(tierPrice)} in subscription cost — ` +
+                            `around ${fmtCurrency.format(netPerMonth)} net per month before any other benefits.`;
+                    } else {
+                        summaryLine.textContent = 'Enter your numbers to see a quick payback estimate.';
+                    }
+                }
+            }
+
+            if (reductionInput) {
+                reductionInput.addEventListener('input', function () {
+                    updateReductionLabel();
+                    updateRoi();
+                });
+            }
+
+            [hoursInput, costInput, tierSelect].forEach(el => {
+                if (!el) return;
+                el.addEventListener('input', updateRoi);
+                el.addEventListener('change', updateRoi);
+            });
+
+            updateReductionLabel();
+            updateRoi();
+        })();
+    </script>
+}

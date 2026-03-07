@@ -1,0 +1,39 @@
+﻿@model SentinelMfgSuite.Web.Models.CtaStripModel
+
+<section class="sentinel-section">
+    <div class="container-xl">
+        <div class="sentinel-card">
+            <div class="card-body p-4 p-md-5 d-flex flex-column flex-lg-row justify-content-between align-items-start gap-4">
+                <div>
+                    <h2 class="h4 fw-semibold mb-2">
+                        @Model.Title
+                    </h2>
+                    <p class="text-secondary mb-0">
+                        @Model.Body
+                    </p>
+                </div>
+                <div class="text-lg-end mt-3 mt-lg-0">
+                    <a asp-controller="@Model.PrimaryController"
+                       asp-action="@Model.PrimaryAction"
+                       class="btn btn-primary rounded-pill mb-2">
+                        @Model.PrimaryText
+                    </a>
+
+                    @if (!string.IsNullOrWhiteSpace(Model.SecondaryText) &&
+                                        !string.IsNullOrWhiteSpace(Model.SecondaryAction) &&
+                                        !string.IsNullOrWhiteSpace(Model.SecondaryController))
+                    {
+                        <div>
+                            <a asp-controller="@Model.SecondaryController"
+                               asp-action="@Model.SecondaryAction"
+                               class="link-light text-decoration-none small">
+                                @Model.SecondaryText
+                            </a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+

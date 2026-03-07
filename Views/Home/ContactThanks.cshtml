@@ -1,0 +1,34 @@
+﻿@{
+    ViewData["Title"] = "Thank you";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="sentinel-page sentinel-page--contact">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-7">
+
+                <h1 class="h3 fw-semibold mb-3">
+                    Thanks — we’ve received your message
+                </h1>
+
+                <p class="text-secondary mb-4">
+                    We’ll review what you sent and follow up by email. In the meantime,
+                    feel free to keep exploring the platform and tiers.
+                </p>
+
+                <a asp-controller="Home" asp-action="Index"
+                   class="btn-sentinel-primary me-2">
+                    Back to home
+                </a>
+
+                <a asp-controller="Home" asp-action="Platform"
+                   class="btn btn-outline-light mt-3 mt-sm-0">
+                    Review the platform
+                </a>
+
+            </div>
+        </div>
+    </div>
+</div>
+

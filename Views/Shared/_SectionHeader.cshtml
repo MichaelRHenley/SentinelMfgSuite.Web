@@ -1,0 +1,57 @@
+﻿@model SentinelMfgSuite.Web.Models.SectionHeaderModel
+
+@{
+    var containerClass = Model.Centered
+        ? "sentinel-section-header sentinel-section-header--center"
+        : "sentinel-section-header";
+}
+
+<div class="@containerClass">
+    <div class="sentinel-kicker">Sentinel</div>
+
+    <h2 class="sentinel-section-title">@Model.Title</h2>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Subtitle))
+    {
+        <p class="sentinel-section-subtitle mb-0">
+            @Model.Subtitle
+        </p>
+    }
+</div>
+
+<style>
+    .sentinel-section-header {
+        margin: 0 0 1.25rem;
+    }
+
+    .sentinel-section-header--center {
+        text-align: center;
+    }
+
+    .sentinel-section-title {
+        font-weight: 800;
+        letter-spacing: .01em;
+        font-size: clamp(1.6rem, 1.4vw + 1.1rem, 2.1rem);
+        margin: 0 0 .45rem;
+    }
+
+    .sentinel-section-subtitle {
+        color: rgba(219,229,255,.72);
+        max-width: 70ch;
+    }
+
+    .sentinel-section-header--center .sentinel-section-subtitle {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    /* Uses your page-level .sentinel-kicker if defined; this is a fallback */
+    .sentinel-kicker {
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        font-size: .75rem;
+        font-weight: 650;
+        color: #7ea8ff;
+        margin-bottom: .5rem;
+    }
+</style>

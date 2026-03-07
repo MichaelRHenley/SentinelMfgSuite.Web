@@ -1,0 +1,50 @@
+﻿@model SentinelMfgSuite.Web.Models.WebLead
+
+@{
+    ViewData["Title"] = "Lead Details";
+}
+
+<div class="container py-4">
+    <a asp-action="Index" class="btn btn-sm btn-outline-light mb-3">
+        ← Back to Leads
+    </a>
+
+    <div class="card bg-dark border-secondary">
+        <div class="card-header d-flex justify-content-between">
+            <div>
+                <div class="small text-muted">
+                    Lead #@Model.Id · @Model.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                </div>
+                <h1 class="h5 mb-0">
+                    @Model.Name (@Model.Email)
+                </h1>
+            </div>
+            <div class="text-end small text-muted">
+                Topic: @(string.IsNullOrWhiteSpace(Model.Topic) ? "Unknown" : Model.Topic)
+
+            </div>
+        </div>
+
+        <div class="card-body">
+            <dl class="row small mb-0">
+                <dt class="col-sm-2">Company</dt>
+                <dd class="col-sm-10">@Model.Company</dd>
+
+                <dt class="col-sm-2">Role</dt>
+                <dd class="col-sm-10">@Model.Role</dd>
+
+                <dt class="col-sm-2">Message</dt>
+                <dd class="col-sm-10">
+                    <pre class="mb-0 text-light" style="white-space: pre-wrap;">@Model.Message</pre>
+                </dd>
+
+                <dt class="col-sm-2 mt-3">Source</dt>
+                <dd class="col-sm-10 mt-3">
+                    <div>Page: @Model.SourcePage</div>
+                    <div>Referrer: @Model.Referrer</div>
+                    <div>UTM: @Model.UtmSource / @Model.UtmMedium / @Model.UtmCampaign</div>
+                </dd>
+            </dl>
+        </div>
+    </div>
+</div>

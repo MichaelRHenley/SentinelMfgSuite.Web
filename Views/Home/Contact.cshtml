@@ -1,0 +1,190 @@
+﻿@model SentinelMfgSuite.Web.Models.CustomBuildForm
+@{
+    ViewData["Title"] = "Contact";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var topic = Model.Topic ?? "CustomBuild";
+
+    var heading = topic switch
+    {
+        "LaunchList" => "Join the launch list",
+        "PilotRollout" => "Plan a pilot rollout",
+        "SiteConversation" => "Talk to us about your site",
+        "EnterpriseMultiSite" => "Talk about Enterprise & multi-site",
+        "PricingConversation" => "Book a pricing conversation",
+        "AdvancedWaitlist" => "Join the Advanced Tier Waitlist",
+        _ => "Talk about a custom build"
+    };
+
+    var intro = topic switch
+    {
+        "LaunchList" => "Tell us a bit about your plant and where you are on your digital roadmap. We'll send launch updates, early-access details, and pilot opportunities.",
+        "PilotRollout" => "Share where your lines stand today and what a good pilot would look like. We'll map out a realistic, low-risk rollout plan.",
+        "SiteConversation" => "Tell us about your site, your constraints, and what's hurting the most. We'll see how Sentinel can fit your reality.",
+        "EnterpriseMultiSite" => "If you're thinking multi-site or enterprise rollout, give us a sense of your footprint and systems. We'll talk through architecture and phasing.",
+        "PricingConversation" => "Share your footprint and needs so we can talk through the right tier mix, projected costs, and expected ROI.",
+        _ => "If you need something sooner than the public launch — or you want Sentinel tuned to your reality — we can talk about a guided, custom build on the same platform we're productizing."
+    };
+}
+
+<div class="sentinel-page sentinel-page--contact">
+    <div class="sentinel-watermark">
+        <img src="~/img/branding/sentinel emblem trans.png" alt="Sentinel emblem watermark" />
+    </div>
+
+    <div class="container py-5">
+        <div class="row gy-4">
+            <div class="col-lg-7">
+                <h1 class="h3 fw-semibold mb-3">@heading</h1>
+                <p class="text-secondary mb-3">@intro</p>
+
+                <ul class="text-secondary small mb-4">
+                    <li>Emergency maintenance + live responder workflow</li>
+                    <li>Work center dashboards and downtime tracking</li>
+                    <li>Parts &amp; BOM intelligence tied into your systems</li>
+                    <li>Roadmap toward IoT and predictive maintenance</li>
+                </ul>
+
+                @if (ViewBag.SuccessMessage != null)
+                {
+                    <div class="alert alert-success rounded-3 py-2 mb-3">
+                        @ViewBag.SuccessMessage
+                    </div>
+                }
+
+                @{
+                    var notesLabel = topic switch
+                    {
+                        "LaunchList" => "Anything you'd like us to know? (optional but helpful)",
+                        "AdvancedWaitlist" => "Anything you'd like us to know? (optional but helpful)",
+                        "PilotRollout" => "What would a good pilot look like?",
+                        "SiteConversation" => "What's hurting most right now?",
+                        "EnterpriseMultiSite" => "What does your footprint look like today?",
+                        "PricingConversation" => "What should we know about your footprint and budget?",
+                        _ => "What are you hoping to build?"
+                    };
+
+                    var notesPlaceholder = topic switch
+                    {
+                        "LaunchList" => "e.g., 2 plants, discrete manufacturing, EM on radios + spreadsheets today…",
+                        "AdvancedWaitlist" => "e.g., current EM/CMMS setup, lines you'd focus on first, any must-have integrations…",
+                        _ => ""
+                    };
+                }
+
+                <form asp-action="Contact" method="post" id="customBuildForm" novalidate>
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="Topic" />
+
+                    <input type="hidden" asp-for="SourcePage" />
+                    <input type="hidden" asp-for="Referrer" />
+                    <input type="hidden" asp-for="UtmSource" />
+                    <input type="hidden" asp-for="UtmMedium" />
+                    <input type="hidden" asp-for="UtmCampaign" />
+                    <input type="hidden" asp-for="UtmContent" />
+                    <input type="hidden" asp-for="UtmTerm" />
+
+                    <div asp-validation-summary="All" class="text-danger mb-3"></div>
+
+                    <div class="mb-3">
+                        <label asp-for="Name" class="form-label"></label>
+                        <input asp-for="Name" class="form-control" id="Name" />
+                        <span asp-validation-for="Name" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Email" class="form-label"></label>
+                        <input asp-for="Email" class="form-control" id="Email" />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Company" class="form-label"></label>
+                        <input asp-for="Company" class="form-control" id="Company" />
+                        <span asp-validation-for="Company" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="Notes">@notesLabel</label>
+                        <textarea asp-for="Notes" class="form-control" id="Notes" rows="4" placeholder="@notesPlaceholder"></textarea>
+                        <span asp-validation-for="Notes" class="text-danger small"></span>
+                    </div>
+
+                    <button type="submit" id="startConversationBtn" class="btn-sentinel-primary mt-3" disabled>
+                        Start the conversation
+                    </button>
+                </form>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card border-0 rounded-4 bg-dark bg-opacity-75 text-light">
+                    <div class="card-body p-4">
+                        <h2 class="h6 text-uppercase text-secondary mb-3">Direct contact</h2>
+                        <p class="small mb-2">Email: <strong>support@sentinelaisystems.net</strong></p>
+                        <p class="small text-secondary">Tell us a bit about your goals, your current tools, and where downtime is hurting most. We'll follow up with a focused, no-fluff conversation.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/contact.css" asp-append-version="true" />
+}
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+
+   <script>
+(function () {
+    const form = document.getElementById('customBuildForm');
+    const btn = document.getElementById('startConversationBtn');
+    if (!form || !btn) return;
+
+    const fields = [
+        document.getElementById('Name'),
+        document.getElementById('Email'),
+        document.getElementById('Company'),
+        document.getElementById('Notes')
+    ].filter(Boolean);
+
+    function looksLikeEmail(value) {
+        return /\S+@@\S+\.\S+/.test(value); // ✅ single 
+    }
+
+    function updateButtonState() {
+        const allFilled = fields.every(f => f.value.trim().length > 0);
+        const emailField = document.getElementById('Email');
+        const emailOk = emailField ? looksLikeEmail(emailField.value.trim()) : false;
+        btn.disabled = !(allFilled && emailOk);
+    }
+
+    fields.forEach(f => {
+        f.addEventListener('input', updateButtonState);
+        f.addEventListener('blur', updateButtonState);
+    });
+
+    updateButtonState();
+
+    const params = new URLSearchParams(window.location.search);
+    const setVal = (name, value) => {
+        const el = document.querySelector('[name="' + name + '"]');
+        if (el && value) el.value = value;
+    };
+
+    setVal("UtmSource", params.get("utm_source"));
+    setVal("UtmMedium", params.get("utm_medium"));
+    setVal("UtmCampaign", params.get("utm_campaign"));
+    setVal("UtmContent", params.get("utm_content"));
+    setVal("UtmTerm", params.get("utm_term"));
+    setVal("SourcePage", window.location.pathname + window.location.search);
+    setVal("Referrer", document.referrer || "");
+})();
+</script>
+}
+
+
+
+
+

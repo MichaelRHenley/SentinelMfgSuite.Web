@@ -1,0 +1,294 @@
+﻿@{
+    ViewData["Title"] = "Resources · Sentinel Manufacturing Core Suite";
+}
+
+@section Styles {
+    <style>
+        body {
+            background: radial-gradient(circle at top left, #131b3a 0, #050713 35%, #050b16 100%);
+            color: #f4f7ff;
+        }
+
+            body::before {
+                content: none !important;
+                display: none !important;
+            }
+
+        .sentinel-section {
+            padding: 3.5rem 0;
+        }
+
+        .sentinel-kicker {
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            font-size: .8rem;
+            font-weight: 650;
+            color: #7ea8ff;
+            margin-bottom: .6rem;
+        }
+
+        .sentinel-title {
+            font-size: clamp(2rem, 2.2vw + 1.2rem, 2.8rem);
+            font-weight: 750;
+            line-height: 1.12;
+        }
+
+        .sentinel-lead {
+            color: rgba(219,229,255,.78);
+            font-size: 1.05rem;
+        }
+
+        .sentinel-muted {
+            color: rgba(219,229,255,.70);
+        }
+
+        .glass-card {
+            background: radial-gradient(circle at top left, rgba(77,184,255,.14), rgba(4,8,26,.92));
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            border: 1px solid rgba(130,189,255,.35);
+            box-shadow: 0 0 26px rgba(36,112,212,.45);
+            backdrop-filter: blur(18px);
+        }
+
+        .glass-card--soft {
+            background: radial-gradient(circle at top left, rgba(14,20,54,.70), rgba(4,7,22,.96));
+            border: 1px solid rgba(103,146,235,.28);
+            box-shadow: 0 0 20px rgba(20,73,185,.35);
+        }
+
+        .glass-label {
+            font-size: .75rem;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: #8fb6ff;
+            margin-bottom: .75rem;
+        }
+
+        .sentinel-list {
+            margin: .6rem 0 0;
+            padding-left: 1.05rem;
+            color: rgba(219,229,255,.75);
+        }
+
+            .sentinel-list li {
+                margin: .25rem 0;
+            }
+
+        .btn-sentinel-primary {
+            border-radius: 999px;
+            padding: .75rem 1.6rem;
+            font-weight: 650;
+            border: none;
+            color: #050713;
+            text-decoration: none;
+            background: radial-gradient(circle at top left, #4ef0ff 0, #2d8cff 30%, #1742ff 100%);
+            box-shadow: 0 0 18px rgba(77,184,255,.55);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+            .btn-sentinel-primary:hover {
+                filter: brightness(1.05);
+                box-shadow: 0 0 24px rgba(77,184,255,.85);
+                color: #020308;
+            }
+
+        .btn-sentinel-ghost {
+            border-radius: 999px;
+            padding: .75rem 1.45rem;
+            font-weight: 560;
+            border: 1px solid rgba(132,170,255,.55);
+            background: rgba(4,10,32,.55);
+            color: #d3deff;
+            text-decoration: none;
+            backdrop-filter: blur(14px);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+            .btn-sentinel-ghost:hover {
+                background: rgba(12,24,66,.85);
+                color: #fff;
+            }
+
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0,1fr));
+            gap: 1rem;
+        }
+
+        .rcol-3 {
+            grid-column: span 3;
+        }
+        @@media (max-width: 1200px) {
+            .rcol-3
+
+        {
+            grid-column: span 6;
+        }
+
+        }
+        @@media (max-width: 768px) {
+            .rcol-3
+
+        {
+            grid-column: span 12;
+        }
+
+        }
+    </style>
+}
+
+<main class="sentinel-main">
+    <section class="sentinel-section" style="padding-top:4.5rem;">
+        <div class="container-xl">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-7">
+                    <div class="sentinel-kicker">Resources</div>
+                    <h1 class="sentinel-title mb-3">Sentinel resources, powered by the Sentinel Assistant.</h1>
+                    <p class="sentinel-lead mb-3">
+                        Instead of a 200-page manual, Sentinel Manufacturing Core Suite™ gives your team
+                        an AI assistant and a small set of focused playbooks. Ask plain-language questions,
+                        follow short guides, and keep people on the floor instead of hunting for answers.
+                    </p>
+                    <p class="sentinel-muted mb-0">
+                        Use this page to share starting points with new sites and teams. Inside the product,
+                        the Sentinel Assistant can walk users through the same workflows step by step.
+                    </p>
+                </div>
+
+                <div class="col-lg-5">
+                    <div class="glass-card h-100">
+                        <div class="glass-label">Example questions to ask Sentinel</div>
+                        <ul class="sentinel-list">
+                            <li>“How do I add a part to an asset?”</li>
+                            <li>“Show me how to log a new EM from the line.”</li>
+                            <li>“How do I add a new downtime reason for Line 3?”</li>
+                            <li>“Where can I see a summary of this week’s EMs by area?”</li>
+                            <li>“How do I invite a new maintenance tech and set their access?”</li>
+                        </ul>
+                        <p class="sentinel-muted mb-0 mt-3">
+                            As you roll out to more sites, you can extend these Q&amp;A patterns with your own
+                            playbooks, checklists, and best practices.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="sentinel-section" style="padding-top:0;">
+        <div class="container-xl">
+            <div class="resource-grid">
+
+                <div class="rcol-3">
+                    <div class="glass-card glass-card--soft h-100">
+                        <div class="glass-label">In product</div>
+                        <div style="font-size:1.15rem;font-weight:750;margin-bottom:.45rem;">Ask Sentinel</div>
+                        <p class="sentinel-muted mb-2">
+                            The Sentinel Assistant is your in-product help center. Ask “How do I…?” and get step-by-step guidance.
+                        </p>
+                        <ul class="sentinel-list">
+                            <li>Plain-language Q&amp;A for daily tasks</li>
+                            <li>Links to the right screen or dashboard</li>
+                            <li>Context-aware tips based on your model</li>
+                        </ul>
+                        <p class="sentinel-muted mb-0 mt-3">
+                            Inside the app, look for the Sentinel Assistant icon to start a conversation.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="rcol-3">
+                    <div class="glass-card glass-card--soft h-100">
+                        <div class="glass-label">Rollout</div>
+                        <div style="font-size:1.15rem;font-weight:750;margin-bottom:.45rem;">Quick-start guides</div>
+                        <p class="sentinel-muted mb-2">
+                            Short, role-based guides for getting a plant live without a giant project.
+                        </p>
+                        <ul class="sentinel-list">
+                            <li>Operator: logging EMs &amp; downtime</li>
+                            <li>Technician: triage, fixes, and close-out</li>
+                            <li>Supervisor: boards, dashboards, and reports</li>
+                            <li>Admin: sites, areas, lines, and permissions</li>
+                        </ul>
+                        <p class="sentinel-muted mb-0 mt-3">
+                            Share as PDFs or mirror inside the Sentinel Assistant.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="rcol-3">
+                    <div class="glass-card glass-card--soft h-100">
+                        <div class="glass-label">Templates</div>
+                        <div style="font-size:1.15rem;font-weight:750;margin-bottom:.45rem;">Rollout templates</div>
+                        <p class="sentinel-muted mb-2">
+                            Simple templates to help you map the plant and get data flowing cleanly.
+                        </p>
+                        <ul class="sentinel-list">
+                            <li>Site / area / line / asset hierarchy</li>
+                            <li>Downtime reason tree starter</li>
+                            <li>EM categories &amp; routing patterns</li>
+                            <li>PM calendar examples by line or asset</li>
+                        </ul>
+                        <p class="sentinel-muted mb-0 mt-3">
+                            Use them in planning, then let Sentinel keep the structure up to date.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="rcol-3">
+                    <div class="glass-card glass-card--soft h-100">
+                        <div class="glass-label">Technical</div>
+                        <div style="font-size:1.15rem;font-weight:750;margin-bottom:.45rem;">Integration &amp; IT notes</div>
+                        <p class="sentinel-muted mb-2">
+                            For IT and engineering teams that want to understand how Sentinel fits the existing stack.
+                        </p>
+                        <ul class="sentinel-list">
+                            <li>CMMS / ERP / MES integration patterns</li>
+                            <li>Historian / PLC signal options</li>
+                            <li>Data in / data out examples</li>
+                            <li>Security, SSO, environment separation</li>
+                        </ul>
+                        <p class="sentinel-muted mb-0 mt-3">
+                            Deeper technical documentation can be shared privately with your IT contacts.
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section class="sentinel-section" style="padding-top:0;">
+        <div class="container-xl">
+            <div class="glass-card">
+                <div class="row align-items-center g-3">
+                    <div class="col-lg-8">
+                        <div class="glass-label">Next step</div>
+                        <div style="font-size:1.25rem;font-weight:750;margin-bottom:.35rem;">
+                            Get your first site live with confidence.
+                        </div>
+                        <p class="sentinel-muted mb-0">
+                            Use these resources as a shared starting point, then let the Sentinel Assistant handle
+                            “how do I…” questions during real shifts.
+                        </p>
+                    </div>
+                    <div class="col-lg-4 d-flex justify-content-lg-end">
+                        <div class="d-flex flex-wrap gap-2">
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="pilot-rollout" class="btn-sentinel-primary">
+                                Plan a pilot rollout
+                            </a>
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="site-conversation" class="btn-sentinel-ghost">
+                                Talk to us about your site
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>

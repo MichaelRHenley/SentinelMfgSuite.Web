@@ -1,0 +1,699 @@
+﻿@* Views/Home/Index.cshtml — NEW company homepage *@
+@{
+    ViewBag.Title = "Home";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    body {
+        background: radial-gradient(circle at top left, #131b3a 0, #050713 35%, #050b16 100%);
+        color: #f4f7ff;
+    }
+
+        body::before {
+            content: none !important;
+            display: none !important;
+        }
+
+    .sis-page {
+        min-height: 100vh;
+        padding-bottom: 4rem;
+    }
+
+    /* =========================================
+           HERO
+        ========================================= */
+    .sis-hero {
+        padding: 5rem 0 3.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .sis-hero::before {
+            content: "";
+            position: absolute;
+            top: -40px;
+            right: 780px;
+            width: 520px;
+            height: 520px;
+            background-image: url("/img/branding/sentinel emblem trans.png");
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: .07;
+            pointer-events: none;
+            filter: drop-shadow(0 0 18px rgba(0,0,0,.45));
+        }
+
+    .sis-hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+        gap: 3rem;
+        align-items: start;
+        position: relative;
+        z-index: 1;
+    }
+
+    .sis-kicker {
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        font-size: .8rem;
+        font-weight: 600;
+        color: #7ea8ff;
+        margin-bottom: .75rem;
+    }
+
+    .sis-title {
+        font-size: clamp(2.2rem, 3vw + 1.2rem, 3.2rem);
+        font-weight: 700;
+        line-height: 1.08;
+        margin-bottom: 1rem;
+    }
+
+        .sis-title span {
+            background: linear-gradient(120deg, #4ef0ff, #2d8cff, #8f8dff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+    .sis-sub {
+        font-size: 1.05rem;
+        max-width: 44rem;
+        color: #c6d1ff;
+        margin-bottom: 1.5rem;
+    }
+
+    .sis-ctas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .75rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Buttons */
+    .btn-sentinel-primary {
+        border-radius: 999px;
+        padding: .75rem 1.75rem;
+        font-weight: 600;
+        border: none;
+        background: radial-gradient(circle at top left, #4ef0ff 0, #2d8cff 30%, #1742ff 100%);
+        color: #050713;
+        box-shadow: 0 0 18px rgba(77, 184, 255, .65);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-sentinel-primary:hover {
+            filter: brightness(1.05);
+            box-shadow: 0 0 24px rgba(77,184,255,.9);
+            color: #020308;
+        }
+
+    .btn-sentinel-ghost {
+        border-radius: 999px;
+        padding: .75rem 1.6rem;
+        font-weight: 500;
+        border: 1px solid rgba(132,170,255,.6);
+        background: rgba(4,10,32,.6);
+        color: #d3deff;
+        text-decoration: none;
+        backdrop-filter: blur(14px);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-sentinel-ghost:hover {
+            background: rgba(12,24,66,.9);
+            color: #fff;
+        }
+
+    /* Glass card (console) */
+    .glass-card {
+        background: radial-gradient(circle at top left, rgba(77,184,255,.12), rgba(4,8,26,.9));
+        border-radius: 1.5rem;
+        padding: 1.5rem;
+        border: 1px solid rgba(130,189,255,.4);
+        box-shadow: 0 0 28px rgba(36,112,212,.55);
+        backdrop-filter: blur(18px);
+    }
+
+    .glass-card-label {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .18em;
+        color: #8fb6ff;
+        margin-bottom: .75rem;
+    }
+
+    /* Enterprise proof strip */
+    .sis-proof {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .75rem;
+        margin-top: 1.25rem;
+        max-width: 46rem;
+    }
+
+    .sis-proof-item {
+        border-radius: 1rem;
+        padding: .75rem .85rem;
+        background: rgba(4,10,32,.55);
+        border: 1px solid rgba(132,170,255,.35);
+        backdrop-filter: blur(14px);
+    }
+
+    .sis-proof-top {
+        font-weight: 600;
+        font-size: .9rem;
+    }
+
+    .sis-proof-sub {
+        color: #a7b4e4;
+        font-size: .8rem;
+        margin-top: .15rem;
+    }
+
+    /* Console rows */
+    .sis-console {
+        display: flex;
+        flex-direction: column;
+        gap: .65rem;
+        margin-bottom: .9rem;
+    }
+
+    .sis-console-row {
+        display: flex;
+        align-items: flex-start;
+        gap: .65rem;
+        padding: .75rem .8rem;
+        border-radius: 1rem;
+        background: radial-gradient(circle at top left, rgba(67,132,255,.16), rgba(6,12,40,.92));
+        border: 1px solid rgba(133,172,255,.28);
+    }
+
+    .sis-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        margin-top: .3rem;
+        box-shadow: 0 0 12px rgba(77,184,255,.55);
+        flex: 0 0 auto;
+    }
+
+        .sis-dot.ok {
+            background: rgba(111,255,210,.95);
+            box-shadow: 0 0 16px rgba(111,255,210,.55);
+        }
+
+        .sis-dot.warn {
+            background: rgba(255,214,102,.95);
+            box-shadow: 0 0 16px rgba(255,214,102,.55);
+        }
+
+        .sis-dot.info {
+            background: rgba(78,240,255,.95);
+            box-shadow: 0 0 16px rgba(78,240,255,.55);
+        }
+
+    .sis-console-main {
+        flex: 1;
+    }
+
+    .sis-console-title {
+        font-weight: 600;
+    }
+
+    .sis-console-sub {
+        font-size: .82rem;
+        color: #a0aedc;
+        margin-top: .15rem;
+    }
+
+    .sis-console-pill {
+        font-size: .72rem;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+        padding: .18rem .55rem;
+        border-radius: 999px;
+        border: 1px solid rgba(181,255,231,.35);
+        background: rgba(4,20,18,.6);
+        color: #b5ffe7;
+        white-space: nowrap;
+    }
+
+        .sis-console-pill.warn {
+            border-color: rgba(255,219,137,.45);
+            background: rgba(21,14,7,.65);
+            color: #ffe2a3;
+        }
+
+        .sis-console-pill.info {
+            border-color: rgba(158,214,255,.45);
+            background: rgba(4,10,32,.6);
+            color: #cfe3ff;
+        }
+
+    /* Mini cards */
+    .sis-mini-cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0,1fr));
+        gap: .65rem;
+    }
+
+    .sis-mini {
+        border-radius: 1rem;
+        padding: .75rem .8rem;
+        background: rgba(4,10,32,.5);
+        border: 1px solid rgba(132,170,255,.25);
+    }
+
+    .sis-mini-label {
+        font-size: .75rem;
+        color: #8fb6ff;
+        text-transform: uppercase;
+        letter-spacing: .16em;
+    }
+
+    .sis-mini-value {
+        font-weight: 700;
+        margin-top: .2rem;
+    }
+
+    /* Capability cards */
+    .sis-cap-grid {
+        margin-top: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0,1fr));
+        gap: 1rem;
+    }
+
+    .sis-cap-card {
+        border-radius: 1.25rem;
+        padding: 1.1rem 1.1rem 1.15rem;
+        background: radial-gradient(circle at top left, rgba(77,184,255,.18), rgba(5,9,30,.92));
+        border: 1px solid rgba(143,191,255,.5);
+        backdrop-filter: blur(14px);
+    }
+
+    .sis-cap-kicker {
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .18em;
+        color: #7ea8ff;
+        margin-bottom: .35rem;
+    }
+
+    .sis-cap-title {
+        font-weight: 600;
+        font-size: 1.05rem;
+    }
+
+    .sis-cap-sub {
+        margin-top: .25rem;
+        color: #c5d2ff;
+        font-size: .9rem;
+    }
+
+    /* Spotlight band */
+    .sis-spotlight {
+        margin-top: 1.25rem;
+        border-radius: 1.5rem;
+        padding: 1.25rem 1.2rem;
+        background: linear-gradient(120deg, rgba(77,184,255,.22), rgba(111,255,210,.14));
+        border: 1px solid rgba(158,214,255,.65);
+        box-shadow: 0 0 26px rgba(77,184,255,.45);
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .sis-spotlight-kicker {
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .18em;
+        color: #061128;
+        opacity: .9;
+    }
+
+    .sis-spotlight-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #061128;
+        margin-top: .15rem;
+    }
+
+    .sis-spotlight-sub {
+        color: #061128;
+        opacity: .9;
+        margin-top: .15rem;
+        max-width: 44rem;
+    }
+
+    .sis-spotlight-ctas {
+        display: flex;
+        gap: .75rem;
+        flex-wrap: wrap;
+    }
+
+    /* Sections */
+    .sis-section {
+        padding: 3.25rem 0;
+    }
+
+    .sis-header {
+        max-width: 48rem;
+        margin-bottom: 1.75rem;
+    }
+
+    .sis-hk {
+        font-size: .8rem;
+        letter-spacing: .18em;
+        text-transform: uppercase;
+        color: #7ea8ff;
+        margin-bottom: .4rem;
+    }
+
+    .sis-ht {
+        font-size: 1.8rem;
+        font-weight: 600;
+        margin-bottom: .5rem;
+    }
+
+    .sis-hs {
+        font-size: .95rem;
+        color: #b5c3f0;
+    }
+
+    .sis-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px,1fr));
+        gap: 1rem;
+    }
+
+    .sis-card {
+        background: radial-gradient(circle at top left, rgba(77,184,255,.16), rgba(5,9,30,.92));
+        border-radius: 1.2rem;
+        padding: 1.2rem;
+        border: 1px solid rgba(143,191,255,.55);
+        backdrop-filter: blur(14px);
+    }
+
+        .sis-card h3 {
+            font-size: 1rem;
+            margin-bottom: .35rem;
+            font-weight: 600;
+        }
+
+        .sis-card p {
+            margin: 0;
+            color: #c5d2ff;
+            font-size: .9rem;
+        }
+
+    /* Responsive */
+    @@media (max-width: 992px) {
+        .sis-hero {
+            padding-top: 3rem;
+        }
+
+        .sis-hero-grid {
+            grid-template-columns: 1fr;
+            gap: 1.25rem;
+        }
+
+        .sis-hero::before {
+            top: -20px;
+            right: 10px;
+            width: 360px;
+            height: 360px;
+            opacity: .09;
+        }
+
+        .sis-proof {
+            grid-template-columns: 1fr;
+        }
+
+        .sis-cap-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .sis-spotlight {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+       }
+        /* =========================
+       Spotlight readability fix
+    ========================= */
+        .sis-spotlight {
+            background: radial-gradient(circle at top left, rgba(77,184,255,.18), rgba(4,8,26,.92));
+            border: 1px solid rgba(143,191,255,.5);
+            box-shadow: 0 0 28px rgba(36,112,212,.35);
+        }
+            /* Force LIGHT text on spotlight */
+            .sis-spotlight,
+            .sis-spotlight * {
+                color: #eaf2ff !important;
+            }
+        /* Restore hierarchy */
+        .sis-spotlight-kicker {
+            opacity: .85 !important;
+            letter-spacing: .22em;
+        }
+
+        .sis-spotlight-title {
+            color: #ffffff !important;
+            text-shadow: 0 0 18px rgba(77, 184, 255, .25);
+        }
+
+        .sis-spotlight-sub {
+            opacity: .92 !important;
+            max-width: 52rem;
+        }
+        /* Optional: add a soft overlay behind left text for extra contrast */
+        .sis-spotlight-left {
+            padding: .35rem .5rem;
+            border-radius: 1rem;
+            background: rgba(0, 0, 0, .18);
+            border: 1px solid rgba(255,255,255,.06);
+        }
+    
+</style>
+
+<div class="sis-page">
+    <div class="container">
+
+        <!-- HERO -->
+        
+        <section class="sis-hero">
+            <div class="sis-hero-grid">
+                <div>
+                    <div class="sis-kicker">Sentinel AI Systems · Operational Intelligence</div>
+
+                    <h1 class="sis-title">
+                        Operational systems built for <span>real-world execution</span>.
+                    </h1>
+
+                    <p class="sis-sub">
+                        We design and deliver web apps, mobile apps, interactive portals, and real-time dashboards that make complex
+                        operations visible, faster, and easier to run. Our flagship Manufacturing Core Suite™ is built using a
+                        CESMII-inspired model, Unified Namespace (UNS) principles, and ISA-95 structure — so systems stay interoperable as you scale.
+                    </p>
+
+                    <div class="sis-ctas">
+                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="custom-build"
+                           class="btn-sentinel-primary"
+                           onclick="gtag('event','custom_build_inquiry',{ 'button_location':'company_hero_primary','event_category':'conversion' });">
+                            Talk about a build
+                        </a>
+
+                        <a asp-controller="Home" asp-action="CoreSuite"
+                           class="btn-sentinel-ghost"
+                           onclick="gtag('event','view_core_suite',{ 'button_location':'company_hero_secondary','event_category':'navigation' });">
+                            Explore the Core Suite
+                        </a>
+                    </div>
+
+                    <!-- Enterprise proof strip -->
+                    <div class="sis-proof">
+                        <div class="sis-proof-item">
+                            <div class="sis-proof-top">Designed for adoption</div>
+                            <div class="sis-proof-sub">Role-based · audit-ready · mobile-first</div>
+                        </div>
+                        <div class="sis-proof-item">
+                            <div class="sis-proof-top">Built to integrate</div>
+                            <div class="sis-proof-sub">UNS thinking · clean interfaces · scalable models</div>
+                        </div>
+                        <div class="sis-proof-item">
+                            <div class="sis-proof-top">Pilot → scale</div>
+                            <div class="sis-proof-sub">Start small, prove value, expand fast</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <!-- Right-side “enterprise console” -->
+                    <div class="glass-card">
+                        <div class="glass-card-label">Sentinel Console · Preview</div>
+
+                        <div class="sis-console">
+                            <div class="sis-console-row">
+                                <span class="sis-dot ok"></span>
+                                <div class="sis-console-main">
+                                    <div class="sis-console-title">Unified operational context</div>
+                                    <div class="sis-console-sub">Events + assets + people + workflows aligned</div>
+                                </div>
+                                <div class="sis-console-pill">ACTIVE</div>
+                            </div>
+
+                            <div class="sis-console-row">
+                                <span class="sis-dot warn"></span>
+                                <div class="sis-console-main">
+                                    <div class="sis-console-title">Workflow friction</div>
+                                    <div class="sis-console-sub">Handoffs, delays, and blind spots surfaced</div>
+                                </div>
+                                <div class="sis-console-pill warn">TRACKING</div>
+                            </div>
+
+                            <div class="sis-console-row">
+                                <span class="sis-dot info"></span>
+                                <div class="sis-console-main">
+                                    <div class="sis-console-title">System delivery</div>
+                                    <div class="sis-console-sub">Web + mobile + dashboards delivered in weeks</div>
+                                </div>
+                                <div class="sis-console-pill info">READY</div>
+                            </div>
+                        </div>
+
+                        <div class="sis-mini-cards">
+                            <div class="sis-mini">
+                                <div class="sis-mini-label">Web apps</div>
+                                <div class="sis-mini-value">Workflows</div>
+                            </div>
+                            <div class="sis-mini">
+                                <div class="sis-mini-label">Mobile</div>
+                                <div class="sis-mini-value">Execution</div>
+                            </div>
+                            <div class="sis-mini">
+                                <div class="sis-mini-label">Dashboards</div>
+                                <div class="sis-mini-value">Visibility</div>
+                            </div>
+                            <div class="sis-mini">
+                                <div class="sis-mini-label">Architecture</div>
+                                <div class="sis-mini-value">Scale</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capability cards directly under hero (this is the $100M feel) -->
+            <div class="sis-cap-grid">
+                <div class="sis-cap-card">
+                    <div class="sis-cap-kicker">Capability</div>
+                    <div class="sis-cap-title">Operational Web Apps</div>
+                    <div class="sis-cap-sub">Dashboards, approvals, planning, and role-based workflows.</div>
+                </div>
+                <div class="sis-cap-card">
+                    <div class="sis-cap-kicker">Capability</div>
+                    <div class="sis-cap-title">Mobile Execution</div>
+                    <div class="sis-cap-sub">Responder flows, field actions, alerts, and collaboration.</div>
+                </div>
+                <div class="sis-cap-card">
+                    <div class="sis-cap-kicker">Capability</div>
+                    <div class="sis-cap-title">Systems Architecture</div>
+                    <div class="sis-cap-sub">UNS + ISA-95 structure so integrations stay clean as you expand.</div>
+                </div>
+            </div>
+
+            <!-- Spotlight band: connects company → product without forcing manufacturing on everyone -->
+            <div class="sis-spotlight">
+                <div class="sis-spotlight-left">
+                    <div class="sis-spotlight-kicker">Spotlight</div>
+                    <div class="sis-spotlight-title">Manufacturing Core Suite™</div>
+                    <div class="sis-spotlight-sub">
+                        A modular platform engineered for manufacturing operations — available for early access and pilots.
+                    </div>
+                </div>
+                <div class="sis-spotlight-ctas">
+                    <a asp-controller="Home" asp-action="CoreSuite" class="btn-sentinel-primary"
+                       onclick="gtag('event','view_core_suite',{ 'button_location':'spotlight_primary','event_category':'navigation' });">
+                        View Core Suite
+                    </a>
+                    <a asp-controller="Home" asp-action="Contact" asp-route-topic="launch-list" class="btn-sentinel-ghost"
+                       onclick="gtag('event','join_launch_list',{ 'button_location':'spotlight_secondary','event_category':'conversion' });">
+                        Join Launch List
+                    </a>
+                </div>
+            </div>
+        </section>
+        
+
+        <!-- WHAT WE BUILD -->
+        <section class="sis-section">
+            <div class="sis-header">
+                <div class="sis-hk">What we build</div>
+                <h2 class="sis-ht">Systems that teams actually use.</h2>
+                <p class="sis-hs">
+                    Sentinel delivers operational software for high-velocity environments — where clarity, speed, and execution matter.
+                </p>
+            </div>
+
+            <div class="sis-cards">
+                <div class="sis-card">
+                    <h3>Operational Web Apps</h3>
+                    <p>Dashboards, approvals, planning tools, and role-based workflows.</p>
+                </div>
+                <div class="sis-card">
+                    <h3>Mobile Applications</h3>
+                    <p>Responder workflows, field execution, alerts, and collaboration.</p>
+                </div>
+                <div class="sis-card">
+                    <h3>Interactive Portals</h3>
+                    <p>Internal hubs and external portals designed for adoption and clarity.</p>
+                </div>
+                <div class="sis-card">
+                    <h3>Manufacturing Core Suite™</h3>
+                    <p>Modular capabilities you can adopt as-is — and extend when you need something unique.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- HOW WE BUILD / AUTHORITY -->
+        <section class="sis-section">
+            <div class="sis-header">
+                <div class="sis-hk">How we build</div>
+                <h2 class="sis-ht">Standards-driven architecture for scale.</h2>
+                <p class="sis-hs">
+                    We apply CESMII-inspired modeling, Unified Namespace thinking, and ISA-95 structure to keep data in-context and
+                    integrations clean — then build apps on top, fast.
+                </p>
+            </div>
+
+            <div class="sis-cards">
+                <div class="sis-card">
+                    <h3>Less integration spaghetti</h3>
+                    <p>A consistent operational model reduces point-to-point fragility as you expand.</p>
+                </div>
+                <div class="sis-card">
+                    <h3>Shared operational truth</h3>
+                    <p>Teams and systems align around the same context — fewer blind spots.</p>
+                </div>
+                <div class="sis-card">
+                    <h3>Pilot → scale</h3>
+                    <p>Start small, prove value, and expand site-wide with controlled risk.</p>
+                </div>
+                <div class="sis-card">
+                    <h3>Core Suite launch page</h3>
+                    <p><a asp-controller="Home" asp-action="CoreSuite">See the Manufacturing Core Suite™ early access page →</a></p>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</div>

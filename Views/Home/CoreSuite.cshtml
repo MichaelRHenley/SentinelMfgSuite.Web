@@ -1,0 +1,1401 @@
+﻿@* Views/Home/CoreSuite.cshtml *@
+@{
+    ViewBag.Title = "Core Suite";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    /* ==========================================
+           CoreSuite page-scoped Sentinel styling
+           (Move into site.css later if desired)
+           ========================================== */
+
+    /* Page + background */
+    body {
+        background: radial-gradient(circle at top left, #131b3a 0, #050713 35%, #050b16 100%);
+        color: #f4f7ff;
+    }
+
+        /* Kill the global watermark on this page only */
+        body::before {
+            content: none !important;
+            background-image: none !important;
+            display: none !important;
+        }
+
+    .sentinel-page {
+        min-height: 100vh;
+        padding-bottom: 4rem;
+    }
+
+    /* =======================
+           HERO + WATERMARK
+           ======================= */
+
+    .sentinel-hero {
+        padding: 5rem 0 4rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .sentinel-hero::before {
+            content: "";
+            position: absolute;
+            top: -40px;
+            right: 780px;
+            width: 520px;
+            height: 520px;
+            background-image: url("/img/branding/sentinel emblem trans.png");
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.08;
+            pointer-events: none;
+            filter: drop-shadow(0 0 18px rgba(0, 0, 0, 0.45));
+            z-index: 0;
+        }
+
+    .sentinel-hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+        gap: 3rem;
+        align-items: center;
+        position: relative;
+        z-index: 1;
+    }
+
+    .sentinel-kicker {
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        font-size: .8rem;
+        font-weight: 600;
+        color: #7ea8ff;
+        margin-bottom: .75rem;
+    }
+
+    .sentinel-hero-title {
+        font-size: clamp(2.4rem, 3vw + 1.5rem, 3.4rem);
+        font-weight: 700;
+        line-height: 1.1;
+        margin-bottom: 1rem;
+    }
+
+        .sentinel-hero-title span {
+            background: linear-gradient(120deg, #4ef0ff, #2d8cff, #8f8dff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+    .sentinel-hero-subtitle {
+        font-size: 1.05rem;
+        max-width: 34rem;
+        color: #c6d1ff;
+        margin-bottom: 1.75rem;
+    }
+
+    .sentinel-hero-ctas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .sentinel-hero-note {
+        font-size: .8rem;
+        color: #8e9bd4;
+    }
+
+    /* =======================
+           BUTTONS
+           ======================= */
+
+    .btn-sentinel-primary {
+        border-radius: 999px;
+        padding: 0.75rem 1.75rem;
+        font-weight: 600;
+        border: none;
+        background: radial-gradient(circle at top left, #4ef0ff 0, #2d8cff 30%, #1742ff 100%);
+        color: #050713;
+        box-shadow: 0 0 18px rgba(77, 184, 255, 0.65);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-sentinel-primary:hover {
+            filter: brightness(1.05);
+            box-shadow: 0 0 24px rgba(77, 184, 255, 0.9);
+            color: #020308;
+        }
+
+    .btn-sentinel-ghost {
+        border-radius: 999px;
+        padding: 0.75rem 1.6rem;
+        font-weight: 500;
+        border: 1px solid rgba(132, 170, 255, 0.6);
+        background: rgba(4, 10, 32, 0.6);
+        color: #d3deff;
+        text-decoration: none;
+        backdrop-filter: blur(14px);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-sentinel-ghost:hover {
+            background: rgba(12, 24, 66, 0.9);
+            color: #ffffff;
+        }
+
+    /* =======================
+           GLASS CARDS
+           ======================= */
+
+    .glass-card {
+        background: radial-gradient(circle at top left, rgba(77, 184, 255, 0.12), rgba(4, 8, 26, 0.9));
+        border-radius: 1.5rem;
+        padding: 1.5rem;
+        border: 1px solid rgba(130, 189, 255, 0.4);
+        box-shadow: 0 0 28px rgba(36, 112, 212, 0.55);
+        backdrop-filter: blur(18px);
+    }
+
+    .glass-card-label {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .18em;
+        color: #8fb6ff;
+        margin-bottom: .75rem;
+    }
+
+    /* Dashboard tiles */
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+        margin-bottom: 1rem;
+    }
+
+    .dashboard-tile {
+        border-radius: 1rem;
+        padding: .9rem;
+        background: radial-gradient(circle at top left, rgba(111, 255, 210, 0.25), rgba(5, 9, 31, 0.9));
+        border: 1px solid rgba(134, 255, 209, 0.6);
+        box-shadow: 0 0 16px rgba(120, 255, 210, 0.5);
+        cursor: pointer;
+    }
+
+        .dashboard-tile.danger {
+            background: radial-gradient(circle at top left, rgba(255, 107, 107, 0.25), rgba(18, 6, 23, 0.95));
+            border-color: rgba(255, 140, 140, 0.7);
+            box-shadow: 0 0 20px rgba(255, 108, 108, 0.7);
+        }
+
+        .dashboard-tile.pending {
+            background: radial-gradient(circle at top left, rgba(255, 214, 102, 0.20), rgba(21, 14, 7, 0.95));
+            border-color: rgba(255, 219, 137, 0.75);
+            box-shadow: 0 0 18px rgba(255, 214, 102, 0.65);
+        }
+
+    .dashboard-tile-label {
+        font-size: .75rem;
+        color: #e2ebff;
+        opacity: .8;
+    }
+
+    .dashboard-tile-value {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #f4f7ff;
+    }
+
+    .dashboard-tile-sub {
+        font-size: .75rem;
+        color: #a0aedc;
+    }
+
+    .sentinel-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        font-size: .75rem;
+    }
+
+    .sentinel-chip {
+        padding: .25rem .7rem;
+        border-radius: 999px;
+        background: rgba(11, 23, 66, 0.9);
+        border: 1px solid rgba(132, 170, 255, 0.6);
+        color: #cdd8ff;
+    }
+
+    /* =======================
+           SECTIONS
+           ======================= */
+
+    .sentinel-section {
+        padding: 3.5rem 0;
+    }
+
+    .sentinel-section-header {
+        max-width: 48rem;
+        margin: 0 auto 2rem;
+        text-align: center;
+    }
+
+    .sentinel-section-kicker {
+        font-size: .8rem;
+        letter-spacing: .18em;
+        text-transform: uppercase;
+        color: #7ea8ff;
+        margin-bottom: .4rem;
+    }
+
+    .sentinel-section-title {
+        font-size: 1.9rem;
+        font-weight: 650;
+        margin-bottom: .5rem;
+    }
+
+    .sentinel-section-sub {
+        font-size: .95rem;
+        color: rgba(219, 229, 255, 0.72);
+        margin: 0;
+    }
+
+    /* Problem band */
+    .sentinel-problem {
+        background: linear-gradient(135deg, rgba(255, 86, 122, 0.12), rgba(0, 0, 0, 0));
+        border-radius: 1.4rem;
+        border: 1px solid rgba(255, 130, 164, 0.4);
+        padding: 1.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .sentinel-problem-title {
+        font-size: 1.45rem;
+        font-weight: 650;
+        margin-bottom: .75rem;
+    }
+
+    .sentinel-problem-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: .75rem;
+    }
+
+    .sentinel-problem-item {
+        font-size: .92rem;
+        color: #f6d2dc;
+    }
+
+    /* Generic feature grid card (used for steps, modules, roles, proof) */
+    .sentinel-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .sentinel-col-4 {
+        grid-column: span 4;
+    }
+
+    .sentinel-col-3 {
+        grid-column: span 3;
+    }
+
+    .sentinel-col-6 {
+        grid-column: span 6;
+    }
+
+    @@media (max-width: 992px) {
+        .sentinel-col-6
+
+    {
+        grid-column: span 12;
+    }
+
+    .sentinel-col-4 {
+        grid-column: span 12;
+    }
+
+    .sentinel-col-3 {
+        grid-column: span 12;
+    }
+
+    .sentinel-hero {
+        padding-top: 3rem;
+    }
+
+    .sentinel-hero-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .sentinel-hero::before {
+        top: -20px;
+        right: 10px;
+        width: 360px;
+        height: 360px;
+        opacity: 0.10;
+    }
+
+    }
+
+    /* Pillars */
+    .sentinel-pillars {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 1rem;
+    }
+
+    .pillar-card {
+        background: radial-gradient(circle at top left, rgba(77, 184, 255, 0.18), rgba(5, 9, 30, 0.9));
+        border-radius: 1.2rem;
+        padding: 1.25rem 1.25rem 1.2rem;
+        border: 1px solid rgba(143, 191, 255, 0.55);
+        backdrop-filter: blur(14px);
+    }
+
+    .pillar-title {
+        font-size: 1.03rem;
+        font-weight: 650;
+        margin-bottom: .35rem;
+        color: #f4f7ff;
+    }
+
+    .pillar-text {
+        font-size: .92rem;
+        color: rgba(219, 229, 255, 0.75);
+        margin: 0;
+    }
+
+    /* Tiers */
+    .tiers-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 1rem;
+    }
+
+    .tier-card {
+        background: radial-gradient(circle at top left, rgba(111, 255, 210, 0.10), rgba(4, 9, 26, 0.92));
+        border-radius: 1.2rem;
+        padding: 1.2rem;
+        border: 1px solid rgba(130, 255, 209, 0.6);
+        backdrop-filter: blur(14px);
+        position: relative;
+    }
+
+    .tier-label {
+        font-size: .8rem;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        color: #7ae9ca;
+        margin-bottom: .2rem;
+    }
+
+    .tier-name {
+        font-weight: 650;
+        margin-bottom: .4rem;
+        color: #f4f7ff;
+    }
+
+    .tier-line {
+        font-size: .87rem;
+        color: rgba(198, 249, 234, 0.85);
+        margin-bottom: .35rem;
+    }
+
+    .tier-tag {
+        position: absolute;
+        top: .9rem;
+        right: 1rem;
+        font-size: .7rem;
+        padding: .2rem .5rem;
+        border-radius: 999px;
+        border: 1px solid rgba(181, 255, 231, 0.7);
+        color: #b5ffe7;
+        background: rgba(4, 20, 18, 0.9);
+    }
+
+    /* Personas */
+    .persona-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 1rem;
+    }
+
+    .persona-card {
+        background: radial-gradient(circle at top left, rgba(122, 167, 255, 0.16), rgba(6, 9, 28, 0.96));
+        border-radius: 1.2rem;
+        padding: 1.1rem;
+        border: 1px solid rgba(153, 191, 255, 0.45);
+        backdrop-filter: blur(14px);
+    }
+
+    .persona-title {
+        font-size: .98rem;
+        font-weight: 650;
+        margin-bottom: .25rem;
+        color: #f4f7ff;
+    }
+
+    .persona-line-label {
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .16em;
+        color: #8ca7ff;
+        margin-top: .55rem;
+        margin-bottom: .15rem;
+    }
+
+    .persona-text {
+        font-size: .87rem;
+        color: rgba(219, 229, 255, 0.78);
+        margin: 0;
+    }
+
+    /* Launch teaser */
+    .sentinel-launch-teaser {
+        padding-top: 1.5rem;
+    }
+
+    .launch-card {
+        border-radius: 1.5rem;
+        padding: 1.75rem 1.6rem 1.9rem;
+        background: radial-gradient(circle at top left, rgba(77, 184, 255, 0.25), rgba(5, 9, 30, 0.95));
+        border: 1px solid rgba(143, 191, 255, 0.55);
+        box-shadow: 0 0 32px rgba(33, 95, 197, 0.55);
+    }
+
+    .launch-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .25rem .8rem;
+        border-radius: 999px;
+        border: 1px solid rgba(158, 214, 255, 0.9);
+        font-size: .75rem;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        color: #cfe3ff;
+        margin-bottom: .75rem;
+    }
+
+    .launch-title {
+        font-size: 1.65rem;
+        font-weight: 650;
+        margin-bottom: .4rem;
+        color: #f4f7ff;
+    }
+
+    .launch-subtitle {
+        font-size: .95rem;
+        color: rgba(219, 229, 255, 0.78);
+        margin-bottom: .85rem;
+        max-width: 46rem;
+    }
+
+    .launch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .launch-point-label {
+        font-size: .8rem;
+        text-transform: uppercase;
+        letter-spacing: .16em;
+        color: #9fc0ff;
+        margin-bottom: .25rem;
+    }
+
+    .launch-point-text {
+        font-size: .9rem;
+        color: rgba(221, 231, 255, 0.85);
+        margin: 0;
+    }
+
+    .launch-cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .75rem;
+        margin-top: .5rem;
+    }
+
+    /* Countdown tile */
+    .launch-tile--countdown {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        border-radius: 1.25rem;
+        background: radial-gradient(circle at top left, rgba(67, 132, 255, 0.22), rgba(6, 12, 40, 0.9));
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(133, 172, 255, 0.35);
+        backdrop-filter: blur(22px);
+        margin-top: 1.25rem;
+        padding: 1rem 1.5rem 1.1rem;
+        align-items: center;
+    }
+
+    .launch-tile-subtitle {
+        margin-bottom: 0.4rem;
+        text-align: center;
+        max-width: 40rem;
+        color: rgba(219, 229, 255, 0.85);
+    }
+
+    .launch-countdown {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.85rem;
+        max-width: 720px;
+        width: 100%;
+    }
+
+    .countdown-segment {
+        text-align: center;
+        padding: 0.45rem 0.4rem;
+        border-radius: 0.85rem;
+        background: radial-gradient(circle at top, rgba(16, 26, 72, 0.9), rgba(3, 7, 26, 0.9));
+        border: 1px solid rgba(140, 190, 255, 0.4);
+        box-shadow: 0 0 18px rgba(40, 120, 255, 0.25);
+    }
+
+    .countdown-value {
+        display: block;
+        font-size: 1.6rem;
+        font-weight: 750;
+        letter-spacing: 0.03em;
+        line-height: 1.1;
+        color: #f4f7ff;
+    }
+
+    .countdown-label {
+        display: block;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        opacity: 0.8;
+        color: rgba(219, 229, 255, 0.85);
+    }
+
+    .launch-countdown-message {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        color: rgba(219, 229, 255, 0.9);
+    }
+
+        .launch-countdown-message.d-none {
+            display: none;
+        }
+
+    /* CTA band */
+    .sentinel-cta-band {
+        margin-top: 2.5rem;
+        margin-bottom: 0.5rem;
+        border-radius: 1.5rem;
+        padding: 1.8rem 1.5rem;
+        background: radial-gradient(circle at top left, rgba(77, 184, 255, 0.18), rgba(5, 9, 30, 0.92));
+        border: 1px solid rgba(158, 214, 255, 0.45);
+        box-shadow: 0 0 34px rgba(77, 184, 255, 0.45);
+        backdrop-filter: blur(18px);
+    }
+
+    .sentinel-cta-title {
+        font-size: 1.45rem;
+        font-weight: 650;
+        margin-bottom: .4rem;
+        color: #f4f7ff;
+    }
+
+    .sentinel-cta-sub {
+        font-size: .95rem;
+        color: rgba(219, 229, 255, 0.80);
+        margin: 0;
+    }
+
+    .sentinel-cta-band .sentinel-hero-ctas {
+        justify-content: flex-start;
+    }
+
+    @@media (max-width: 576px) {
+        .sentinel-cta-band .sentinel-hero-ctas
+
+    {
+        justify-content: center;
+    }
+
+    }
+
+    /* Bullet list inside Sentinel cards */
+    .sentinel-list {
+        margin: .65rem 0 0;
+        padding-left: 1.05rem;
+        color: rgba(219, 229, 255, 0.78);
+        font-size: .9rem;
+    }
+
+        .sentinel-list li {
+            margin: .25rem 0;
+        }
+
+    /* Small eyebrow badge */
+    .sentinel-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .25rem .75rem;
+        border-radius: 999px;
+        border: 1px solid rgba(158, 214, 255, 0.55);
+        background: rgba(4, 10, 32, 0.55);
+        color: #cfe3ff;
+        font-size: .75rem;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        margin-bottom: .85rem;
+        backdrop-filter: blur(14px);
+    }
+</style>
+
+<main class="sentinel-main">
+    <div class="sentinel-page sentinel-page--no-watermark">
+        <div class="container">
+
+            <!-- HERO -->
+            <section class="sentinel-hero">
+                <div class="sentinel-hero-grid">
+
+                    <div>
+                        <div class="sentinel-kicker">
+                            Manufacturing Core Suite™ · Early access coming soon
+                        </div>
+
+                        <h1 class="sentinel-hero-title">
+                            The <span>smart way</span> to run your factory.
+                        </h1>
+
+                        <p class="sentinel-hero-subtitle">
+                            We’re putting the finishing touches on Sentinel Manufacturing Core Suite™ — an AI-driven platform
+                            that gives you real-time visibility, modern maintenance workflows, and a clear path to a smart factory
+                            without a seven-figure “transformation” project.
+                        </p>
+
+                        <div class="sentinel-hero-ctas">
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="launch-list"
+                               class="btn-sentinel-primary"
+                               onclick="gtag('event', 'join_launch_list', {
+                                   'button_location': 'hero_primary',
+                                   'event_category': 'engagement',
+                                   'event_label': 'Launch List CTA'
+                               });">
+                                Join the Launch List
+                            </a>
+
+                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="custom-build"
+                               class="btn-sentinel-ghost"
+                               onclick="gtag('event', 'custom_build_inquiry', {
+                                   'button_location': 'hero_secondary',
+                                   'event_category': 'engagement',
+                                   'event_label': 'Custom Build CTA'
+                               });">
+                                Talk about a custom build
+                            </a>
+                        </div>
+
+                        <p class="sentinel-hero-note">
+                            Ideal for manufacturers who want modern tools now and a guided path into AI —
+                            and for anyone who needs a serious custom build for their workflows, in any industry.
+                        </p>
+                    </div>
+
+                    <div class="sentinel-hero-dashboard">
+                        <div class="glass-card">
+                            <div class="glass-card-label">
+                                Manufacturing Core Suite™ · Launch Console (preview)
+                            </div>
+
+                            <div class="dashboard-grid">
+                                <div class="dashboard-tile"
+                                     onclick="gtag('event', 'tile_click', {
+                                         'tile_name': 'early_access',
+                                         'tile_location': 'launch_console',
+                                         'event_category': 'engagement'
+                                     });">
+                                    <div class="dashboard-tile-label">Early access spots</div>
+                                    <div class="dashboard-tile-value">Limited</div>
+                                    <div class="dashboard-tile-sub">Priority for plants ready to pilot</div>
+                                </div>
+
+                                <div class="dashboard-tile pending"
+                                     onclick="gtag('event', 'tile_click', {
+                                         'tile_name': 'custom_builds',
+                                         'tile_location': 'launch_console',
+                                         'event_category': 'engagement'
+                                     });">
+                                    <div class="dashboard-tile-label">Custom builds</div>
+                                    <div class="dashboard-tile-value">Open</div>
+                                    <div class="dashboard-tile-sub">
+                                        Manufacturing, other industries, or serious personal workflows —
+                                        built to your reality.
+                                    </div>
+                                </div>
+
+                                <div class="dashboard-tile"
+                                     onclick="gtag('event', 'tile_click', {
+                                         'tile_name': 'timeline',
+                                         'tile_location': 'launch_console',
+                                         'event_category': 'engagement'
+                                     });">
+                                    <div class="dashboard-tile-label">Go-live timeline</div>
+                                    <div class="dashboard-tile-value">Weeks</div>
+                                    <div class="dashboard-tile-sub">
+                                        Start with Tier 1 foundations, grow from there
+                                    </div>
+                                </div>
+
+                                <div class="dashboard-tile danger"
+                                     onclick="gtag('event', 'tile_click', {
+                                         'tile_name': 'downtime_risk',
+                                         'tile_location': 'launch_console',
+                                         'event_category': 'engagement'
+                                     });">
+                                    <div class="dashboard-tile-label">Downtime risk</div>
+                                    <div class="dashboard-tile-value">Too high</div>
+                                    <div class="dashboard-tile-sub">
+                                        That's what we're here to fix.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sentinel-chip-row">
+                                <span class="sentinel-chip">Early-access pricing</span>
+                                <span class="sentinel-chip">Shaped by real plants</span>
+                                <span class="sentinel-chip">AI-assisted from day one</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- LAUNCH TEASER -->
+            <section class="sentinel-section sentinel-launch-teaser">
+                <div class="launch-card">
+                    <div class="launch-pill">Sentinel Manufacturing Core Suite™ · Coming soon</div>
+
+                    <h2 class="launch-title">Be first in line when Sentinel goes live.</h2>
+
+                    <p class="launch-subtitle">
+                        We’re actively building the first public release. Join the launch list to get early-access details,
+                        founding-customer pricing, and a chance to shape the roadmap around your plant — or whatever world you work in.
+                    </p>
+
+                    <div class="launch-grid">
+                        <div class="launch-point">
+                            <div class="launch-point-label">Founding customers</div>
+                            <p class="launch-point-text">
+                                Limited early-access slots for manufacturers who want to co-design the first wave of features and integrations.
+                            </p>
+                        </div>
+
+                        <div class="launch-point">
+                            <div class="launch-point-label">Custom system builds</div>
+                            <p class="launch-point-text">
+                                Need something sooner? We’ll talk about building out your EM, operations, or completely different workflows
+                                on the same stack — any industry, and even serious personal systems.
+                            </p>
+                        </div>
+
+                        <div class="launch-point">
+                            <div class="launch-point-label">No spam, no fluff</div>
+                            <p class="launch-point-text">
+                                A short, occasional update when there’s something real to show: milestones, screenshots, and go-live opportunities.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="launch-cta-row">
+                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="launch-list"
+                           class="btn-sentinel-primary"
+                           onclick="gtag('event', 'join_launch_list', {
+                               'button_location': 'launch_teaser',
+                               'event_category': 'conversion',
+                               'event_label': 'Launch Teaser CTA'
+                           });">
+                            Join the Launch List
+                        </a>
+
+                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="custom-build"
+                           class="btn-sentinel-ghost"
+                           onclick="gtag('event', 'custom_build_inquiry', {
+                               'button_location': 'launch_teaser',
+                               'event_category': 'conversion',
+                               'event_label': 'Launch Teaser Custom Build'
+                           });">
+                            Talk about a custom build
+                        </a>
+                    </div>
+
+                    <div class="launch-tile launch-tile--countdown">
+                        <div class="launch-tile-subtitle">
+                            Time until Sentinel Manufacturing Core Suite™ early-access launch.
+                        </div>
+
+                        <div id="launchCountdown" class="launch-countdown">
+                            <div class="countdown-segment">
+                                <span id="cdDays" class="countdown-value">--</span>
+                                <span class="countdown-label">Days</span>
+                            </div>
+                            <div class="countdown-segment">
+                                <span id="cdHours" class="countdown-value">--</span>
+                                <span class="countdown-label">Hours</span>
+                            </div>
+                            <div class="countdown-segment">
+                                <span id="cdMinutes" class="countdown-value">--</span>
+                                <span class="countdown-label">Minutes</span>
+                            </div>
+                            <div class="countdown-segment">
+                                <span id="cdSeconds" class="countdown-value">--</span>
+                                <span class="countdown-label">Seconds</span>
+                            </div>
+                        </div>
+
+                        <div id="launchCountdownMessage" class="launch-countdown-message d-none">
+                            We’re live. Let’s run your first pilots. 🚀
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PROBLEM -->
+            <section class="sentinel-section">
+                <div class="sentinel-problem">
+                    <div class="sentinel-problem-title">
+                        Downtime, chaos, and blind spots are costing you more than you think.
+                    </div>
+                    <div class="sentinel-problem-list">
+                        <div class="sentinel-problem-item">&bull; Unplanned downtime quietly draining hundreds of thousands per year.</div>
+                        <div class="sentinel-problem-item">&bull; Maintenance stuck in reactive mode, chasing failures instead of preventing them.</div>
+                        <div class="sentinel-problem-item">&bull; Operators buried under paperwork, radios, spreadsheets, and disconnected tools.</div>
+                        <div class="sentinel-problem-item">&bull; Leadership forced to make big decisions with incomplete, lagging data.</div>
+                    </div>
+                </div>
+
+                <p class="sentinel-section-sub">
+                    Sentinel replaces this chaos with a single, AI-powered platform that ties maintenance, production,
+                    quality, safety, and parts together — and gives everyone the same live source of truth.
+                </p>
+            </section>
+
+            <!-- PILLARS -->
+            <section class="sentinel-section">
+                <div class="sentinel-section-header">
+                    <div class="sentinel-section-kicker">What Sentinel Delivers</div>
+                    <h2 class="sentinel-section-title">One platform. Three big shifts in how your plant runs.</h2>
+                    <p class="sentinel-section-sub">
+                        From the first day you go live, Sentinel focuses on visibility, control, and a path to a smarter factory —
+                        without forcing you into a risky “big bang” project.
+                    </p>
+                </div>
+
+                <div class="sentinel-pillars">
+                    <div class="pillar-card">
+                        <div class="pillar-title">See everything in one place</div>
+                        <p class="pillar-text">
+                            Tie EM, preventive maintenance, work centers, parts, quality, and safety into a single live view.
+                            No more guessing what’s happening on the floor.
+                        </p>
+                    </div>
+
+                    <div class="pillar-card">
+                        <div class="pillar-title">Control the day-to-day chaos</div>
+                        <p class="pillar-text">
+                            Replace radios and whiteboards with clear digital workflows, live EM chat, and prioritized work —
+                            so every shift knows exactly what to do next.
+                        </p>
+                    </div>
+
+                    <div class="pillar-card">
+                        <div class="pillar-title">Build toward a smart factory</div>
+                        <p class="pillar-text">
+                            Start with digital operations and light AI in Standard. Add deep analytics in Advanced,
+                            IoT and predictive maintenance in Premium, and expert services in Enterprise — all on the same platform.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- HOW IT WORKS (Sentinel cards, not Bootstrap cards) -->
+            <section class="sentinel-section">
+                <div class="sentinel-section-header">
+                    <div class="sentinel-section-kicker">How it works</div>
+                    <h2 class="sentinel-section-title">From paper chaos to a live control center in weeks — not years.</h2>
+                    <p class="sentinel-section-sub">
+                        Sentinel plugs into the tools you already have and adds the connective tissue: real-time visibility, workflow, and AI.
+                    </p>
+                </div>
+
+                <div class="sentinel-grid">
+                    <div class="sentinel-col-4">
+                        <div class="pillar-card">
+                            <div class="sentinel-badge">Step 1</div>
+                            <div class="pillar-title">Connect your factory</div>
+                            <p class="pillar-text">
+                                Connect work centers, EM requests, maintenance history, and key machines — no rip-and-replace required.
+                            </p>
+                            <ul class="sentinel-list">
+                                <li>Pull in EM requests and work orders</li>
+                                <li>Map work centers, lines, and assets</li>
+                                <li>Optional hooks into PLC / historian data</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="sentinel-col-4">
+                        <div class="pillar-card">
+                            <div class="sentinel-badge">Step 2</div>
+                            <div class="pillar-title">Give everyone a live view</div>
+                            <p class="pillar-text">
+                                Dispatchers, technicians, and leadership share the same real-time view of the plant.
+                            </p>
+                            <ul class="sentinel-list">
+                                <li>Live EM board for emergencies</li>
+                                <li>Maintenance queue and status tracking</li>
+                                <li>Production, quality, and safety widgets</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="sentinel-col-4">
+                        <div class="pillar-card">
+                            <div class="sentinel-badge">Step 3</div>
+                            <div class="pillar-title">Layer in AI assistance</div>
+                            <p class="pillar-text">
+                                Let Sentinel suggest root causes, parts, and playbooks based on your own history.
+                            </p>
+                            <ul class="sentinel-list">
+                                <li>Suggested fixes from past EM tickets</li>
+                                <li>Likely parts and BOM lookups</li>
+                                <li>Early warning for repeat issues</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PLATFORM MODULES -->
+            <section class="sentinel-section">
+                <div class="sentinel-section-header">
+                    <div class="sentinel-section-kicker">Modules</div>
+                    <h2 class="sentinel-section-title">One platform. Built for the whole factory.</h2>
+                    <p class="sentinel-section-sub">
+                        Start with maintenance, then grow into production, quality, safety, and parts as you’re ready.
+                    </p>
+                </div>
+
+                <div class="sentinel-grid">
+                    <div class="sentinel-col-3">
+                        <div class="pillar-card">
+                            <div class="pillar-title">Emergency Maintenance</div>
+                            <p class="pillar-text">
+                                Real-time EM board with live chat, mobile responders, photos, and machine status.
+                            </p>
+                            <ul class="sentinel-list">
+                                <li>Live EM queue by site and work center</li>
+                                <li>Tech/operator chat &amp; photo capture</li>
+                                <li>Response SLAs and time-to-repair</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="sentinel-col-3">
+                        <div class="pillar-card">
+                            <div class="pillar-title">Planned Maintenance</div>
+                            <p class="pillar-text">
+                                Keep PMs and corrective work organized, prioritized, and visible.
+                            </p>
+                            <ul class="sentinel-list">
+                                <li>Digital backlog with clear priority</li>
+                                <li>Calendar and route planning</li>
+                                <li>History and repeat issue detection</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="sentinel-col-3">
+                        <div class="pillar-card">
+                            <div class="pillar-title">Production &amp; Downtime</div>
+                            <p class="pillar-text">
+                                Track runtime, stoppages, and standardized reasons in real time.
+                            </p>
+                            <ul class="sentinel-list">
+                                <li>Live machines-running view</li>
+                                <li>Standard downtime coding</li>
+                                <li>Shift / line / plant rollups</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="sentinel-col-3">
+                        <div class="pillar-card">
+                            <div class="pillar-title">Parts &amp; BOM Intelligence</div>
+                            <p class="pillar-text">
+                                Find the right part the first time — across SAP, CMMS, and local stores.
+                            </p>
+                            <ul class="sentinel-list">
+                                <li>Smart search across SKUs &amp; descriptions</li>
+                                <li>Equipment BOM and inventory view</li>
+                                <li>AI suggestions for likely spares</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI FEATURES -->
+            <section class="sentinel-section">
+                <div class="sentinel-section-header">
+                    <div class="sentinel-section-kicker">AI</div>
+                    <h2 class="sentinel-section-title">AI that speaks maintenance — not buzzwords.</h2>
+                    <p class="sentinel-section-sub">
+                        Sentinel’s AI is trained on your own data and language — your EM tickets, comments, work orders, and parts usage —
+                        not a generic demo set.
+                    </p>
+                </div>
+
+                <div class="sentinel-grid">
+                    <div class="sentinel-col-6">
+                        <div class="glass-card">
+                            <div class="glass-card-label">Capabilities</div>
+
+                            <div class="sentinel-grid" style="gap: .75rem;">
+                                <div class="sentinel-col-6">
+                                    <div class="pillar-card" style="padding:1rem;">
+                                        <div class="pillar-title" style="font-size:.98rem;">Suggested fixes &amp; next steps</div>
+                                        <p class="pillar-text">Surface similar past events and what actually fixed them.</p>
+                                    </div>
+                                </div>
+                                <div class="sentinel-col-6">
+                                    <div class="pillar-card" style="padding:1rem;">
+                                        <div class="pillar-title" style="font-size:.98rem;">Likely parts &amp; BOM lookups</div>
+                                        <p class="pillar-text">Short list of likely parts based on equipment and symptoms.</p>
+                                    </div>
+                                </div>
+                                <div class="sentinel-col-6">
+                                    <div class="pillar-card" style="padding:1rem;">
+                                        <div class="pillar-title" style="font-size:.98rem;">Risk &amp; recurrence signals</div>
+                                        <p class="pillar-text">Highlight repeat offenders and emerging risks early.</p>
+                                    </div>
+                                </div>
+                                <div class="sentinel-col-6">
+                                    <div class="pillar-card" style="padding:1rem;">
+                                        <div class="pillar-title" style="font-size:.98rem;">Plain-language answers</div>
+                                        <p class="pillar-text">Ask questions and get clear, visual responses.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sentinel-col-6">
+                        <div class="glass-card">
+                            <div class="glass-card-label">Sentinel Assistant · Example</div>
+
+                            <div style="padding: 1rem; border-radius: 1rem; background: rgba(0,0,0,0.35); border: 1px solid rgba(124,173,255,0.25);">
+                                <div style="margin-bottom:.85rem;">
+                                    <span style="font-weight:650; color:#86e5ff;">You:</span>
+                                    <span style="color:rgba(219,229,255,0.9);"> What’s driving downtime on Line 3 this week?</span>
+                                </div>
+
+                                <div style="margin-bottom:.85rem;">
+                                    <span style="font-weight:650; color:#7db7ff;">Sentinel:</span>
+                                    <span style="color:rgba(219,229,255,0.9);">
+                                        Line 3 downtime is <strong>4.2 hrs</strong> this week. Top drivers:
+                                        WC-301 EMs (bearings), WC-402 changeover overruns, and two extended startups.
+                                    </span>
+                                </div>
+
+                                <div>
+                                    <span style="font-weight:650; color:#7db7ff;">Sentinel:</span>
+                                    <span style="color:rgba(219,229,255,0.9);">
+                                        Recommendation: add a focused PM on WC-301 bearings, standardize changeover steps,
+                                        and review startup checklist compliance.
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TIERS -->
+            <section class="sentinel-section">
+                <div class="sentinel-section-header">
+                    <div class="sentinel-section-kicker">Tiered Growth Path</div>
+                    <h2 class="sentinel-section-title">Start where you are. Grow into full smart factory capability.</h2>
+                    <p class="sentinel-section-sub">
+                        Sentinel is designed as a ladder, not a gamble. Start with digital foundations and grow when you’re ready.
+                    </p>
+                </div>
+
+                <div class="tiers-grid">
+                    <div class="tier-card">
+                        <div class="tier-label">Standard</div>
+                        <div class="tier-name">Digital foundations + AI</div>
+                        <div class="tier-line">All-in-one CMMS, EM, parts, dashboards, quality, safety, SOPs.</div>
+                        <div class="tier-line">Light AI everywhere to speed up daily work.</div>
+                        <span class="tier-tag">Most popular starting point</span>
+                    </div>
+
+                    <div class="tier-card">
+                        <div class="tier-label">Advanced</div>
+                        <div class="tier-name">Operations intelligence</div>
+                        <div class="tier-line">Deep analytics across maintenance, EM, parts, and quality.</div>
+                        <div class="tier-line">Scheduling, reliability scoring, and advanced AI insights.</div>
+                    </div>
+
+                    <div class="tier-card">
+                        <div class="tier-label">Premium</div>
+                        <div class="tier-name">IoT + predictive maintenance</div>
+                        <div class="tier-line">PLC / OPC-UA connectivity through Kepware.</div>
+                        <div class="tier-line">Telemetry, digital twins, and predictive maintenance models.</div>
+                    </div>
+
+                    <div class="tier-card">
+                        <div class="tier-label">Enterprise</div>
+                        <div class="tier-name">Elite engineering &amp; consulting</div>
+                        <div class="tier-line">Custom AI, PLC logic, reliability engineering, and transformation services.</div>
+                        <div class="tier-line">For organizations ready to go all-in on smart factory.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PERSONAS -->
+            <section class="sentinel-section">
+                <div class="sentinel-section-header">
+                    <div class="sentinel-section-kicker">Who Sentinel Helps</div>
+                    <h2 class="sentinel-section-title">Built for the plant floor. Trusted by leadership.</h2>
+                    <p class="sentinel-section-sub">
+                        Sentinel speaks to everyone involved in running a factory — from the technician on nights to the executive reading the monthly report.
+                    </p>
+                </div>
+
+                <div class="persona-grid">
+                    <div class="persona-card">
+                        <div class="persona-title">Maintenance &amp; reliability teams</div>
+                        <div class="persona-line-label">Pain</div>
+                        <p class="persona-text">No visibility, reactive firefighting, scattered data.</p>
+                        <div class="persona-line-label">Sentinel</div>
+                        <p class="persona-text">Real-time EM view, asset history, reliability insights, and a clear plan for the day.</p>
+                    </div>
+
+                    <div class="persona-card">
+                        <div class="persona-title">Operators &amp; front-line teams</div>
+                        <div class="persona-line-label">Pain</div>
+                        <p class="persona-text">Paperwork, radios, and systems that don’t talk to each other.</p>
+                        <div class="persona-line-label">Sentinel</div>
+                        <p class="persona-text">Simple screens, fast EM, clear instructions — less chaos every shift.</p>
+                    </div>
+
+                    <div class="persona-card">
+                        <div class="persona-title">Plant &amp; production managers</div>
+                        <div class="persona-line-label">Pain</div>
+                        <p class="persona-text">Missing targets, no clean story about why, and limited tools to fix it.</p>
+                        <div class="persona-line-label">Sentinel</div>
+                        <p class="persona-text">Production vs goal, downtime reasons, and clear trends in one live dashboard.</p>
+                    </div>
+
+                    <div class="persona-card">
+                        <div class="persona-title">Ops leaders, finance, &amp; executives</div>
+                        <div class="persona-line-label">Pain</div>
+                        <p class="persona-text">Hidden risk, unpredictable costs, and slow, manual reporting.</p>
+                        <div class="persona-line-label">Sentinel</div>
+                        <p class="persona-text">Standardized data across sites, clear ROI on improvements, and a path to true smart factory performance.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SOCIAL PROOF -->
+            <section class="sentinel-section">
+                <div class="sentinel-section-header">
+                    <div class="sentinel-section-kicker">Designed on real shop floors</div>
+                    <h2 class="sentinel-section-title">Built on real plants — not in a boardroom.</h2>
+                    <p class="sentinel-section-sub">
+                        Sentinel was born inside a live manufacturing plant, battle-tested on real EM calls, and then turned into a platform any factory can adopt.
+                    </p>
+                </div>
+
+                <div class="sentinel-grid">
+                    <div class="sentinel-col-6">
+                        <div class="glass-card">
+                            <div class="glass-card-label">Maintenance Supervisor · Discrete Manufacturing</div>
+                            <p style="margin:0; color: rgba(219,229,255,0.88);">
+                                “Our responders stopped living on the radio. Everyone sees the same EM board and we cut
+                                average response time without adding headcount.”
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="sentinel-col-6">
+                        <div class="glass-card">
+                            <div class="glass-card-label">Operations Manager · Process Manufacturing</div>
+                            <p style="margin:0; color: rgba(219,229,255,0.88);">
+                                “Leadership finally gets a clean story on where downtime is coming from —
+                                and what it would cost not to fix it.”
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PRICING PREVIEW -->
+            <section class="sentinel-section">
+                <div class="glass-card">
+                    <div class="sentinel-grid" style="align-items: start;">
+                        <div class="sentinel-col-6">
+                            <div class="glass-card-label">Pricing preview</div>
+                            <div style="font-size: 1.45rem; font-weight: 650; margin-bottom: .5rem;">Tiered to grow with you.</div>
+                            <p style="margin:0 0 .85rem; color: rgba(219,229,255,0.78);">
+                                Start with a focused maintenance tier and expand as your digital roadmap matures.
+                                No seven-figure “digital transformation” required.
+                            </p>
+                            <ul class="sentinel-list">
+                                <li>Standard tier for small &amp; mid-sized plants</li>
+                                <li>Advanced tiers for multi-site and predictive programs</li>
+                                <li>Transparent, subscription-based pricing</li>
+                            </ul>
+                        </div>
+
+                        <div class="sentinel-col-6" style="display:flex; justify-content:flex-end; align-items:flex-start;">
+                            <div class="sentinel-hero-ctas" style="margin: 0;">
+                                <a asp-controller="Home" asp-action="Pricing"
+                                   class="btn-sentinel-primary"
+                                   onclick="gtag('event', 'view_pricing', {
+                                       'button_location': 'pricing_preview',
+                                       'event_category': 'navigation',
+                                       'event_label': 'View Tiers & Pricing'
+                                   });">
+                                    View Tiers &amp; Pricing
+                                </a>
+
+                                <a asp-controller="Home" asp-action="Contact" asp-route-topic="custom-build"
+                                   class="btn-sentinel-ghost"
+                                   onclick="gtag('event', 'custom_build_inquiry', {
+                                       'button_location': 'pricing_preview',
+                                       'event_category': 'conversion',
+                                       'event_label': 'Pricing Section Custom Build'
+                                   });">
+                                    Talk about a custom build
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- FINAL CTA -->
+            <section class="sentinel-section">
+                <div class="sentinel-cta-band">
+                    <div class="sentinel-cta-title">Ready to see your work in real time?</div>
+                    <p class="sentinel-cta-sub">
+                        We’ll walk through your current reality, plug it into Sentinel, and show you how much downtime,
+                        friction, and guesswork you can remove — whether that’s a factory floor or a completely different kind of workflow.
+                    </p>
+
+                    <div class="sentinel-hero-ctas" style="margin-top: 1rem;">
+                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="custom-build"
+                           class="btn-sentinel-ghost"
+                           onclick="gtag('event', 'custom_build_inquiry', {
+                               'button_location': 'final_cta_band',
+                               'event_category': 'conversion',
+                               'event_label': 'Bottom CTA Custom Build'
+                           });">
+                            Talk about a custom build
+                        </a>
+
+                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="launch-list"
+                           class="btn-sentinel-primary"
+                           onclick="gtag('event', 'join_launch_list', {
+                               'button_location': 'final_cta_band',
+                               'event_category': 'conversion',
+                               'event_label': 'Bottom CTA Launch List'
+                           });">
+                            Join the Launch List
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+</main>
+
+@section Scripts {
+
+    <script>
+        // Track scroll depth
+        let scrollTracked = { '25': false, '50': false, '75': false, '90': false };
+
+        window.addEventListener('scroll', function () {
+            let scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+
+            if (scrollPercent >= 25 && !scrollTracked['25']) { gtag('event', 'scroll_depth', { 'percent': '25' }); scrollTracked['25'] = true; }
+            if (scrollPercent >= 50 && !scrollTracked['50']) { gtag('event', 'scroll_depth', { 'percent': '50' }); scrollTracked['50'] = true; }
+            if (scrollPercent >= 75 && !scrollTracked['75']) { gtag('event', 'scroll_depth', { 'percent': '75' }); scrollTracked['75'] = true; }
+            if (scrollPercent >= 90 && !scrollTracked['90']) { gtag('event', 'scroll_depth', { 'percent': '90' }); scrollTracked['90'] = true; }
+        });
+    </script>
+
+    <script>
+        (function () {
+            // 2026-05-01T05:00:00Z
+            const launchDate = new Date('2026-05-01T05:00:00Z').getTime();
+
+            const daysEl = document.getElementById('cdDays');
+            const hoursEl = document.getElementById('cdHours');
+            const minutesEl = document.getElementById('cdMinutes');
+            const secondsEl = document.getElementById('cdSeconds');
+            const messageEl = document.getElementById('launchCountdownMessage');
+            const containerEl = document.getElementById('launchCountdown');
+
+            if (!daysEl || !hoursEl || !minutesEl || !secondsEl) return;
+
+            function updateCountdown() {
+                const now = Date.now();
+                const distance = launchDate - now;
+
+                if (distance <= 0) {
+                    daysEl.textContent = '0';
+                    hoursEl.textContent = '0';
+                    minutesEl.textContent = '0';
+                    secondsEl.textContent = '0';
+
+                    if (messageEl && containerEl) {
+                        messageEl.classList.remove('d-none');
+                        containerEl.classList.add('launch-countdown--complete');
+                    }
+
+                    clearInterval(timerId);
+                    return;
+                }
+
+                const seconds = Math.floor(distance / 1000);
+                const days = Math.floor(seconds / (60 * 60 * 24));
+                const hours = Math.floor((seconds % (60 * 60 * 24)) / (60 * 60));
+                const mins = Math.floor((seconds % (60 * 60)) / 60);
+                const secs = seconds % 60;
+
+                daysEl.textContent = days.toString();
+                hoursEl.textContent = hours.toString().padStart(2, '0');
+                minutesEl.textContent = mins.toString().padStart(2, '0');
+                secondsEl.textContent = secs.toString().padStart(2, '0');
+            }
+
+            const timerId = setInterval(updateCountdown, 1000);
+            updateCountdown();
+        })();
+    </script>
+}

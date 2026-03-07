@@ -1,0 +1,239 @@
+﻿@using System.Linq
+
+@{
+    var title = ViewData["Title"] as string ?? "Home";
+
+    var controller = (ViewContext.RouteData.Values["controller"]?.ToString() ?? "").ToLowerInvariant();
+    var action = (ViewContext.RouteData.Values["action"]?.ToString() ?? "").ToLowerInvariant();
+
+    bool hideGlobalWatermark = controller == "home" && (action == "index" || action == "contact");
+
+    bool Is(string c, params string[] actions)
+        => controller == c.ToLowerInvariant()
+           && actions.Select(a => a.ToLowerInvariant()).Contains(action);
+
+    bool IsHome() => Is("home", "index");
+
+    // Treat these as "under Solutions"
+    bool IsCoreSuite() => Is("home", "coresuite");
+    bool IsSolutionsRoot() => Is("home", "solutions", "platform"); // include platform during transition
+    bool IsSolutionsAny() => IsSolutionsRoot() || IsCoreSuite();    
+    bool IsUseCases() => Is("home", "usecases");
+    bool IsResources() => Is("home", "resources");
+    bool IsAbout() => Is("home", "about");
+}
+
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@title - Sentinel AI Systems</title>
+
+    <meta name="description" content="Sentinel is an all-in-one, AI-powered manufacturing platform that reduces downtime, streamlines operations, and gives you real-time visibility across your plant." />
+    <meta name="keywords" content="manufacturing, CMMS, downtime, smart factory, predictive maintenance, IoT, Sentinel" />
+
+    <link rel="icon" type="image/png" href="~/img/sentinel-favicon.png" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/SentinelMfgSuite.Web.styles.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-7R9BEEH432"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-7R9BEEH432');
+    </script>
+
+    <!-- Microsoft Clarity -->
+    <script>
+        (function (c, l, a, r, i, t, y) {
+            c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments) };
+            t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i;
+            y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
+        })(window, document, "clarity", "script", "ukl6dgxpfg");
+    </script>
+
+    @* Keep layout CSS OUT of the layout. Move everything below into site.css.
+       If you truly need page-specific layout styles, put them in site.css under a section and scope by body class. *@
+
+    @RenderSection("Styles", required: false)
+</head>
+
+<body>
+    <div class="sentinel-root">
+
+        @if (!hideGlobalWatermark)
+        {
+            <div class="sentinel-watermark">
+                <img src="~/img/branding/sentinel emblem trans.png"
+                     alt="Sentinel emblem watermark" />
+            </div>
+        }
+
+        <!-- HEADER / NAVBAR -->
+        <header class="sentinel-header-wrap">
+            <nav class="navbar navbar-expand-lg navbar-dark sentinel-navbar">
+                <div class="container">
+
+                    <a class="navbar-brand sentinel-brand" asp-controller="Home" asp-action="Index">
+                        <div class="sentinel-logo">
+                            <img src="~/img/branding/sentinel emblem trans.png" alt="Sentinel AI Systems" />
+                        </div>
+                        <div class="sentinel-brand-text">
+                            <div class="sentinel-brand-text-main">Sentinel AI Systems</div>
+                        </div>
+                    </a>
+
+                    <button class="navbar-toggler" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#sentinelNavbar"
+                            aria-controls="sentinelNavbar" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"><span></span></span>
+                    </button>
+
+                    <div class="collapse navbar-collapse" id="sentinelNavbar">
+                        <ul class="navbar-nav ms-3 me-auto mb-2 mb-lg-0">
+
+                            <li class="nav-item">
+                                <a class="nav-link @(IsHome() ? "active" : "")"
+                                   asp-controller="Home" asp-action="Index">Home</a>
+                            </li>
+
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle @(IsSolutionsAny() ? "active" : "")"
+                                   href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Solutions
+                                </a>
+
+                                <ul class="dropdown-menu dropdown-menu-dark sentinel-dropdown">
+                                    <li>
+                                        <a class="dropdown-item @(IsSolutionsRoot() ? "active" : "")"
+                                           asp-controller="Home" asp-action="Solutions">
+                                            Overview
+                                        </a>
+                                    </li>
+
+                                    <li><hr class="dropdown-divider" /></li>
+
+                                    <li>
+                                        <a class="dropdown-item @(IsCoreSuite() ? "active" : "")"
+                                           asp-controller="Home" asp-action="CoreSuite">
+                                            Mfg Core Suite
+                                        </a>
+                                    </li>
+
+                                    <li>
+                                        <a class="dropdown-item @(Is("home", "platform") ? "active" : "")"
+                                           asp-controller="Home" asp-action="Platform">
+                                            Platform
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>                           
+
+                            <li class="nav-item">
+                                <a class="nav-link @(IsUseCases() ? "active" : "")"
+                                   asp-controller="Home" asp-action="UseCases">Use Cases</a>
+                            </li>
+
+                            <li class="nav-item">
+                                <a class="nav-link @(IsResources() ? "active" : "")"
+                                   asp-controller="Home" asp-action="Resources">Resources</a>
+                            </li>
+
+                            <li class="nav-item">
+                                <a class="nav-link @(IsAbout() ? "active" : "")"
+                                   asp-controller="Home" asp-action="About">About</a>
+                            </li>
+                        </ul>
+
+                        <!-- Right-side CTA -->
+                        <div class="sentinel-nav-cta">
+                            @if (!User.Identity?.IsAuthenticated ?? true)
+                            {
+                                <a asp-area="Identity" asp-page="/Account/Login" class="btn-sentinel-nav-primary">
+                                    Sign in
+                                </a>
+                            }
+                            else
+                            {
+                                var tenantIdClaim = User.FindFirst("tenant_id")?.Value;
+
+                                if (string.IsNullOrWhiteSpace(tenantIdClaim))
+                                {
+                                    <a asp-controller="Subscribe" asp-action="Index" class="btn-sentinel-nav-primary">
+                                        Subscribe
+                                    </a>
+                                }
+                                else
+                                {
+                                    <a asp-controller="Home" asp-action="App" class="btn-sentinel-nav-primary">
+                                        Go to app
+                                    </a>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                </div>
+            </nav>
+        </header>
+
+        <!-- MAIN BODY -->
+        <main role="main" class="sentinel-body-wrap">
+            @RenderBody()
+        </main>
+
+        <!-- FOOTER -->
+        <footer class="sentinel-footer">
+            <div class="container">
+                <div class="row gy-3">
+                    <div class="col-md-4">
+                        <div class="sentinel-footer-title">Sentinel Manufacturing Core Suite™</div>
+                        <p>
+                            An all-in-one, AI-powered platform that helps factories reduce downtime,
+                            standardize operations, and grow into full smart-factory capability.
+                        </p>
+                        <div class="mt-1 small text-secondary text-uppercase" style="letter-spacing: .18em;">
+                            Automate · Accelerate · Dominate
+                        </div>
+                    </div>
+
+                    <div class="col-md-2">
+                        <div class="sentinel-footer-title">Product</div>
+                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="Solutions">Solutions</a>
+                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="Pricing">Tiers &amp; Pricing</a>
+                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="UseCases">Use Cases</a>
+                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="Resources">Resources</a>
+                    </div>
+
+                    <div class="col-md-2">
+                        <div class="sentinel-footer-title">Company</div>
+                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="About">About</a>
+                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="Contact">Contact</a>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="sentinel-footer-title">Stay in the loop</div>
+                        <p>Get updates on new modules, AI features, and predictive maintenance capabilities.</p>
+                        @* Placeholder for future email capture *@
+                    </div>
+                </div>
+
+                <div class="sentinel-footer-bottom">
+                    <span>&copy; @DateTime.UtcNow.Year Sentinel AI Systems. All rights reserved.</span>
+                    <span class="sentinel-footer-pill">Built on ASP.NET Core · Ready for the plant floor</span>
+                </div>
+            </div>
+        </footer>
+
+    </div>
+
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

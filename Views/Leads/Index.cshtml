@@ -1,0 +1,58 @@
+﻿@model IEnumerable<SentinelMfgSuite.Web.Models.WebLead>
+
+@{
+    ViewData["Title"] = "Website Leads";
+}
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">Website Leads</h1>
+        <span class="text-muted small">
+            Showing latest @Model.Count() leads
+        </span>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-dark table-striped table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Contact</th>
+                    <th>Topic</th>
+                    <th>Company</th>
+                    <th>Source</th>
+                    <th>Message</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var l in Model)
+                {
+                    <tr>
+                        <td>@l.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>
+                            <div>@l.Name</div>
+                            <div class="small text-muted">@l.Email</div>
+                        </td>
+                        <td>@l.Topic</td>
+                        <td>@l.Company</td>
+                        <td class="small">
+                            <div>@(l.UtmSource ?? "-") / @(l.UtmCampaign ?? "-")</div>
+                            <div class="text-muted">@l.SourcePage</div>
+                        </td>
+                        <td class="small text-truncate" style="max-width: 260px;">
+                            @l.Message
+                        </td>
+                        <td class="text-end">
+                            <a asp-action="Details" asp-route-id="@l.Id"
+                               class="btn btn-sm btn-outline-light">
+                                View
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+

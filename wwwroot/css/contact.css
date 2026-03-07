@@ -1,0 +1,39 @@
+/* Contact page watermark override */
+.sentinel-watermark {
+    position: fixed;
+    right: 280px;
+    bottom: 100px;
+    width: 560px;
+    opacity: 0.06;
+    pointer-events: none;
+    z-index: 0;
+}
+
+    .sentinel-watermark img {
+        filter: blur(1px);
+    }
+
+.sentinel-watermark {
+    opacity: 0;
+    animation: watermarkFade 0.8s ease-out forwards;
+}
+
+@keyframes watermarkFade {
+    to {
+        opacity: 0.06;
+    }
+}
+
+@media (max-width: 992px) {
+    .sentinel-watermark {
+        display: none;
+    }
+}
+
+@media (min-width: 1600px) {
+    .sentinel-watermark {
+        width: 560px;
+        bottom: 100px;
+        right: 280px;
+    }
+}

@@ -1,0 +1,737 @@
+/* =========================
+   Base template styles
+   ========================= */
+
+html {
+    font-size: 14px;
+}
+
+@media (min-width: 768px) {
+    html {
+        font-size: 16px;
+    }
+}
+
+.btn:focus,
+.btn:active:focus,
+.btn-link.nav-link:focus,
+.form-control:focus,
+.form-check-input:focus {
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+html {
+    position: relative;
+    min-height: 100%;
+}
+
+body {
+    margin-bottom: 60px;
+}
+
+/* =========================
+   Global Sentinel theme (was incorrectly duplicated as .body/.a/.main/.footer)
+   ========================= */
+
+body {
+    margin: 0; /* overrides template margin-bottom behavior intentionally? keep if desired */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: radial-gradient(circle at top left, #131b3a 0, #050713 35%, #050b16 100%);
+    color: #f4f7ff;
+}
+
+a {
+    color: #a9c4ff;
+}
+
+    a:hover {
+        color: #d9e5ff;
+    }
+
+.sentinel-root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1 0 auto;
+}
+
+footer {
+    flex-shrink: 0;
+}
+
+/* =========================
+   Generic Sentinel cards / sections
+   ========================= */
+
+.sentinel-card {
+    border: 0;
+    border-radius: 1.5rem;
+    background-color: rgba(10, 10, 20, 0.9);
+    color: #f8f9ff;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.sentinel-card-soft {
+    border-radius: 1.5rem;
+    background-color: rgba(20, 20, 40, 0.9);
+    color: #f8f9ff;
+}
+
+.sentinel-section {
+    padding-top: 3rem;
+    padding-bottom: 3rem;
+}
+
+.sentinel-section-header {
+    text-align: center;
+    margin-bottom: 1.75rem;
+}
+
+.sentinel-section-title {
+    font-weight: 600;
+    font-size: 1.75rem;
+}
+
+.sentinel-section-subtitle {
+    color: #9ca3af;
+    margin-top: 0.5rem;
+}
+
+/* When inside marketing pages */
+.sentinel-main .sentinel-section-subtitle {
+    color: rgba(219, 229, 255, 0.72);
+}
+
+/* =========================
+   Branding
+   ========================= */
+
+.sentinel-brand-logo {
+    height: 100px;
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.5));
+}
+
+@media (max-width: 576px) {
+    .sentinel-brand-logo {
+        height: 40px;
+    }
+}
+
+.navbar-brand img {
+    max-height: none;
+}
+
+.sentinel-brand-mark-sm {
+    height: 20px;
+    width: auto;
+    display: block;
+}
+
+.sentinel-card-badge {
+    color: #a5b4fc;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+    opacity: 0.95;
+}
+
+    .sentinel-card-badge .tm-mark {
+        font-size: 0.6em;
+        vertical-align: super;
+        margin-left: 2px;
+    }
+
+/* =========================
+   Hero / watermark helpers
+   ========================= */
+
+@media (max-width: 768px) {
+    .sentinel-hero::before {
+        top: -20px;
+        left: -30px;
+        width: 260px;
+        height: 260px;
+        opacity: 0.08;
+    }
+}
+
+.sentinel-page.sentinel-page--no-watermark::before {
+    content: none !important;
+    background-image: none !important;
+}
+
+/* =========================
+   Sentinel Auth Page
+   ========================= */
+
+.sentinel-auth-wrapper {
+    min-height: calc(100vh - 80px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 3rem 1.5rem;
+    background: radial-gradient(circle at top left, #1f3bff 0, #050816 50%, #020617 100%);
+}
+
+.sentinel-auth-card {
+    width: 100%;
+    max-width: 480px;
+    background: rgba(15, 23, 42, 0.9);
+    border-radius: 24px;
+    padding: 2.5rem 2.75rem;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    backdrop-filter: blur(18px);
+    color: #e5e7eb;
+}
+
+.sentinel-auth-header {
+    margin-bottom: 1.75rem;
+}
+
+.sentinel-auth-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.sentinel-auth-subtitle {
+    color: #9ca3af;
+    margin: 0;
+}
+
+.sentinel-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #cbd5f5;
+}
+
+.sentinel-input {
+    background: rgba(15, 23, 42, 0.85);
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    color: #e5e7eb;
+}
+
+    .sentinel-input:focus {
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.6);
+    }
+
+.sentinel-auth-link {
+    font-size: 0.9rem;
+    color: #60a5fa;
+    text-decoration: none;
+}
+
+    .sentinel-auth-link:hover {
+        color: #93c5fd;
+        text-decoration: underline;
+    }
+
+.sentinel-auth-footer {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.9rem;
+    color: #9ca3af;
+}
+
+/* =========================
+   Sentinel primary CTA button – shared across pages
+   ========================= */
+
+.btn-sentinel-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.75rem 1.75rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    border: none;
+    background: radial-gradient(circle at top left, #4ef0ff 0, #2d8cff 30%, #1742ff 100%);
+    color: #050713 !important;
+    box-shadow: 0 0 18px rgba(77, 184, 255, 0.75);
+    text-decoration: none;
+    transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, filter 0.12s ease-out;
+}
+
+    .btn-sentinel-primary:hover {
+        filter: brightness(1.07);
+        box-shadow: 0 0 24px rgba(77, 184, 255, 0.95);
+        transform: translateY(-1px);
+        color: #020308 !important;
+    }
+
+    .btn-sentinel-primary:active {
+        transform: translateY(0);
+        box-shadow: 0 0 14px rgba(77, 184, 255, 0.6);
+    }
+
+    .btn-sentinel-primary:disabled,
+    .btn-sentinel-primary.btn-sentinel-primary--disabled {
+        opacity: 0.45;
+        box-shadow: none;
+        cursor: not-allowed;
+    }
+
+/* =========================
+   Page-scoped: Solutions page
+   ========================= */
+
+.solutions-page {
+    color: #eaf2ff;
+}
+
+    .solutions-page .sol-kicker {
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #7ea8ff;
+    }
+
+    .solutions-page .sol-title {
+        color: #f4f7ff;
+        text-shadow: 0 0 22px rgba(77, 184, 255, 0.12);
+    }
+
+    .solutions-page .sol-sub,
+    .solutions-page .sol-muted {
+        color: #c6d1ff !important;
+    }
+
+    .solutions-page .sol-card {
+        background: radial-gradient(circle at top left, rgba(77, 184, 255, 0.14), rgba(5, 9, 30, 0.92));
+        border: 1px solid rgba(143, 191, 255, 0.35);
+        box-shadow: 0 0 26px rgba(36, 112, 212, 0.18);
+        border-radius: 1.25rem;
+        backdrop-filter: blur(14px);
+    }
+
+        .solutions-page .sol-card ul {
+            margin-bottom: 0;
+        }
+
+        .solutions-page .sol-card li {
+            color: #b7c6f6;
+        }
+
+    .solutions-page .btn-sentinel-primary {
+        border-radius: 999px;
+        padding: 0.75rem 1.75rem;
+        font-weight: 600;
+        border: none;
+        background: radial-gradient(circle at top left, #4ef0ff 0, #2d8cff 30%, #1742ff 100%);
+        color: #050713 !important;
+        box-shadow: 0 0 18px rgba(77, 184, 255, 0.75);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .solutions-page .btn-sentinel-primary:hover {
+            filter: brightness(1.07);
+            box-shadow: 0 0 24px rgba(77, 184, 255, 0.95);
+            color: #020308 !important;
+        }
+
+    .solutions-page .btn-sentinel-ghost {
+        border-radius: 999px;
+        padding: 0.7rem 1.6rem;
+        font-weight: 500;
+        border: 1px solid rgba(132, 170, 255, 0.6);
+        background: rgba(4, 10, 32, 0.6);
+        color: #d3deff !important;
+        text-decoration: none;
+        backdrop-filter: blur(14px);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .solutions-page .btn-sentinel-ghost:hover {
+            background: rgba(12, 24, 66, 0.9);
+            color: #fff !important;
+        }
+
+/* =========================
+   Marketing pages: fix Bootstrap utility text colors on dark backgrounds
+   ========================= */
+
+.sentinel-main {
+    color: #f4f7ff;
+    /* Bootstrap 5.3 uses CSS vars for text-secondary / text-muted */
+    --bs-secondary-color: rgba(219, 229, 255, 0.72);
+    --bs-tertiary-color: rgba(219, 229, 255, 0.55);
+}
+
+    .sentinel-main .text-primary {
+        color: #7db7ff !important;
+    }
+
+    .sentinel-main a {
+        color: #a9c4ff;
+    }
+
+        .sentinel-main a:hover {
+            color: #d9e5ff;
+        }
+
+    /* FORCE: readable muted text everywhere inside marketing pages */
+    .sentinel-main .text-secondary,
+    .sentinel-main .text-muted,
+    .sentinel-main .lead.text-secondary,
+    .sentinel-main ul.text-secondary,
+    .sentinel-main p.text-secondary,
+    .sentinel-main .accordion-body.text-secondary,
+    .sentinel-main .card ul.text-secondary,
+    .sentinel-main .card .text-secondary,
+    .sentinel-main .accordion .text-secondary {
+        color: rgba(219, 229, 255, 0.72) !important;
+    }
+
+/* =========================
+   Header / Nav (moved from layout <style>)
+   ========================= */
+
+.sentinel-header-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    backdrop-filter: blur(18px);
+    background: linear-gradient(120deg, rgba(3, 7, 26, 0.94), rgba(7, 15, 39, 0.9));
+    border-bottom: 1px solid rgba(124, 173, 255, 0.3);
+    box-shadow: 0 0 22px rgba(33, 95, 197, 0.6);
+}
+
+.sentinel-navbar {
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+}
+
+.sentinel-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    text-decoration: none;
+}
+
+.sentinel-logo {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: radial-gradient(circle at top left, #4ef0ff, #2d8cff, #8f8dff);
+    box-shadow: 0 0 22px rgba(77, 184, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+    .sentinel-logo img {
+        width: 80%;
+        height: 80%;
+        object-fit: contain;
+    }
+
+.sentinel-brand-text-main {
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1.1;
+}
+
+.sentinel-brand-text-sub {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: #7ea8ff;
+}
+
+@media (max-width: 576px) {
+    .sentinel-logo {
+        width: 34px;
+        height: 34px;
+        box-shadow: 0 0 16px rgba(77, 184, 255, 0.7);
+    }
+
+    .sentinel-brand-text-main {
+        font-size: 0.9rem;
+        letter-spacing: 0.1em;
+    }
+
+    .sentinel-brand-text-sub {
+        display: none;
+    }
+}
+
+.navbar-dark .navbar-nav .nav-link {
+    color: #dbe5ff;
+    font-size: 0.9rem;
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
+}
+
+    .navbar-dark .navbar-nav .nav-link:hover,
+    .navbar-dark .navbar-nav .nav-link.active {
+        color: #ffffff;
+    }
+
+.sentinel-nav-spacer {
+    flex: 1;
+}
+
+.sentinel-nav-cta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.btn-sentinel-nav-primary {
+    border-radius: 999px;
+    padding: 0.45rem 1.25rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: none;
+    background: radial-gradient(circle at top left, #4ef0ff 0, #2d8cff 36%, #1742ff 100%);
+    color: #050713;
+    box-shadow: 0 0 16px rgba(77, 184, 255, 0.75);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+    .btn-sentinel-nav-primary:hover {
+        filter: brightness(1.05);
+        box-shadow: 0 0 20px rgba(77, 184, 255, 0.95);
+        color: #020308;
+    }
+
+.btn-sentinel-nav-ghost {
+    border-radius: 999px;
+    padding: 0.4rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid rgba(133, 176, 255, 0.7);
+    background: rgba(4, 10, 32, 0.8);
+    color: #d3deff;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+    .btn-sentinel-nav-ghost:hover {
+        background: rgba(11, 25, 69, 0.95);
+        color: #ffffff;
+    }
+
+.navbar-toggler {
+    border: 1px solid rgba(139, 184, 255, 0.7);
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+}
+
+.navbar-toggler-icon {
+    background-image: none;
+    position: relative;
+    width: 1.3rem;
+    height: 1.1rem;
+}
+
+    .navbar-toggler-icon::before,
+    .navbar-toggler-icon::after,
+    .navbar-toggler-icon span {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 2px;
+        border-radius: 999px;
+        background: rgba(184, 213, 255, 0.9);
+    }
+
+    .navbar-toggler-icon::before {
+        top: 0;
+    }
+
+    .navbar-toggler-icon::after {
+        bottom: 0;
+    }
+
+    .navbar-toggler-icon span {
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+/* Body container wrapper */
+.sentinel-body-wrap {
+    padding-top: 1.25rem;
+    padding-bottom: 2.5rem;
+}
+
+@media (max-width: 992px) {
+    .sentinel-body-wrap {
+        padding-top: 1rem;
+    }
+
+    .sentinel-nav-cta {
+        margin-top: 0.75rem;
+    }
+}
+
+/* =========================
+   Footer
+   ========================= */
+
+.sentinel-footer {
+    border-top: 1px solid rgba(124, 173, 255, 0.3);
+    background: radial-gradient(circle at bottom, rgba(16, 24, 59, 0.96), rgba(1, 3, 10, 0.98));
+    padding: 1.8rem 0 1.2rem;
+    color: #a7b4e4;
+    font-size: 0.85rem;
+}
+
+.sentinel-footer-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+}
+
+.sentinel-footer-link {
+    display: block;
+    font-size: 0.83rem;
+    color: #aebaf0;
+    text-decoration: none;
+    margin-bottom: 0.2rem;
+}
+
+    .sentinel-footer-link:hover {
+        color: #ffffff;
+    }
+
+.sentinel-footer-bottom {
+    border-top: 1px solid rgba(67, 96, 167, 0.6);
+    margin-top: 1.25rem;
+    padding-top: 0.8rem;
+    font-size: 0.78rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    justify-content: space-between;
+    align-items: center;
+    color: #7e8bbf;
+}
+
+.sentinel-footer-pill {
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(120, 169, 255, 0.7);
+    color: #c7d6ff;
+}
+
+/* Global watermark */
+.sentinel-watermark {
+    position: fixed;
+    right: -40px;
+    bottom: -40px;
+    width: 340px;
+    opacity: 0.06;
+    pointer-events: none;
+    z-index: 0;
+}
+
+    .sentinel-watermark img {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+
+@media (max-width: 992px) {
+    .sentinel-watermark {
+        display: none;
+    }
+}
+
+/* Dropdown styling to match Sentinel theme */
+.sentinel-dropdown {
+    border: 1px solid rgba(124, 173, 255, 0.25);
+    background: linear-gradient(160deg, rgba(3, 7, 26, 0.98), rgba(7, 15, 39, 0.95));
+    box-shadow: 0 0 22px rgba(33, 95, 197, 0.35);
+    border-radius: 14px;
+    padding: 0.5rem;
+    min-width: 240px;
+}
+
+    .sentinel-dropdown .dropdown-item {
+        border-radius: 10px;
+        padding: 0.55rem 0.75rem;
+        color: #dbe5ff;
+    }
+
+        .sentinel-dropdown .dropdown-item:hover,
+        .sentinel-dropdown .dropdown-item:focus {
+            background: rgba(77, 184, 255, 0.12);
+            color: #ffffff;
+        }
+
+        .sentinel-dropdown .dropdown-item.active {
+            background: rgba(77, 184, 255, 0.18);
+            color: #ffffff;
+        }
+
+    .sentinel-dropdown .dropdown-divider {
+        border-top-color: rgba(124, 173, 255, 0.2);
+    }
+
+/* =========================
+   Page-scoped: About
+   ========================= */
+.about-page .sentinel-kicker {
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #7ea8ff;
+    display: inline-block;
+    margin-bottom: .75rem;
+}
+
+.about-page .sentinel-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .18rem .7rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    background: rgba(118, 164, 255, 0.12);
+    color: #a9c4ff;
+    border: 1px solid rgba(133, 176, 255, 0.35);
+}
+
+.about-page .about-principle {
+    padding: .9rem 1rem;
+    border-radius: 1rem;
+    background: radial-gradient(circle at top left, rgba(77, 184, 255, 0.12), rgba(4, 9, 30, 0.92));
+    border: 1px solid rgba(143, 191, 255, 0.28);
+    box-shadow: 0 0 18px rgba(20, 73, 185, 0.22);
+}
+
+.about-page .about-principle-title {
+    font-weight: 700;
+    font-size: .95rem;
+    margin-bottom: .25rem;
+}
+
+.about-page .about-principle-text {
+    font-size: .86rem;
+    color: rgba(219, 229, 255, 0.72);
+    margin: 0;
+}
