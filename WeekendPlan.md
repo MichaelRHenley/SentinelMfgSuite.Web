@@ -1,4 +1,118 @@
-﻿- [ ] Restart IIS: `iisreset /restart`
+﻿# Weekend Plan - EM Pilot Launch Pivot
+
+## FRIDAY (Setup & Planning)
+- [x] Strategy pivot decided: EM Module → Pilot Partners
+- [ ] Create git branch: `git checkout -b pivot-to-em-pilot`
+- [ ] Review all open files and identify content changes needed
+- [ ] Backup current production deployment
+
+---
+
+## SATURDAY (Core Messaging & Critical Pages)
+
+### Homepage (Views\Home\Index.cshtml) - PRIORITY 1
+- [ ] Update hero title: Focus on EM Module (not full suite)
+- [ ] Update hero subtitle: Add pilot partner recruitment message
+- [ ] Change primary CTA: "Apply for Pilot Program" (not "Join Launch List")
+- [ ] Add new "Pilot Benefits" section below hero
+- [ ] Remove/soften multi-module messaging
+- [ ] Update countdown section: "Pilot applications open" instead of "Launch"
+- [ ] Test all CTAs and links
+
+### Contact Form (Views\Home\Contact.cshtml + Controllers\HomeController.cs)
+- [x] Add "PilotApplication" to NormalizeTopic method
+- [ ] Update Contact GET: Add heading for "Apply for Pilot Program"
+- [ ] Update Contact GET: Add intro text emphasizing pilot partnership
+- [ ] Test form submission with new topic
+- [ ] Verify email notification reaches michael@sentinelaisystems.net
+
+### Pricing Page (Views\Home\Pricing.cshtml)
+- [ ] Add NEW "Pilot Partner" tier card at top
+  - Limited spots (5-10 partners)
+  - 50% discount for 12 months
+  - Co-design privileges
+  - Direct engineering access
+- [ ] Rename tiers: "EM Standard" (current Standard)
+- [ ] Gray out or hide Advanced/Premium/Enterprise
+- [ ] Add "Coming 2026" labels to future modules
+- [ ] Update CTA buttons to point to pilot application
+
+### Navigation & Layout (Views\Shared\_Layout.cshtml)
+- [ ] Update primary nav CTA: "Apply for Pilot" button
+- [ ] Consider renaming "Core Suite" nav item to "Emergency Maintenance"
+- [ ] Update footer product description
+- [ ] Test mobile nav
+
+---
+
+## SUNDAY (Supporting Pages & Polish)
+
+### Core Suite Page (Views\Home\CoreSuite.cshtml)
+**Decision:** Repurpose as EM deep-dive or keep as roadmap?
+- [ ] Option A: Rename to EmergencyMaintenance.cshtml and focus 100% on EM
+- [ ] Option B: Keep name, show EM as "Available Now", others as "Coming Soon"
+- [ ] Update countdown timer messaging
+- [ ] Update all CTAs to pilot application
+- [ ] Remove or soften promises about future modules
+
+### Platform Page (Views\Home\Platform.cshtml)
+- [ ] Lead section: Emphasize EM Module capabilities
+- [ ] Architecture section: Show extensibility without over-promising
+- [ ] Add "Start with EM, grow with us" messaging
+- [ ] Update feature list: Focus on what's available now
+- [ ] Test all links and CTAs
+
+### About Page (Views\Home\About.cshtml)
+- [ ] Add new section: "Why We're Starting with EM"
+- [ ] Add placeholder for pilot partner testimonials
+- [ ] Emphasize commitment to co-development
+- [ ] Update team/company story to align with focused launch
+
+### Use Cases Page (Views\Home\UseCases.cshtml)
+- [ ] Focus use cases on EM Module scenarios
+- [ ] Add pilot partner success story placeholders
+- [ ] Update CTAs to pilot application
+- [ ] Remove/soften multi-module use cases
+
+### Resources Page (Views\Home\Resources.cshtml)
+- [ ] Update any content mentioning "full suite launch"
+- [ ] Add pilot program FAQ section
+- [ ] Update download/resource links
+- [ ] Test all external links
+
+### New Components (Create if needed)
+- [ ] Create _PilotBenefitsCard.cshtml partial (reusable component)
+- [ ] Create _PilotCtaStrip.cshtml (alternative to existing CTA strip)
+- [ ] Update existing _TierCard.cshtml to support "Pilot" tier styling
+
+---
+
+## TESTING & DEPLOYMENT (Sunday Evening)
+
+### Testing Checklist
+- [ ] Test all navigation flows
+- [ ] Test contact form with "pilot-application" topic
+- [ ] Verify email notifications work (check michael@sentinelaisystems.net)
+- [ ] Test on mobile (responsive design)
+- [ ] Test all CTA buttons lead to correct pages
+- [ ] Verify no broken links
+- [ ] Test GA4 tracking (if enabled)
+- [ ] Check Clarity session recordings (if enabled)
+
+### Content Audit
+- [ ] Search codebase for "Manufacturing Core Suite" → decide keep or replace
+- [ ] Search for "launch" → update to "pilot" where appropriate
+- [ ] Search for "coming soon" → ensure consistency
+- [ ] Search for "early access" → update to "pilot partner"
+- [ ] Verify no contradictory messaging across pages
+
+### Deployment
+- [ ] Build and test locally one more time
+- [ ] Publish to dev machine: `dotnet publish -c Release`
+- [ ] Backup VM web.config
+- [ ] Robocopy to VM (exclude web.config and appsettings.Production.json):
+
+- [ ] Restart IIS: `iisreset /restart`
 - [ ] Verify site loads: https://sentinelaisystems.net
 - [ ] Submit test pilot application
 - [ ] Monitor logs for errors
