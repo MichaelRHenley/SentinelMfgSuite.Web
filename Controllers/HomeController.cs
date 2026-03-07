@@ -256,6 +256,7 @@ Message:
 
             return topic.Trim().ToLowerInvariant() switch
             {
+                "pilot-application" or "pilot" or "pilot-partner" => "PilotApplication",
                 "launch-list" or "launchlist" => "LaunchList",
                 "pilot-rollout" or "pilotrollout" => "PilotRollout",
                 "site-conversation" or "siteconversation" => "SiteConversation",
