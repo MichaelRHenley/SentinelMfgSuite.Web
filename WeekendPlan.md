@@ -172,10 +172,17 @@
 
 ## GA4 & ANALYTICS UPDATES (If Time Permits)
 
-- [ ] Update GA4 event: "join_launch_list" → "apply_pilot_program"
-- [ ] Add new conversion goal: "Pilot Application Submitted"
-- [ ] Update Clarity heatmap goals
+- [x] **Document all tracking events** - Created Analytics-Tracking.md with comprehensive documentation
+- [ ] Update GA4 event: "join_launch_list" → "apply_pilot_program" (if applicable)
+- [ ] Mark "apply_pilot_program" as conversion in GA4 admin
+- [ ] Mark "custom_build_inquiry" as conversion in GA4 admin
+- [ ] Mark "enterprise_inquiry" as conversion in GA4 admin
+- [ ] Set up GA4 conversion goals with estimated values
+- [ ] Update Clarity heatmap goals for pilot program funnel
 - [ ] Set up alerts for form submission failures
+- [ ] Add scroll depth tracking to Homepage and Pricing pages (currently only on CoreSuite)
+- [ ] Add ROI calculator interaction tracking
+- [ ] Add form start/submit event tracking
 
 ---
 
