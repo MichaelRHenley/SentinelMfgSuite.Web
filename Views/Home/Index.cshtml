@@ -537,7 +537,7 @@
                 </div>
 
                 <div>
-                    <!-- Right-side “enterprise console” -->
+                    <!-- Right-side "enterprise console" -->
                     <div class="glass-card">
                         <div class="glass-card-label">Sentinel Console · Preview</div>
 
@@ -611,25 +611,30 @@
                 </div>
             </div>
 
-            <!-- Spotlight band: connects company → product without forcing manufacturing on everyone -->
+            <!-- Spotlight band: EM MODULE PILOT OPPORTUNITY -->
             <div class="sis-spotlight">
                 <div class="sis-spotlight-left">
-                    <div class="sis-spotlight-kicker">Spotlight</div>
-                    <div class="sis-spotlight-title">Manufacturing Core Suite™</div>
+                    <div class="sis-spotlight-kicker">Emergency Maintenance Module · Pilot Program</div>
+                    <div class="sis-spotlight-title">Join the EM Module pilot program</div>
                     <div class="sis-spotlight-sub">
-                        A modular platform engineered for manufacturing operations — available for early access and pilots.
+                        Our Emergency Maintenance Module is ready for production — now recruiting 5-10 pilot partners 
+                        to refine deployment. Get 50% off for 12 months, co-design your instance, and work directly with engineering.
                     </div>
                 </div>
                 <div class="sis-spotlight-ctas">
-                    <a asp-controller="Home" asp-action="CoreSuite" class="btn-sentinel-primary"
-                       onclick="gtag('event','view_core_suite',{ 'button_location':'spotlight_primary','event_category':'navigation' });">
-                        View Core Suite
-                    </a>
-                    <a asp-controller="Home" asp-action="Contact" asp-route-topic="launch-list" class="btn-sentinel-ghost"
-                       onclick="gtag('event','join_launch_list',{ 'button_location':'spotlight_secondary','event_category':'conversion' });">
-                        Join Launch List
+                    <a asp-controller="Home" asp-action="Contact" asp-route-topic="pilot-application" class="btn-sentinel-primary"
+                       onclick="gtag('event','apply_pilot_program',{ 'button_location':'spotlight_primary','event_category':'conversion' });">
+                        Apply for Pilot
                     </a>
                 </div>
+            </div>
+
+            <!-- Explore EM button below pilot box -->
+            <div style="margin-top: 1.5rem; text-align: center;">
+                <a asp-controller="Home" asp-action="CoreSuite" class="btn-sentinel-ghost"
+                   onclick="gtag('event','view_core_suite',{ 'button_location':'below_pilot_spotlight','event_category':'navigation' });">
+                    Explore Emergency Maintenance
+                </a>
             </div>
         </section>
         

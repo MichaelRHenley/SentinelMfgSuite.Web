@@ -16,8 +16,8 @@
 
     // Treat these as "under Solutions"
     bool IsCoreSuite() => Is("home", "coresuite");
-    bool IsSolutionsRoot() => Is("home", "solutions", "platform"); // include platform during transition
-    bool IsSolutionsAny() => IsSolutionsRoot() || IsCoreSuite();    
+    bool IsPlatform() => Is("home", "platform");
+    bool IsSolutionsAny() => IsPlatform() || IsCoreSuite();
     bool IsUseCases() => Is("home", "usecases");
     bool IsResources() => Is("home", "resources");
     bool IsAbout() => Is("home", "about");
@@ -109,29 +109,22 @@
 
                                 <ul class="dropdown-menu dropdown-menu-dark sentinel-dropdown">
                                     <li>
-                                        <a class="dropdown-item @(IsSolutionsRoot() ? "active" : "")"
-                                           asp-controller="Home" asp-action="Solutions">
-                                            Overview
+                                        <a class="dropdown-item @(IsCoreSuite() ? "active" : "")"
+                                           asp-controller="Home" asp-action="CoreSuite">
+                                            Emergency Maintenance
                                         </a>
                                     </li>
 
                                     <li><hr class="dropdown-divider" /></li>
 
                                     <li>
-                                        <a class="dropdown-item @(IsCoreSuite() ? "active" : "")"
-                                           asp-controller="Home" asp-action="CoreSuite">
-                                            Mfg Core Suite
-                                        </a>
-                                    </li>
-
-                                    <li>
                                         <a class="dropdown-item @(Is("home", "platform") ? "active" : "")"
                                            asp-controller="Home" asp-action="Platform">
-                                            Platform
+                                            Future Platform Overview
                                         </a>
                                     </li>
                                 </ul>
-                            </li>                           
+                            </li>
 
                             <li class="nav-item">
                                 <a class="nav-link @(IsUseCases() ? "active" : "")"

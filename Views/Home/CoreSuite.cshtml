@@ -311,36 +311,33 @@
     }
 
     @@media (max-width: 992px) {
-        .sentinel-col-6
+        .sentinel-col-6 {
+            grid-column: span 12;
+        }
 
-    {
-        grid-column: span 12;
-    }
+        .sentinel-col-4 {
+            grid-column: span 12;
+        }
 
-    .sentinel-col-4 {
-        grid-column: span 12;
-    }
+        .sentinel-col-3 {
+            grid-column: span 12;
+        }
 
-    .sentinel-col-3 {
-        grid-column: span 12;
-    }
+        .sentinel-hero {
+            padding-top: 3rem;
+        }
 
-    .sentinel-hero {
-        padding-top: 3rem;
-    }
+        .sentinel-hero-grid {
+            grid-template-columns: 1fr;
+        }
 
-    .sentinel-hero-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .sentinel-hero::before {
-        top: -20px;
-        right: 10px;
-        width: 360px;
-        height: 360px;
-        opacity: 0.10;
-    }
-
+        .sentinel-hero::before {
+            top: -20px;
+            right: 10px;
+            width: 360px;
+            height: 360px;
+            opacity: 0.10;
+        }
     }
 
     /* Pillars */
@@ -622,12 +619,9 @@
     }
 
     @@media (max-width: 576px) {
-        .sentinel-cta-band .sentinel-hero-ctas
-
-    {
-        justify-content: center;
-    }
-
+        .sentinel-cta-band .sentinel-hero-ctas {
+            justify-content: center;
+        }
     }
 
     /* Bullet list inside Sentinel cards */
@@ -670,98 +664,79 @@
 
                     <div>
                         <div class="sentinel-kicker">
-                            Manufacturing Core Suite™ · Early access coming soon
+                            Manufacturing Core Suite™ · Emergency Maintenance Module
                         </div>
 
                         <h1 class="sentinel-hero-title">
-                            The <span>Emergency Maintenance Module</span> your plant needs.
+                            <span>EM Module</span> launching first. The rest follows.
                         </h1>
 
                         <p class="sentinel-hero-subtitle">
-                            Live EM board. Mobile responders. Real-time status. Proven in production facilities.
-                            <strong>Now recruiting pilot partners to refine and expand it together.</strong>
+                            We're launching the <strong>Emergency Maintenance Module</strong> first — a complete, mobile-first workflow 
+                            for managing unplanned equipment failures. <strong>Pilot partners get early access</strong> and help shape the roadmap.
+                            <br /><br />
+                            <strong>This system costs less than one hour of downtime per month.</strong>
                         </p>
 
                         <div class="sentinel-hero-ctas">
                             <a asp-controller="Home" asp-action="Contact" asp-route-topic="pilot-application"
-                               class="btn-sentinel-primary">
+                               class="btn-sentinel-primary"
+                               onclick="gtag('event','apply_pilot_program',{ 'button_location':'core_suite_hero_primary','event_category':'conversion' });">
                                 Apply for Pilot Program
                             </a>
-                            <a asp-controller="Home" asp-action="EmergencyMaintenance"
-                               class="btn-sentinel-ghost">
-                                See How It Works
+                            <a asp-controller="Home" asp-action="Pricing"
+                               class="btn-sentinel-ghost"
+                               onclick="gtag('event','view_pricing',{ 'button_location':'core_suite_hero_secondary','event_category':'navigation' });">
+                                See Pricing
                             </a>
                         </div>
 
                         <p class="sentinel-hero-note">
-                            Ideal for manufacturers who want modern tools now and a guided path into AI —
-                            and for anyone who needs a serious custom build for their workflows, in any industry.
+                            <strong>Pilot benefits:</strong> Early access when EM launches · 50% discount for 12 months · 
+                            Direct engineering access · Co-design your deployment · Priority for future modules
                         </p>
                     </div>
 
                     <div class="sentinel-hero-dashboard">
                         <div class="glass-card">
                             <div class="glass-card-label">
-                                Manufacturing Core Suite™ · Launch Console (preview)
+                                EM Module · Launch Status
                             </div>
 
                             <div class="dashboard-grid">
-                                <div class="dashboard-tile"
-                                     onclick="gtag('event', 'tile_click', {
-                                         'tile_name': 'early_access',
-                                         'tile_location': 'launch_console',
-                                         'event_category': 'engagement'
-                                     });">
-                                    <div class="dashboard-tile-label">Early access spots</div>
-                                    <div class="dashboard-tile-value">Limited</div>
-                                    <div class="dashboard-tile-sub">Priority for plants ready to pilot</div>
+                                <div class="dashboard-tile pending">
+                                    <div class="dashboard-tile-label">EM Module</div>
+                                    <div class="dashboard-tile-value">Coming Soon</div>
+                                    <div class="dashboard-tile-sub">Launching Q2 2026</div>
                                 </div>
 
-                                <div class="dashboard-tile pending"
-                                     onclick="gtag('event', 'tile_click', {
-                                         'tile_name': 'custom_builds',
-                                         'tile_location': 'launch_console',
-                                         'event_category': 'engagement'
-                                     });">
-                                    <div class="dashboard-tile-label">Custom builds</div>
+                                <div class="dashboard-tile">
+                                    <div class="dashboard-tile-label">Pilot Program</div>
                                     <div class="dashboard-tile-value">Open</div>
-                                    <div class="dashboard-tile-sub">
-                                        Manufacturing, other industries, or serious personal workflows —
-                                        built to your reality.
-                                    </div>
+                                    <div class="dashboard-tile-sub">Apply for early access</div>
                                 </div>
 
-                                <div class="dashboard-tile"
-                                     onclick="gtag('event', 'tile_click', {
-                                         'tile_name': 'timeline',
-                                         'tile_location': 'launch_console',
-                                         'event_category': 'engagement'
-                                     });">
-                                    <div class="dashboard-tile-label">Go-live timeline</div>
+                                <div class="dashboard-tile">
+                                    <div class="dashboard-tile-label">Deployment</div>
                                     <div class="dashboard-tile-value">Weeks</div>
                                     <div class="dashboard-tile-sub">
-                                        Start with Tier 1 foundations, grow from there
+                                        Co-designed with your team
                                     </div>
                                 </div>
 
-                                <div class="dashboard-tile danger"
-                                     onclick="gtag('event', 'tile_click', {
-                                         'tile_name': 'downtime_risk',
-                                         'tile_location': 'launch_console',
-                                         'event_category': 'engagement'
-                                     });">
-                                    <div class="dashboard-tile-label">Downtime risk</div>
-                                    <div class="dashboard-tile-value">Too high</div>
+                                <div class="dashboard-tile pending" style="opacity: 0.6;">
+                                    <div class="dashboard-tile-label">Other Modules</div>
+                                    <div class="dashboard-tile-value">Later 2026</div>
                                     <div class="dashboard-tile-sub">
-                                        That's what we're here to fix.
+                                        After EM stabilizes
                                     </div>
                                 </div>
                             </div>
 
                             <div class="sentinel-chip-row">
-                                <span class="sentinel-chip">Early-access pricing</span>
-                                <span class="sentinel-chip">Shaped by real plants</span>
-                                <span class="sentinel-chip">AI-assisted from day one</span>
+                                <span class="sentinel-chip">EM First</span>
+                                <span class="sentinel-chip">Pilot early access</span>
+                                <span class="sentinel-chip">50% discount</span>
                             </div>
                         </div>
                     </div>
@@ -769,67 +744,69 @@
                 </div>
             </section>
 
-            <!-- LAUNCH TEASER -->
+            <!-- EM MODULE PILOT PROGRAM -->
             <section class="sentinel-section sentinel-launch-teaser">
                 <div class="launch-card">
-                    <div class="launch-pill">Sentinel Manufacturing Core Suite™ · Coming soon</div>
+                    <div class="launch-pill">Emergency Maintenance Module · Launching Q2 2026</div>
 
-                    <h2 class="launch-title">Be first in line when Sentinel goes live.</h2>
+                    <h2 class="launch-title">Be first to deploy the EM Module</h2>
 
                     <p class="launch-subtitle">
-                        We’re actively building the first public release. Join the launch list to get early-access details,
-                        founding-customer pricing, and a chance to shape the roadmap around your plant — or whatever world you work in.
+                        We're recruiting 5-10 pilot partners to get early access when the EM Module launches. 
+                        Get 50% off for 12 months, co-design your deployment, and work directly with engineering as we build the rest of the platform.
                     </p>
 
                     <div class="launch-grid">
                         <div class="launch-point">
-                            <div class="launch-point-label">Founding customers</div>
+                            <div class="launch-point-label">Early Access to EM</div>
                             <p class="launch-point-text">
-                                Limited early-access slots for manufacturers who want to co-design the first wave of features and integrations.
+                                Be the first to deploy the Emergency Maintenance Module when it launches in Q2 2026. 
+                                No waiting in line — you're in from day one.
                             </p>
                         </div>
 
                         <div class="launch-point">
-                            <div class="launch-point-label">Custom system builds</div>
+                            <div class="launch-point-label">Shape the Roadmap</div>
                             <p class="launch-point-text">
-                                Need something sooner? We’ll talk about building out your EM, operations, or completely different workflows
-                                on the same stack — any industry, and even serious personal systems.
+                                Your feedback directly influences EM v2.0 and the development of the other modules 
+                                (Planned Maintenance, Production Tracking, Parts Intelligence).
                             </p>
                         </div>
 
                         <div class="launch-point">
-                            <div class="launch-point-label">No spam, no fluff</div>
+                            <div class="launch-point-label">50% Off + Priority Access</div>
                             <p class="launch-point-text">
-                                A short, occasional update when there’s something real to show: milestones, screenshots, and go-live opportunities.
+                                50% discount for 12 months, direct engineering support, and first access to new modules 
+                                as they roll out later in 2026.
                             </p>
                         </div>
                     </div>
 
                     <div class="launch-cta-row">
-                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="launch-list"
+                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="pilot-application"
                            class="btn-sentinel-primary"
-                           onclick="gtag('event', 'join_launch_list', {
-                               'button_location': 'launch_teaser',
+                           onclick="gtag('event', 'apply_pilot_program', {
+                               'button_location': 'pilot_teaser',
                                'event_category': 'conversion',
-                               'event_label': 'Launch Teaser CTA'
+                               'event_label': 'Pilot Teaser Apply CTA'
                            });">
-                            Join the Launch List
+                            Apply for Pilot Program
                         </a>
 
-                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="custom-build"
+                        <a asp-controller="Home" asp-action="Pricing"
                            class="btn-sentinel-ghost"
-                           onclick="gtag('event', 'custom_build_inquiry', {
-                               'button_location': 'launch_teaser',
-                               'event_category': 'conversion',
-                               'event_label': 'Launch Teaser Custom Build'
+                           onclick="gtag('event', 'view_pricing', {
+                               'button_location': 'pilot_teaser',
+                               'event_category': 'navigation',
+                               'event_label': 'Pilot Teaser Pricing'
                            });">
-                            Talk about a custom build
+                            See Pilot Pricing
                         </a>
                     </div>
 
                     <div class="launch-tile launch-tile--countdown">
                         <div class="launch-tile-subtitle">
-                            Time until Sentinel Manufacturing Core Suite™ early-access launch.
+                            EM Module launch countdown:
                         </div>
 
                         <div id="launchCountdown" class="launch-countdown">
@@ -852,12 +829,13 @@
                         </div>
 
                         <div id="launchCountdownMessage" class="launch-countdown-message d-none">
-                            We’re live. Let’s run your first pilots. 🚀
+                            EM Module is live! 🚀
                         </div>
                     </div>
                 </div>
             </section>
 
+           
             <!-- PROBLEM -->
             <section class="sentinel-section">
                 <div class="sentinel-problem">
@@ -894,7 +872,7 @@
                         <div class="pillar-title">See everything in one place</div>
                         <p class="pillar-text">
                             Tie EM, preventive maintenance, work centers, parts, quality, and safety into a single live view.
-                            No more guessing what’s happening on the floor.
+                            No more guessing what's happening on the floor.
                         </p>
                     </div>
 
@@ -978,16 +956,20 @@
             <section class="sentinel-section">
                 <div class="sentinel-section-header">
                     <div class="sentinel-section-kicker">Modules</div>
-                    <h2 class="sentinel-section-title">One platform. Built for the whole factory.</h2>
+                    <h2 class="sentinel-section-title">Start with EM. Grow into the full suite.</h2>
                     <p class="sentinel-section-sub">
-                        Start with maintenance, then grow into production, quality, safety, and parts as you’re ready.
+                        The Emergency Maintenance Module launches Q2 2026. Pilot partners get early access. 
+                        Other modules follow later in 2026 once EM stabilizes.
                     </p>
                 </div>
 
                 <div class="sentinel-grid">
                     <div class="sentinel-col-3">
-                        <div class="pillar-card">
-                            <div class="pillar-title">Emergency Maintenance</div>
+                        <div class="pillar-card" style="border: 2px solid rgba(255,214,102,0.8); box-shadow: 0 0 24px rgba(255,214,102,0.5);">
+                            <div style="display: inline-flex; align-items: center; gap: .5rem; margin-bottom: .5rem;">
+                                <div class="pillar-title" style="margin: 0;">Emergency Maintenance</div>
+                                <span style="font-size: .7rem; padding: .2rem .5rem; border-radius: 999px; border: 1px solid rgba(255,214,102,0.9); color: #ffd666; background: rgba(21,14,7,0.9); text-transform: uppercase; letter-spacing: .14em;">Launching Q2 2026</span>
+                            </div>
                             <p class="pillar-text">
                                 Real-time EM board with live chat, mobile responders, photos, and machine status.
                             </p>
@@ -1000,8 +982,11 @@
                     </div>
 
                     <div class="sentinel-col-3">
-                        <div class="pillar-card">
-                            <div class="pillar-title">Planned Maintenance</div>
+                        <div class="pillar-card" style="opacity: 0.7;">
+                            <div style="display: inline-flex; align-items: center; gap: .5rem; margin-bottom: .5rem;">
+                                <div class="pillar-title" style="margin: 0;">Planned Maintenance</div>
+                                <span style="font-size: .7rem; padding: .2rem .5rem; border-radius: 999px; border: 1px solid rgba(255,214,102,0.7); color: #ffd666; background: rgba(21,14,7,0.9); text-transform: uppercase; letter-spacing: .14em;">Later 2026</span>
+                            </div>
                             <p class="pillar-text">
                                 Keep PMs and corrective work organized, prioritized, and visible.
                             </p>
@@ -1014,8 +999,11 @@
                     </div>
 
                     <div class="sentinel-col-3">
-                        <div class="pillar-card">
-                            <div class="pillar-title">Production &amp; Downtime</div>
+                        <div class="pillar-card" style="opacity: 0.7;">
+                            <div style="display: inline-flex; align-items: center; gap: .5rem; margin-bottom: .5rem;">
+                                <div class="pillar-title" style="margin: 0;">Production &amp; Downtime</div>
+                                <span style="font-size: .7rem; padding: .2rem .5rem; border-radius: 999px; border: 1px solid rgba(255,214,102,0.7); color: #ffd666; background: rgba(21,14,7,0.9); text-transform: uppercase; letter-spacing: .14em;">Later 2026</span>
+                            </div>
                             <p class="pillar-text">
                                 Track runtime, stoppages, and standardized reasons in real time.
                             </p>
@@ -1028,8 +1016,11 @@
                     </div>
 
                     <div class="sentinel-col-3">
-                        <div class="pillar-card">
-                            <div class="pillar-title">Parts &amp; BOM Intelligence</div>
+                        <div class="pillar-card" style="opacity: 0.7;">
+                            <div style="display: inline-flex; align-items: center; gap: .5rem; margin-bottom: .5rem;">
+                                <div class="pillar-title" style="margin: 0;">Parts &amp; BOM Intelligence</div>
+                                <span style="font-size: .7rem; padding: .2rem .5rem; border-radius: 999px; border: 1px solid rgba(255,214,102,0.7); color: #ffd666; background: rgba(21,14,7,0.9); text-transform: uppercase; letter-spacing: .14em;">Later 2026</span>
+                            </div>
                             <p class="pillar-text">
                                 Find the right part the first time — across SAP, CMMS, and local stores.
                             </p>
@@ -1041,6 +1032,12 @@
                         </div>
                     </div>
                 </div>
+
+                <div style="margin-top: 1.5rem; text-align: center;">
+                    <p style="color: rgba(219,229,255,0.85); font-size: .95rem;">
+                        <strong>Pilot partners get early access</strong> to the EM Module when it launches Q2 2026, and priority access to all future modules as they roll out later in 2026.
+                    </p>
+                </div>
             </section>
 
             <!-- AI FEATURES -->
@@ -1049,7 +1046,7 @@
                     <div class="sentinel-section-kicker">AI</div>
                     <h2 class="sentinel-section-title">AI that speaks maintenance — not buzzwords.</h2>
                     <p class="sentinel-section-sub">
-                        Sentinel’s AI is trained on your own data and language — your EM tickets, comments, work orders, and parts usage —
+                        Sentinel's AI is trained on your own data and language — your EM tickets, comments, work orders, and parts usage —
                         not a generic demo set.
                     </p>
                 </div>
@@ -1095,7 +1092,7 @@
                             <div style="padding: 1rem; border-radius: 1rem; background: rgba(0,0,0,0.35); border: 1px solid rgba(124,173,255,0.25);">
                                 <div style="margin-bottom:.85rem;">
                                     <span style="font-weight:650; color:#86e5ff;">You:</span>
-                                    <span style="color:rgba(219,229,255,0.9);"> What’s driving downtime on Line 3 this week?</span>
+                                    <span style="color:rgba(219,229,255,0.9);"> What's driving downtime on Line 3 this week?</span>
                                 </div>
 
                                 <div style="margin-bottom:.85rem;">
@@ -1125,7 +1122,7 @@
                     <div class="sentinel-section-kicker">Tiered Growth Path</div>
                     <h2 class="sentinel-section-title">Start where you are. Grow into full smart factory capability.</h2>
                     <p class="sentinel-section-sub">
-                        Sentinel is designed as a ladder, not a gamble. Start with digital foundations and grow when you’re ready.
+                        Sentinel is designed as a ladder, not a gamble. Start with digital foundations and grow when you're ready.
                     </p>
                 </div>
 
@@ -1183,7 +1180,7 @@
                     <div class="persona-card">
                         <div class="persona-title">Operators &amp; front-line teams</div>
                         <div class="persona-line-label">Pain</div>
-                        <p class="persona-text">Paperwork, radios, and systems that don’t talk to each other.</p>
+                        <p class="persona-text">Paperwork, radios, and systems that don't talk to each other.</p>
                         <div class="persona-line-label">Sentinel</div>
                         <p class="persona-text">Simple screens, fast EM, clear instructions — less chaos every shift.</p>
                     </div>
@@ -1210,9 +1207,10 @@
             <section class="sentinel-section">
                 <div class="sentinel-section-header">
                     <div class="sentinel-section-kicker">Designed on real shop floors</div>
-                    <h2 class="sentinel-section-title">Built on real plants — not in a boardroom.</h2>
+                    <h2 class="sentinel-section-title">Built on real EM calls — not in a boardroom</h2>
                     <p class="sentinel-section-sub">
-                        Sentinel was born inside a live manufacturing plant, battle-tested on real EM calls, and then turned into a platform any factory can adopt.
+                        The EM Module was born inside a live manufacturing plant, battle-tested on real emergency calls, 
+                        and refined into a system any factory can deploy.
                     </p>
                 </div>
 
@@ -1221,8 +1219,8 @@
                         <div class="glass-card">
                             <div class="glass-card-label">Maintenance Supervisor · Discrete Manufacturing</div>
                             <p style="margin:0; color: rgba(219,229,255,0.88);">
-                                “Our responders stopped living on the radio. Everyone sees the same EM board and we cut
-                                average response time without adding headcount.”
+                                "The EM board replaced our radio chaos. Everyone sees the same queue, 
+                                response times dropped 30%, and we didn't add headcount."
                             </p>
                         </div>
                     </div>
@@ -1231,8 +1229,8 @@
                         <div class="glass-card">
                             <div class="glass-card-label">Operations Manager · Process Manufacturing</div>
                             <p style="margin:0; color: rgba(219,229,255,0.88);">
-                                “Leadership finally gets a clean story on where downtime is coming from —
-                                and what it would cost not to fix it.”
+                                "Leadership finally sees where downtime is coming from in real time. 
+                                No more 'Why didn't anyone tell us?' conversations."
                             </p>
                         </div>
                     </div>
@@ -1248,7 +1246,7 @@
                             <div style="font-size: 1.45rem; font-weight: 650; margin-bottom: .5rem;">Tiered to grow with you.</div>
                             <p style="margin:0 0 .85rem; color: rgba(219,229,255,0.78);">
                                 Start with a focused maintenance tier and expand as your digital roadmap matures.
-                                No seven-figure “digital transformation” required.
+                                No seven-figure "digital transformation" required.
                             </p>
                             <ul class="sentinel-list">
                                 <li>Standard tier for small &amp; mid-sized plants</li>
@@ -1287,31 +1285,31 @@
             <!-- FINAL CTA -->
             <section class="sentinel-section">
                 <div class="sentinel-cta-band">
-                    <div class="sentinel-cta-title">Ready to see your work in real time?</div>
+                    <div class="sentinel-cta-title">Ready to see EM chaos become clarity?</div>
                     <p class="sentinel-cta-sub">
-                        We’ll walk through your current reality, plug it into Sentinel, and show you how much downtime,
-                        friction, and guesswork you can remove — whether that’s a factory floor or a completely different kind of workflow.
+                        Apply for the pilot program. We'll walk through your current EM reality, 
+                        show you the module, and co-design your deployment together.
                     </p>
 
                     <div class="sentinel-hero-ctas" style="margin-top: 1rem;">
-                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="custom-build"
-                           class="btn-sentinel-ghost"
-                           onclick="gtag('event', 'custom_build_inquiry', {
+                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="pilot-application"
+                           class="btn-sentinel-primary"
+                           onclick="gtag('event', 'apply_pilot_program', {
                                'button_location': 'final_cta_band',
                                'event_category': 'conversion',
-                               'event_label': 'Bottom CTA Custom Build'
+                               'event_label': 'Bottom CTA Pilot Application'
                            });">
-                            Talk about a custom build
+                            Apply for Pilot Program
                         </a>
 
-                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="launch-list"
-                           class="btn-sentinel-primary"
-                           onclick="gtag('event', 'join_launch_list', {
+                        <a asp-controller="Home" asp-action="Pricing"
+                           class="btn-sentinel-ghost"
+                           onclick="gtag('event', 'view_pricing', {
                                'button_location': 'final_cta_band',
-                               'event_category': 'conversion',
-                               'event_label': 'Bottom CTA Launch List'
+                               'event_category': 'navigation',
+                               'event_label': 'Bottom CTA Pricing'
                            });">
-                            Join the Launch List
+                            See Pilot Pricing
                         </a>
                     </div>
                 </div>
