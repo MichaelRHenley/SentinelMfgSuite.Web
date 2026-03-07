@@ -771,7 +771,13 @@
                                                    });">
                                                     Apply for Pilot Program
                                                 </a>
-                                                <a asp-controller="Home" asp-action="Contact" asp-route-topic="pricing-conversation" class="btn-sentinel-ghost">
+                                                <a asp-controller="Home" asp-action="Contact" asp-route-topic="pricing-conversation" 
+                                                   class="btn-sentinel-ghost"
+                                                   onclick="gtag('event', 'pricing_conversation_inquiry', {
+                                                       'button_location': 'pricing_faq_cta',
+                                                       'event_category': 'conversion',
+                                                       'event_label': 'FAQ Section Pricing'
+                                                   });">
                                                     Talk about pricing
                                                 </a>
                                             </div>
@@ -849,6 +855,8 @@
                 reductionLabel.textContent = reductionInput.value + '%';
             }
 
+            let roiCalculatorInteracted = false;
+
             function updateRoi() {
                 if (!hoursInput || !costInput || !reductionInput || !tierSelect) return;
 
@@ -865,8 +873,9 @@
                 if (annualOut) annualOut.textContent = fmtCurrency.format(annualSavings || 0);
 
                 let multiplierText = '–';
+                let roiMultiple = 0;
                 if (tierPrice > 0 && annualSavings > 0) {
-                    const roiMultiple = annualSavings / (tierPrice * 12);
+                    roiMultiple = annualSavings / (tierPrice * 12);
                     multiplierText = roiMultiple < 0.1 ? '<1×' : fmtNumber.format(roiMultiple) + '×';
                 }
                 if (multiplierOut) multiplierOut.textContent = multiplierText;
@@ -878,6 +887,16 @@
                             `At these numbers, Sentinel would save about ${fmtCurrency.format(monthlySavings)} per month ` +
                             `against roughly ${fmtCurrency.format(tierPrice)} in subscription cost — ` +
                             `around ${fmtCurrency.format(netPerMonth)} net per month before any other benefits.`;
+
+                        // Track positive ROI result
+                        if (netPerMonth > 0 && roiMultiple > 1) {
+                            gtag('event', 'roi_calculator_positive', {
+                                'event_category': 'engagement',
+                                'event_label': 'Pricing Page ROI Calculator',
+                                'savings_annual': Math.round(annualSavings),
+                                'roi_multiple': Math.round(roiMultiple * 10) / 10
+                            });
+                        }
                     } else {
                         summaryLine.textContent = 'Enter your numbers to see a quick payback estimate.';
                     }
@@ -886,6 +905,14 @@
 
             if (reductionInput) {
                 reductionInput.addEventListener('input', function () {
+                    // Track first interaction with ROI calculator
+                    if (!roiCalculatorInteracted) {
+                        roiCalculatorInteracted = true;
+                        gtag('event', 'roi_calculator_interaction', {
+                            'event_category': 'engagement',
+                            'event_label': 'Pricing Page ROI Calculator'
+                        });
+                    }
                     updateReductionLabel();
                     updateRoi();
                 });
@@ -893,12 +920,36 @@
 
             [hoursInput, costInput, tierSelect].forEach(el => {
                 if (!el) return;
-                el.addEventListener('input', updateRoi);
+                el.addEventListener('input', function() {
+                    // Track first interaction with ROI calculator
+                    if (!roiCalculatorInteracted) {
+                        roiCalculatorInteracted = true;
+                        gtag('event', 'roi_calculator_interaction', {
+                            'event_category': 'engagement',
+                            'event_label': 'Pricing Page ROI Calculator'
+                        });
+                    }
+                    updateRoi();
+                });
                 el.addEventListener('change', updateRoi);
             });
 
             updateReductionLabel();
             updateRoi();
         })();
+    </script>
+
+    <script>
+        // Track scroll depth
+        let scrollTracked = { '25': false, '50': false, '75': false, '90': false };
+
+        window.addEventListener('scroll', function () {
+            let scrollPercent = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+
+            if (scrollPercent >= 25 && !scrollTracked['25']) { gtag('event', 'scroll_depth', { 'percent': '25', 'page': 'pricing' }); scrollTracked['25'] = true; }
+            if (scrollPercent >= 50 && !scrollTracked['50']) { gtag('event', 'scroll_depth', { 'percent': '50', 'page': 'pricing' }); scrollTracked['50'] = true; }
+            if (scrollPercent >= 75 && !scrollTracked['75']) { gtag('event', 'scroll_depth', { 'percent': '75', 'page': 'pricing' }); scrollTracked['75'] = true; }
+            if (scrollPercent >= 90 && !scrollTracked['90']) { gtag('event', 'scroll_depth', { 'percent': '90', 'page': 'pricing' }); scrollTracked['90'] = true; }
+        });
     </script>
 }

@@ -134,24 +134,50 @@
 }
 
 @section Scripts {
-    @await Html.PartialAsync("_ValidationScriptsPartial")
-
-   <script>
-(function () {
-    const form = document.getElementById('customBuildForm');
-    const btn = document.getElementById('startConversationBtn');
-    if (!form || !btn) return;
-
-    const fields = [
-        document.getElementById('Name'),
-        document.getElementById('Email'),
-        document.getElementById('Company'),
-        document.getElementById('Notes')
-    ].filter(Boolean);
-
-    function looksLikeEmail(value) {
-        return /\S+@@\S+\.\S+/.test(value); // ✅ single 
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+
+    <script>
+            (function () {
+                const form = document.getElementById('customBuildForm');
+                const btn = document.getElementById('startConversationBtn');
+                if (!form || !btn) return;
+
+                const fields = [
+                    document.getElementById('Name'),
+                    document.getElementById('Email'),
+                    document.getElementById('Company'),
+                    document.getElementById('Notes')
+                ].filter(Boolean);
+
+                let formStarted = false;
+                fields.forEach(f => {
+                    f.addEventListener('focus', function () {
+                        if (!formStarted) {
+                            formStarted = true;
+                            const topic = new URLSearchParams(window.location.search).get('topic') || 'general';
+                            gtag('event', 'form_start', {
+                                event_category: 'form',
+                                form_name: 'contact',
+                                form_topic: topic
+                            });
+                        }
+                    });
+                });
+
+                form.addEventListener('submit', function () {
+                    const topic = new URLSearchParams(window.location.search).get('topic') || 'general';
+                    gtag('event', 'form_submit', {
+                        event_category: 'form',
+                        form_name: 'contact',
+                        form_topic: topic
+                    });
+                });
+
+                function looksLikeEmail(value) {
+                    return /\S+@@\S+\.\S+/.test(value);
+                }
 
     function updateButtonState() {
         const allFilled = fields.every(f => f.value.trim().length > 0);

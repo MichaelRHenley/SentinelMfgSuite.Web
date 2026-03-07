@@ -92,4 +92,67 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+
+    <script>
+        (function () {
+            const form = document.getElementById('launchListForm');
+            const btn = document.getElementById('joinLaunchListBtn');
+            if (!form || !btn) return;
+
+            const fields = [
+                document.getElementById('LaunchName'),
+                document.getElementById('LaunchEmail'),
+                document.getElementById('LaunchCompany')
+            ].filter(Boolean);
+
+            // Track form start
+            let formStarted = false;
+            fields.forEach(f => {
+                f.addEventListener('focus', function () {
+                    if (!formStarted) {
+                        formStarted = true;
+                        gtag('event', 'form_start', {
+                            event_category: 'form',
+                            form_name: 'launch_list',
+                            form_location: 'launch_list_page'
+                        });
+                    }
+                });
+            });
+
+            // Track form submission
+            form.addEventListener('submit', function () {
+                gtag('event', 'form_submit', {
+                    event_category: 'form',
+                    form_name: 'launch_list',
+                    form_location: 'launch_list_page'
+                });
+
+                gtag('event', 'launch_list_signup', {
+                    event_category: 'conversion',
+                    signup_location: 'launch_list_page'
+                });
+            });
+
+            // Email validation
+            function looksLikeEmail(value) {
+                return /\S+@@\S+\.\S+/.test(value);
+            }
+
+            // Button state management
+            function updateButtonState() {
+                const allFilled = fields.every(f => f.value.trim().length > 0);
+                const emailField = document.getElementById('LaunchEmail');
+                const emailOk = emailField ? looksLikeEmail(emailField.value.trim()) : false;
+                btn.disabled = !(allFilled && emailOk);
+            }
+
+            fields.forEach(f => {
+                f.addEventListener('input', updateButtonState);
+                f.addEventListener('blur', updateButtonState);
+            });
+
+            updateButtonState();
+        })();
+    </script>
 }
