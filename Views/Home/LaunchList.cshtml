@@ -1,4 +1,4 @@
-﻿@model SentinelMfgSuite.Web.Models.LaunchListForm
+@model SentinelMfgSuite.Web.Models.LaunchListForm
 @{
     ViewData["Title"] = "Launch List";
     Layout = "~/Views/Shared/_Layout.cshtml";
@@ -13,8 +13,8 @@
                 </h1>
 
                 <p class="text-secondary mb-3">
-                    Get early access details, founding-customer pricing, and a chance to shape the roadmap
-                    for the Sentinel Manufacturing Suite.
+                    Get notified when the <strong>Emergency Maintenance Module launches Q2 2026</strong>. 
+                    Early access details, pilot partner opportunities, and founding-customer pricing.
                 </p>
 
                 @if (ViewBag.SuccessMessage != null)
@@ -52,7 +52,8 @@
                         <textarea asp-for="Notes"
                                   class="form-control"
                                   id="LaunchNotes"
-                                  rows="3"></textarea>
+                                  rows="3"
+                                  placeholder="Tell us about your plant size, lines, and EM challenges..."></textarea>
                         <span asp-validation-for="Notes" class="text-danger small"></span>
                     </div>
 
@@ -69,14 +70,19 @@
                 <div class="card border-0 rounded-4 bg-dark bg-opacity-75 text-light h-100">
                     <div class="card-body p-4">
                         <h2 class="h6 text-uppercase text-secondary mb-3">
-                            What you’ll get
+                            What you'll get
                         </h2>
-                        <ul class="small text-secondary mb-0">
-                            <li>Early-access invite for pilot plants</li>
-                            <li>Founding-customer pricing options</li>
+                        <ul class="small text-secondary mb-4">
+                            <li>Early notification when EM Module launches Q2 2026</li>
+                            <li>Pilot partner program invites (limited to 5-10 spots)</li>
+                            <li>50% founding-customer discount for 12 months</li>
                             <li>Behind-the-scenes build updates</li>
-                            <li>Opportunities to influence the roadmap</li>
+                            <li>Opportunity to shape the roadmap</li>
                         </ul>
+                        
+                        <div class="small text-secondary mt-3 pt-3 border-top border-secondary border-opacity-25">
+                            <strong>EM Module first.</strong> Other modules (Planned Maintenance, Production Tracking, Parts Intelligence) launch later in 2026 after EM stabilizes.
+                        </div>
                     </div>
                 </div>
             </div>
