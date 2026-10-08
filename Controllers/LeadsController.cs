@@ -20,8 +20,8 @@ namespace SentinelMfgSuite.Web.Controllers
         // Small helper: check the owner token
         private bool IsOwner()
         {
-            var expected = _config["Leads:OwnerToken"];
-            if (string.IsNullOrWhiteSpace(expected))
+            var expectedToken = _config["Leads:OwnerToken"];
+            if (string.IsNullOrWhiteSpace(expectedToken))
             {
                 // safety: if no token configured, never show leads
                 return false;
@@ -37,14 +37,14 @@ namespace SentinelMfgSuite.Web.Controllers
                 supplied = cookieVal;
             }
 
-            var ok = string.Equals(supplied, expected, StringComparison.Ordinal);
+            var ok = string.Equals(supplied, expectedToken, StringComparison.Ordinal);
 
             // If correct, refresh cookie for convenience
             if (ok)
             {
                 HttpContext.Response.Cookies.Append(
                     "sentinel_leads_key",
-                    expected,
+                    expectedToken,
                     new CookieOptions
                     {
                         HttpOnly = true,

@@ -39,16 +39,16 @@ namespace SentinelMfgSuite.Web.Controllers
         public IActionResult Index() => View();
         [HttpGet]
         [Route("core-suite")]
-        public IActionResult CoreSuite() => View();
+        public IActionResult CoreSuite() => RedirectToAction("Solutions");
 
         public IActionResult Platform() => View();
-        public IActionResult Pricing() => View();
+        public IActionResult Pricing() => RedirectToAction("Contact");
         public IActionResult UseCases() => View();
         public IActionResult Resources() => View();
         public IActionResult About() => View();
 
         [HttpGet("solutions")]
-        public IActionResult Solutions() => View("Platform");
+        public IActionResult Solutions() => View("Solutions");
 
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
@@ -72,7 +72,8 @@ namespace SentinelMfgSuite.Web.Controllers
         [HttpGet]
         public IActionResult LaunchList()
         {
-            return View(new LaunchListForm());
+            // Legacy launch list page should not serve public content. Redirect to contact for inquiries.
+            return RedirectToAction("Contact");
         }
 
         [HttpPost]
@@ -83,25 +84,13 @@ namespace SentinelMfgSuite.Web.Controllers
             {
                 return View(model);
             }
-
             try
             {
-                var appDataPath = Path.Combine(_env.ContentRootPath, "App_Data");
-                Directory.CreateDirectory(appDataPath);
+                // Legacy endpoint retained for compatibility. Do not perform file system writes from the web app.
+                _logger.LogInformation("LaunchList signup received (legacy endpoint) for {Email}", model?.Email);
 
-                var filePath = Path.Combine(appDataPath, "launch-list-signups.csv");
-
-                var line = string.Join(",",
-                    EscapeCsv(DateTime.UtcNow.ToString("O")),
-                    EscapeCsv(model.Name),
-                    EscapeCsv(model.Email),
-                    EscapeCsv(model.Company),
-                    EscapeCsv(model.Notes)
-                ) + Environment.NewLine;
-
-                await System.IO.File.AppendAllTextAsync(filePath, line, Encoding.UTF8);
-
-                ViewBag.SuccessMessage = "You're on the list. We'll be in touch.";
+                // Provide a friendly response while avoiding persistence in the legacy path.
+                ViewBag.SuccessMessage = "Thanks — we'll be in touch.";
                 ModelState.Clear();
 
                 return View(new LaunchListForm());
@@ -178,7 +167,6 @@ namespace SentinelMfgSuite.Web.Controllers
 
                 // Save lead first
                 _db.WebLeads.Add(lead);
-                _logger.LogInformation("DB: {Db} @ {Server}", _db.Database.GetDbConnection().Database, _db.Database.GetDbConnection().DataSource);
                 await _db.SaveChangesAsync();
                 _logger.LogInformation("WebLead saved: {Email} - {Topic}", lead.Email, lead.Topic);
 
@@ -215,6 +203,7 @@ Message:
                 }
                 catch (Exception emailEx)
                 {
+                    // Do NOT expose email exception details to the user; log for diagnostics only.
                     _logger.LogWarning(emailEx, "Failed to send notification to {NotifyRecipient} for lead {LeadEmail}. Lead persisted.", notifyRecipient, lead.Email);
                     // continue - lead already saved
                 }
@@ -223,17 +212,15 @@ Message:
             }
             catch (DbUpdateException dbEx)
             {
-                var inner = dbEx.InnerException?.Message ?? dbEx.Message;
-                _logger.LogError(dbEx, "DB error saving WebLead. Inner={Inner}", inner);
-
-                // DEV ONLY: surface the real reason on the page
-                ModelState.AddModelError("", inner);
+                // Log internal DB details for diagnostics, but do not reveal to end users.
+                _logger.LogError(dbEx, "DB error saving WebLead.");
+                ModelState.AddModelError("", "An internal error occurred while processing your request. Please try again later.");
                 return View(model);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing contact form");
-                ModelState.AddModelError("", ex.Message); // DEV ONLY
+                ModelState.AddModelError("", "An unexpected error occurred. Please try again later.");
                 return View(model);
             }
         }
@@ -252,18 +239,17 @@ Message:
         private static string NormalizeTopic(string? topic)
         {
             if (string.IsNullOrWhiteSpace(topic))
-                return "CustomBuild";
+                return "GeneralInquiry";
 
             return topic.Trim().ToLowerInvariant() switch
             {
-                "pilot-application" or "pilot" or "pilot-partner" => "PilotApplication",
-                "launch-list" or "launchlist" => "LaunchList",
-                "pilot-rollout" or "pilotrollout" => "PilotRollout",
-                "site-conversation" or "siteconversation" => "SiteConversation",
-                "enterprise-multi-site" or "enterprisemultisite" => "EnterpriseMultiSite",
-                "pricing-conversation" or "pricingconversation" => "PricingConversation",
-                "advanced-waitlist" or "advancedwaitlist" or "advanced" => "AdvancedWaitlist",
-                _ => "CustomBuild"
+                "industrial-ai-readiness" or "assess" => "IndustrialAIReadiness",
+                "industrial-data-integration" or "connect" => "IndustrialDataIntegration",
+                "applied-industrial-intelligence" or "solve" => "AppliedIndustrialIntelligence",
+                "architecture-integration-support" or "scale" => "ArchitectureIntegrationSupport",
+                "technology-partnership" or "technology" => "TechnologyPartnership",
+                "general" or "general-inquiry" or "inquiry" => "GeneralInquiry",
+                _ => "GeneralInquiry"
             };
         }
     }

@@ -30,7 +30,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@title - Sentinel AI Systems</title>
 
-    <meta name="description" content="Sentinel is an all-in-one, AI-powered manufacturing platform that reduces downtime, streamlines operations, and gives you real-time visibility across your plant." />
+    <meta name="description" content="Sentinel AI Systems is a Canadian industrial intelligence engineering company that helps manufacturers connect operational technology, business systems, and industrial data so people, applications, analytics and AI can work with meaningful manufacturing context." />
     <meta name="keywords" content="manufacturing, CMMS, downtime, smart factory, predictive maintenance, IoT, Sentinel" />
 
     <link rel="icon" type="image/png" href="~/img/sentinel-favicon.png" />
@@ -95,35 +95,19 @@
 
                     <div class="collapse navbar-collapse" id="sentinelNavbar">
                         <ul class="navbar-nav ms-3 me-auto mb-2 mb-lg-0">
-
                             <li class="nav-item">
                                 <a class="nav-link @(IsHome() ? "active" : "")"
                                    asp-controller="Home" asp-action="Index">Home</a>
                             </li>
 
-                            <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle @(IsSolutionsAny() ? "active" : "")"
-                                   href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    Solutions
-                                </a>
+                            <li class="nav-item">
+                                <a class="nav-link @(Is("home", "solutions") ? "active" : "")"
+                                   asp-controller="Home" asp-action="Solutions">Services</a>
+                            </li>
 
-                                <ul class="dropdown-menu dropdown-menu-dark sentinel-dropdown">
-                                    <li>
-                                        <a class="dropdown-item @(IsCoreSuite() ? "active" : "")"
-                                           asp-controller="Home" asp-action="CoreSuite">
-                                            Emergency Maintenance
-                                        </a>
-                                    </li>
-
-                                    <li><hr class="dropdown-divider" /></li>
-
-                                    <li>
-                                        <a class="dropdown-item @(Is("home", "platform") ? "active" : "")"
-                                           asp-controller="Home" asp-action="Platform">
-                                            Future Platform Overview
-                                        </a>
-                                    </li>
-                                </ul>
+                            <li class="nav-item">
+                                <a class="nav-link @(Is("home", "platform") ? "active" : "")"
+                                   asp-controller="Home" asp-action="Platform">Approach</a>
                             </li>
 
                             <li class="nav-item">
@@ -132,41 +116,20 @@
                             </li>
 
                             <li class="nav-item">
-                                <a class="nav-link @(IsResources() ? "active" : "")"
-                                   asp-controller="Home" asp-action="Resources">Resources</a>
-                            </li>
-
-                            <li class="nav-item">
                                 <a class="nav-link @(IsAbout() ? "active" : "")"
                                    asp-controller="Home" asp-action="About">About</a>
                             </li>
+
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Home" asp-action="Contact">Contact</a>
+                            </li>
                         </ul>
 
-                        <!-- Right-side CTA -->
+                        <!-- Right-side CTA: contact only (no sign-in promoted publicly) -->
                         <div class="sentinel-nav-cta">
-                            @if (!User.Identity?.IsAuthenticated ?? true)
-                            {
-                                <a asp-area="Identity" asp-page="/Account/Login" class="btn-sentinel-nav-primary">
-                                    Sign in
-                                </a>
-                            }
-                            else
-                            {
-                                var tenantIdClaim = User.FindFirst("tenant_id")?.Value;
-
-                                if (string.IsNullOrWhiteSpace(tenantIdClaim))
-                                {
-                                    <a asp-controller="Subscribe" asp-action="Index" class="btn-sentinel-nav-primary">
-                                        Subscribe
-                                    </a>
-                                }
-                                else
-                                {
-                                    <a asp-controller="Home" asp-action="App" class="btn-sentinel-nav-primary">
-                                        Go to app
-                                    </a>
-                                }
-                            }
+                            <a asp-controller="Home" asp-action="Contact" class="btn-sentinel-nav-primary">
+                                Discuss your manufacturing challenge
+                            </a>
                         </div>
                     </div>
 
@@ -184,20 +147,19 @@
             <div class="container">
                 <div class="row gy-3">
                     <div class="col-md-4">
-                        <div class="sentinel-footer-title">Sentinel Manufacturing Core Suite™</div>
+                        <div class="sentinel-footer-title">Sentinel AI Systems</div>
                         <p>
-                            An all-in-one, AI-powered platform that helps factories reduce downtime,
-                            standardize operations, and grow into full smart-factory capability.
+                            Industrial intelligence engineering for connected manufacturing.
                         </p>
-                        <div class="mt-1 small text-secondary text-uppercase" style="letter-spacing: .18em;">
-                            Automate · Accelerate · Dominate
+                        <div class="mt-1 small text-secondary" style="letter-spacing: .02em;">
+                            Helping manufacturers integrate operational and business systems, contextualize industrial data,
+                            and apply analytics and AI where they create measurable value.
                         </div>
                     </div>
 
                     <div class="col-md-2">
-                        <div class="sentinel-footer-title">Product</div>
-                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="Solutions">Solutions</a>
-                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="Pricing">Tiers &amp; Pricing</a>
+                        <div class="sentinel-footer-title">Services</div>
+                        <a class="sentinel-footer-link" asp-controller="Home" asp-action="Solutions">Assess · Connect · Solve · Scale</a>
                         <a class="sentinel-footer-link" asp-controller="Home" asp-action="UseCases">Use Cases</a>
                         <a class="sentinel-footer-link" asp-controller="Home" asp-action="Resources">Resources</a>
                     </div>
@@ -209,15 +171,15 @@
                     </div>
 
                     <div class="col-md-4">
-                        <div class="sentinel-footer-title">Stay in the loop</div>
-                        <p>Get updates on new modules, AI features, and predictive maintenance capabilities.</p>
-                        @* Placeholder for future email capture *@
+                        <div class="sentinel-footer-title">Insights</div>
+                        <p>Practical perspectives on industrial data integration, manufacturing context, applied analytics and AI.</p>
+                        @* Placeholder for future content; no newsletter or capture form included *@
                     </div>
                 </div>
 
                 <div class="sentinel-footer-bottom">
                     <span>&copy; @DateTime.UtcNow.Year Sentinel AI Systems. All rights reserved.</span>
-                    <span class="sentinel-footer-pill">Built on ASP.NET Core · Ready for the plant floor</span>
+                    <span class="sentinel-footer-pill">Canadian Industrial Intelligence Engineering</span>
                 </div>
             </div>
         </footer>

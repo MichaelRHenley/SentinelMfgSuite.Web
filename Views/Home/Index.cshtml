@@ -287,7 +287,7 @@
     .sis-cap-grid {
         margin-top: 1.5rem;
         display: grid;
-        grid-template-columns: repeat(3, minmax(0,1fr));
+        grid-template-columns: repeat(4, minmax(0,1fr));
         gap: 1rem;
     }
 
@@ -493,24 +493,26 @@
         <section class="sis-hero">
             <div class="sis-hero-grid">
                 <div>
-                    <div class="sis-kicker">Sentinel AI Systems · Operational Intelligence</div>
+                    <div class="sis-kicker">INDUSTRIAL INTELLIGENCE ENGINEERING</div>
 
                     <h1 class="sis-title">
-                        Operational systems built for <span>real-world execution</span>.
+                        Turn industrial data into <span>operational intelligence</span>.
                     </h1>
 
                     <p class="sis-sub">
-                        We design and deliver web apps, mobile apps, interactive portals, and real-time dashboards that make complex
-                        operations visible, faster, and easier to run. Our flagship Manufacturing Core Suite™ is built using a
-                        CESMII-inspired model, Unified Namespace (UNS) principles, and ISA-95 structure — so systems stay interoperable as you scale.
+                        Sentinel AI Systems helps manufacturers connect operational technology, business systems and industrial data so
+                        people, applications, analytics and AI can work with meaningful manufacturing context.
                     </p>
 
                     <div class="sis-ctas">
-                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="custom-build"
-                           class="btn-sentinel-primary"
-                           onclick="gtag('event','custom_build_inquiry',{ 'button_location':'company_hero_primary','event_category':'conversion' });">
-                            Talk about a build
+                        <a asp-controller="Home" asp-action="Contact" asp-route-topic="industrial-ai-readiness"
+                           class="btn-sentinel-primary">
+                            Discuss your manufacturing challenge
                         </a>
+                    </div>
+
+                    <div style="margin-top:.65rem; color:#cfe3ff; font-weight:600;">
+                        Your manufacturing data. Your architecture. Your choice of technology.
                     </div>
 
                     <!-- Enterprise proof strip -->
@@ -533,32 +535,32 @@
                 <div>
                     <!-- Right-side "enterprise console" -->
                     <div class="glass-card">
-                        <div class="glass-card-label">Sentinel Console · Preview</div>
+                    <div class="glass-card-label">SENTINEL CONTEXT · EXAMPLE</div>
 
                         <div class="sis-console">
                             <div class="sis-console-row">
                                 <span class="sis-dot ok"></span>
                                 <div class="sis-console-main">
-                                    <div class="sis-console-title">Unified operational context</div>
-                                    <div class="sis-console-sub">Events + assets + people + workflows aligned</div>
+                                    <div class="sis-console-title">Operational systems — CONNECTED</div>
+                                    <div class="sis-console-sub">OT + enterprise sources available</div>
                                 </div>
-                                <div class="sis-console-pill">ACTIVE</div>
+                                <div class="sis-console-pill">CONNECTED</div>
                             </div>
 
                             <div class="sis-console-row">
                                 <span class="sis-dot warn"></span>
                                 <div class="sis-console-main">
-                                    <div class="sis-console-title">Workflow friction</div>
-                                    <div class="sis-console-sub">Handoffs, delays, and blind spots surfaced</div>
+                                    <div class="sis-console-title">Manufacturing context — RESOLVED</div>
+                                    <div class="sis-console-sub">Equipment + signals + production relationships</div>
                                 </div>
-                                <div class="sis-console-pill warn">TRACKING</div>
+                                <div class="sis-console-pill warn">RESOLVED</div>
                             </div>
 
                             <div class="sis-console-row">
                                 <span class="sis-dot info"></span>
                                 <div class="sis-console-main">
-                                    <div class="sis-console-title">System delivery</div>
-                                    <div class="sis-console-sub">Web + mobile + dashboards delivered in weeks</div>
+                                    <div class="sis-console-title">Integration readiness — READY</div>
+                                    <div class="sis-console-sub">Context available to applications, analytics &amp; AI</div>
                                 </div>
                                 <div class="sis-console-pill info">READY</div>
                             </div>
@@ -566,69 +568,48 @@
 
                         <div class="sis-mini-cards">
                             <div class="sis-mini">
-                                <div class="sis-mini-label">Web apps</div>
-                                <div class="sis-mini-value">Workflows</div>
+                                <div class="sis-mini-label">OT DATA</div>
+                                <div class="sis-mini-value">Connected</div>
                             </div>
                             <div class="sis-mini">
-                                <div class="sis-mini-label">Mobile</div>
-                                <div class="sis-mini-value">Execution</div>
+                                <div class="sis-mini-label">ERP / MES</div>
+                                <div class="sis-mini-value">Context</div>
                             </div>
                             <div class="sis-mini">
-                                <div class="sis-mini-label">Dashboards</div>
-                                <div class="sis-mini-value">Visibility</div>
+                                <div class="sis-mini-label">INTEGRATION</div>
+                                <div class="sis-mini-value">Open</div>
                             </div>
                             <div class="sis-mini">
-                                <div class="sis-mini-label">Architecture</div>
-                                <div class="sis-mini-value">Scale</div>
+                                <div class="sis-mini-label">AI READINESS</div>
+                                <div class="sis-mini-value">Assessed</div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Capability cards directly under hero (this is the $100M feel) -->
+            <!-- Services / four-stage model -->
             <div class="sis-cap-grid">
                 <div class="sis-cap-card">
-                    <div class="sis-cap-kicker">Capability</div>
-                    <div class="sis-cap-title">Operational Web Apps</div>
-                    <div class="sis-cap-sub">Dashboards, approvals, planning, and role-based workflows.</div>
+                    <div class="sis-cap-kicker">Assess</div>
+                    <div class="sis-cap-title">Industrial AI Readiness &amp; Opportunity Assessment</div>
+                    <div class="sis-cap-sub">Evaluate manufacturing problems, existing systems, available data, missing context and practical opportunities. Produce an implementation-ready roadmap.</div>
                 </div>
                 <div class="sis-cap-card">
-                    <div class="sis-cap-kicker">Capability</div>
-                    <div class="sis-cap-title">Mobile Execution</div>
-                    <div class="sis-cap-sub">Responder flows, field actions, alerts, and collaboration.</div>
+                    <div class="sis-cap-kicker">Connect</div>
+                    <div class="sis-cap-title">Industrial Data &amp; Context Integration</div>
+                    <div class="sis-cap-sub">Connect information from PLC/SCADA, OPC UA, MQTT, historians, MES, ERP, CMMS, databases and APIs. Establish meaningful relationships between equipment, signals, production, maintenance and business context.</div>
                 </div>
                 <div class="sis-cap-card">
-                    <div class="sis-cap-kicker">Capability</div>
-                    <div class="sis-cap-title">Systems Architecture</div>
-                    <div class="sis-cap-sub">UNS + ISA-95 structure so integrations stay clean as you expand.</div>
+                    <div class="sis-cap-kicker">Solve</div>
+                    <div class="sis-cap-title">Applied Industrial Intelligence</div>
+                    <div class="sis-cap-sub">Develop focused solutions for reliability, production, quality, scheduling and operational decision support. Apply analytics and AI where evidence and business value justify them.</div>
                 </div>
-            </div>
-
-            <!-- Spotlight band: EM MODULE PILOT OPPORTUNITY -->
-            <div class="sis-spotlight">
-                <div class="sis-spotlight-left">
-                    <div class="sis-spotlight-kicker">Emergency Maintenance Module · Pilot Program</div>
-                    <div class="sis-spotlight-title">Join the EM Module pilot program</div>
-                    <div class="sis-spotlight-sub">
-                        Our Emergency Maintenance Module is ready for production — now recruiting 5-10 pilot partners 
-                        to refine deployment. Get 50% off for 12 months, co-design your instance, and work directly with engineering.
-                    </div>
+                <div class="sis-cap-card">
+                    <div class="sis-cap-kicker">Scale</div>
+                    <div class="sis-cap-title">Architecture &amp; Integration Support</div>
+                    <div class="sis-cap-sub">Extend successful solutions across equipment, lines and sites while maintaining interoperability and avoiding unnecessary vendor lock-in.</div>
                 </div>
-                <div class="sis-spotlight-ctas">
-                    <a asp-controller="Home" asp-action="Contact" asp-route-topic="pilot-application" class="btn-sentinel-primary"
-                       onclick="gtag('event','apply_pilot_program',{ 'button_location':'spotlight_primary','event_category':'conversion' });">
-                        Apply for Pilot
-                    </a>
-                </div>
-            </div>
-
-            <!-- Explore EM button below pilot box -->
-            <div style="margin-top: 1.5rem; text-align: center;">
-                <a asp-controller="Home" asp-action="CoreSuite" class="btn-sentinel-ghost"
-                   onclick="gtag('event','view_core_suite',{ 'button_location':'below_pilot_spotlight','event_category':'navigation' });">
-                    Explore Emergency Maintenance
-                </a>
             </div>
         </section>
         
@@ -636,29 +617,29 @@
         <!-- WHAT WE BUILD -->
         <section class="sis-section">
             <div class="sis-header">
-                <div class="sis-hk">What we build</div>
-                <h2 class="sis-ht">Systems that teams actually use.</h2>
+                <div class="sis-hk">What we do</div>
+                <h2 class="sis-ht">Practical engineering for manufacturing outcomes.</h2>
                 <p class="sis-hs">
-                    Sentinel delivers operational software for high-velocity environments — where clarity, speed, and execution matter.
+                    We help manufacturers connect systems and data, clarify operational context, and apply analytics and AI where it creates measurable value.
                 </p>
             </div>
 
             <div class="sis-cards">
                 <div class="sis-card">
-                    <h3>Operational Web Apps</h3>
-                    <p>Dashboards, approvals, planning tools, and role-based workflows.</p>
+                    <h3>Connected industrial information</h3>
+                    <p>Bring together information from OT and IT systems so teams and applications can work from consistent, reliable data sources.</p>
                 </div>
                 <div class="sis-card">
-                    <h3>Mobile Applications</h3>
-                    <p>Responder workflows, field execution, alerts, and collaboration.</p>
+                    <h3>Meaningful manufacturing context</h3>
+                    <p>Establish relationships between equipment, signals, production, maintenance and business data so raw information becomes operationally meaningful.</p>
                 </div>
                 <div class="sis-card">
-                    <h3>Interactive Portals</h3>
-                    <p>Internal hubs and external portals designed for adoption and clarity.</p>
+                    <h3>Focused operational solutions</h3>
+                    <p>Deliver targeted engineering and analytics that address specific operational problems — not broad, generic promises.</p>
                 </div>
                 <div class="sis-card">
-                    <h3>Manufacturing Core Suite™</h3>
-                    <p>Modular capabilities you can adopt as-is — and extend when you need something unique.</p>
+                    <h3>Architecture that can scale</h3>
+                    <p>Provide interoperable patterns and integration practices that extend successful work across lines and sites.</p>
                 </div>
             </div>
         </section>
@@ -669,27 +650,26 @@
                 <div class="sis-hk">How we build</div>
                 <h2 class="sis-ht">Standards-driven architecture for scale.</h2>
                 <p class="sis-hs">
-                    We apply CESMII-inspired modeling, Unified Namespace thinking, and ISA-95 structure to keep data in-context and
-                    integrations clean — then build apps on top, fast.
+                    We apply industrial information modeling, Unified Namespace principles and ISA-95 concepts to keep data in context and integrations manageable as you scale.
                 </p>
             </div>
 
             <div class="sis-cards">
                 <div class="sis-card">
-                    <h3>Less integration spaghetti</h3>
-                    <p>A consistent operational model reduces point-to-point fragility as you expand.</p>
+                    <h3>Standards-driven architecture</h3>
+                    <p>We apply modeling and namespace principles to keep data in-context and integrations manageable as you scale.</p>
                 </div>
                 <div class="sis-card">
                     <h3>Shared operational truth</h3>
-                    <p>Teams and systems align around the same context — fewer blind spots.</p>
+                    <p>Teams and systems align around the same context to reduce blind spots and improve decision making.</p>
                 </div>
                 <div class="sis-card">
-                    <h3>Pilot → scale</h3>
-                    <p>Start small, prove value, and expand site-wide with controlled risk.</p>
+                    <h3>Start small, prove value</h3>
+                    <p>Deliver a focused proof of value, then expand scope and reach based on evidence and measurable outcomes.</p>
                 </div>
                 <div class="sis-card">
-                    <h3>Core Suite launch page</h3>
-                    <p><a asp-controller="Home" asp-action="CoreSuite">See the Manufacturing Core Suite™ early access page →</a></p>
+                    <h3>Engineering approach</h3>
+                    <p><a asp-controller="Home" asp-action="Platform">Read about our approach →</a></p>
                 </div>
             </div>
         </section>

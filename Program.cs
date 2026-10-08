@@ -21,7 +21,9 @@ if (string.IsNullOrEmpty(connStr))
     throw new InvalidOperationException("DefaultConnection is not configured!");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connStr));
+    // Use PostgreSQL via Npgsql. Connection string is read from Configuration: ConnectionStrings:DefaultConnection
+    // For local development, supply the connection string via User Secrets or environment variable.
+    options.UseNpgsql(connStr));
 
 // 2) Add Identity + default UI
 builder.Services.AddDefaultIdentity<ApplicationUser>(options =>

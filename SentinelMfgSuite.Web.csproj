@@ -10,7 +10,13 @@
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="8.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.11" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
+    <!-- Keep SQL Server provider as a build-time-only dependency so historical SQL Server migrations compile.
+         This does NOT change runtime provider choice (Program.cs uses Npgsql). Remove this entry after
+         historical migrations are archived or migrated. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.11">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.11">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

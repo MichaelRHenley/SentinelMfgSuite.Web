@@ -1,57 +1,40 @@
-﻿@{
-    ViewData["Title"] = "Platform · Sentinel Manufacturing Suite";
+@{
+    ViewData["Title"] = "Approach · Sentinel AI Systems";
 }
 <main class="sentinel-main solutions-page">
 
-    <!-- =========================
-         PLATFORM HERO
-    ========================== -->
+    <!-- APPROACH HERO -->
     <section class="pb-5">
         <div class="container-xl">
             <div class="row align-items-center g-4">
-                <!-- LEFT: COPY -->
                 <div class="col-lg-7">
-                    <p class="sol-kicker mb-2">Solutions</p>
+                    <p class="sol-kicker mb-2">Approach</p>
 
                     <h1 class="display-5 fw-semibold mb-3 sol-title">
-                        One platform for the whole factory.
+                        Engineering for industrial intelligence — practical, vendor-neutral, and evidence-driven.
                     </h1>
 
                     <p class="lead sol-sub mb-3">
-                        Sentinel Manufacturing Core Suite<span class="tm-mark">™</span> brings maintenance,
-                        operations, production, quality, safety, and parts together in a single, live control
-                        center — so every team works from the same source of truth.
+                        We work with the technology manufacturers already have, integrate OT and IT data, and create the contextual
+                        models teams and machines need to make better decisions. AI is applied only where it demonstrably improves outcomes.
                     </p>
 
                     <p class="sol-muted mb-0">
-                        Built by people who actually run plants, Sentinel Manufacturing Core Suite<span class="tm-mark">™</span>
-                        is opinionated where it matters, flexible where it counts, and ready to grow from one line
-                        to a multi-site network.
+                        Start with a defined problem, prove measurable value, then scale with interoperable architecture and open interfaces.
                     </p>
                 </div>
 
-                <!-- RIGHT: LIVE FACTORY CARD -->
                 <div class="col-lg-5">
                     <div class="sol-card h-100">
                         <div class="card-body p-4">
-                            <h2 class="h6 text-uppercase sol-muted mb-2">Live factory, single pane of glass</h2>
-                            
-
-                            <ul class="small sol-muted mb-4">
-                                <li>Real-time EM &amp; PM status for maintenance</li>
-                                <li>Machines-running, bottlenecks, and downtime for ops</li>
-                                <li>Cost, risk, and trends for leadership</li>
+                            <h2 class="h6 text-uppercase sol-muted mb-2">Principles</h2>
+                            <ul class="small sol-muted mb-0">
+                                <li>Work with existing manufacturing technology — avoid rip-and-replace.</li>
+                                <li>Vendor-neutral integration and open interfaces.</li>
+                                <li>Establish context before applying analytics or AI.</li>
+                                <li>Keep human authority over consequential operational actions.</li>
+                                <li>Scale based on proven outcomes, not product roadmaps.</li>
                             </ul>
-
-                            <a asp-controller="Home"
-                               asp-action="Pricing"
-                               class="btn-sentinel-primary w-100">
-                                View tiers &amp; pricing
-                            </a>
-
-                            <p class="small text-secondary text-center mt-3 mb-0">
-                                Or scroll down to see modules built for how factories actually run.
-                            </p>
                         </div>
                     </div>
                 </div>
@@ -59,377 +42,52 @@
         </div>
     </section>
 
-
-    <!-- =========================
-         MODULE OVERVIEW
-    ========================== -->
+    <!-- DETAILED POINTS -->
     <section class="pb-5">
         <div class="container-xl">
             <div class="text-center mb-4">
-                <h2 class="h2 fw-semibold">Modules built for how factories actually run.</h2>
-                <p class="text-secondary mb-3">
-                    The <strong>Emergency Maintenance Module launches Q2 2026</strong>. Pilot partners get early access, 50% discount, 
-                    and co-design privileges. Other modules launch later in 2026 once EM stabilizes.
-                </p>
-                <p class="text-secondary mb-0">
-                    Every module plugs into the same live data model — start with what matters most, add capabilities as you grow.
-                </p>
+                <h2 class="h2 fw-semibold">How we deliver</h2>
+                <p class="text-secondary mb-0">An engineering-first approach: assess the opportunity, integrate data and context, deliver focused solutions, and provide the architecture to scale.</p>
             </div>
 
             <div class="row g-4">
-                <!-- EM / Maintenance -->
-                <div class="col-md-6 col-xl-3">
-                    <div class="sol-card h-100" style="border: 2px solid rgba(255,214,102,0.8); box-shadow: 0 0 18px rgba(255,214,102,0.35);">
-                        <div class="card-body p-4">
-                            <div style="display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem;">
-                                <h3 class="h5 fw-semibold mb-0">Emergency Maintenance</h3>
-                            </div>
-                            <div style="display: inline-block; font-size: .7rem; padding: .25rem .6rem; border-radius: 999px; background: rgba(255,214,102,0.15); border: 1px solid rgba(255,214,102,0.6); color: #ffd666; text-transform: uppercase; letter-spacing: .14em; margin-bottom: .75rem;">
-                                Launching Q2 2026
-                            </div>
-                            <p class="small text-secondary">
-                                A live EM board that gets maintenance and operations out of their inbox and off the radio.
-                            </p>
-                            <ul class="small text-secondary mb-0">
-                                <li>Plant-wide EM queue with clear ownership</li>
-                                <li>Mobile-friendly responder view &amp; chat</li>
-                                <li>Photos, machine status, and SLAs in context</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Planned Maintenance -->
-                <div class="col-md-6 col-xl-3">
-                    <div class="sol-card h-100" style="opacity: 0.7;">
-                        <div class="card-body p-4">
-                            <div style="display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem;">
-                                <h3 class="h5 fw-semibold mb-0">Planned Maintenance</h3>
-                            </div>
-                            <div style="display: inline-block; font-size: .7rem; padding: .25rem .6rem; border-radius: 999px; background: rgba(132,170,255,0.1); border: 1px solid rgba(132,170,255,0.4); color: #84aaff; text-transform: uppercase; letter-spacing: .14em; margin-bottom: .75rem;">
-                                Later 2026
-                            </div>
-                            <p class="small text-secondary">
-                                Keep PMs and corrective work flowing without drowning in spreadsheets.
-                            </p>
-                            <ul class="small text-secondary mb-0">
-                                <li>Backlog with simple priority &amp; status</li>
-                                <li>Calendar, route, and shift views</li>
-                                <li>History by asset to spot repeat offenders</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Production & Downtime -->
-                <div class="col-md-6 col-xl-3">
-                    <div class="sol-card h-100" style="opacity: 0.7;">
-                        <div class="card-body p-4">
-                            <div style="display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem;">
-                                <h3 class="h5 fw-semibold mb-0">Production &amp; Downtime</h3>
-                            </div>
-                            <div style="display: inline-block; font-size: .7rem; padding: .25rem .6rem; border-radius: 999px; background: rgba(132,170,255,0.1); border: 1px solid rgba(132,170,255,0.4); color: #84aaff; text-transform: uppercase; letter-spacing: .14em; margin-bottom: .75rem;">
-                                Later 2026
-                            </div>
-                            <p class="small text-secondary">
-                                A live control center for operations to see machines running, stoppages, and throughput in real time.
-                            </p>
-                            <ul class="small text-secondary mb-0">
-                                <li>Machines-running view by line &amp; work center</li>
-                                <li>Downtime coding and reasons in real time</li>
-                                <li>Shift/line/plant rollups and trends</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Parts & BOM Intelligence -->
-                <div class="col-md-6 col-xl-3">
-                    <div class="sol-card h-100" style="opacity: 0.7;">
-                        <div class="card-body p-4">
-                            <div style="display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem;">
-                                <h3 class="h5 fw-semibold mb-0">Parts &amp; BOM Intelligence</h3>
-                            </div>
-                            <div style="display: inline-block; font-size: .7rem; padding: .25rem .6rem; border-radius: 999px; background: rgba(132,170,255,0.1); border: 1px solid rgba(132,170,255,0.4); color: #84aaff; text-transform: uppercase; letter-spacing: .14em; margin-bottom: .75rem;">
-                                Later 2026
-                            </div>
-                            <p class="small text-secondary">
-                                Find the right part, first time, using the systems you already have.
-                            </p>
-                            <ul class="small text-secondary mb-0">
-                                <li>Smart search across SKUs &amp; descriptions</li>
-                                <li>Equipment BOM and on-hand inventory in one view</li>
-                                <li>Usage history and AI-suggested likely parts</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row g-4 mt-1">
-                <!-- Quality & Safety -->
-                <div class="col-md-6">
+                <div class="col-md-6 col-lg-3">
                     <div class="sol-card h-100">
                         <div class="card-body p-4">
-                            <h3 class="h5 fw-semibold mb-2">Quality &amp; Safety</h3>
-                            <p class="small text-secondary">
-                                Tie quality events and safety incidents directly to assets, lines, and downtime — not isolated logs.
-                            </p>
-                            <ul class="small text-secondary mb-0">
-                                <li>Capture quality holds, defects, and rework reasons</li>
-                                <li>Log safety events by area, equipment, and shift</li>
-                                <li>See where quality, safety, EM, and operations overlap</li>
-                            </ul>
+                            <h3 class="h5 fw-semibold mb-2">Work with what you have</h3>
+                            <p class="small text-secondary mb-0">We prioritize existing OT/IT systems and minimize disruption while integrating meaningful signals.</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Leadership Dashboards -->
-                <div class="col-md-6">
+                <div class="col-md-6 col-lg-3">
                     <div class="sol-card h-100">
                         <div class="card-body p-4">
-                            <h3 class="h5 fw-semibold mb-2">Leadership Dashboards</h3>
-                            <p class="small text-secondary">
-                                A clean narrative for operations and leadership on where you’re winning, where you’re leaking,
-                                and what it costs to ignore it.
-                            </p>
-                            <ul class="small text-secondary mb-0">
-                                <li>Cost of downtime by line, asset, and category</li>
-                                <li>EM &amp; PM performance, backlog, and staffing view</li>
-                                <li>Executive-ready views you can screenshot, not rebuild</li>
-                            </ul>
+                            <h3 class="h5 fw-semibold mb-2">Vendor-neutral architecture</h3>
+                            <p class="small text-secondary mb-0">Interoperable models and open interfaces prevent vendor lock-in and preserve long-term choices.</p>
                         </div>
                     </div>
                 </div>
-            </div>
 
-        </div>
-    </section>
-
-
-    <!-- =========================
-         AI LAYER
-    =========================== -->
-    <section class="pb-5">
-        <div class="container-xl">
-            <div class="sol-card h-100">
-                <div class="card-body p-4">
-                    <div class="row g-4 align-items-center">
-
-                        <!-- LEFT SIDE -->
-                        <div class="col-lg-6">
-                            <h2 class="h3 fw-semibold mb-3">
-                                AI that sits on top of real plant data.
-                            </h2>
-                            <p class="text-secondary mb-3">
-                                The Sentinel Manufacturing Core Suite™ includes an assistive AI layer
-                                that helps teams spot patterns, surface context, and make faster decisions —
-                                without replacing human judgment.
-                            </p>
-
-                            <div class="row g-3 small">
-                                <div class="col-sm-6">
-                                    <h3 class="h6 fw-semibold">Suggested fixes &amp; playbooks</h3>
-                                    <p class="text-secondary mb-0">
-                                        For new issues, surface similar historical events and what teams
-                                        found helpful in resolving them.
-                                    </p>
-                                </div>
-
-                                <div class="col-sm-6">
-                                    <h3 class="h6 fw-semibold">Likely parts and BOMs</h3>
-                                    <p class="text-secondary mb-0">
-                                        Shortlist commonly associated parts based on symptoms, equipment type,
-                                        and past usage patterns.
-                                    </p>
-                                </div>
-
-                                <div class="col-sm-6">
-                                    <h3 class="h6 fw-semibold">Risk &amp; recurrence</h3>
-                                    <p class="text-secondary mb-0">
-                                        Identify repeat offenders and emerging trends before they begin
-                                        impacting throughput or uptime.
-                                    </p>
-                                </div>
-
-                                <div class="col-sm-6">
-                                    <h3 class="h6 fw-semibold">Plain-language questions</h3>
-                                    <p class="text-secondary mb-0">
-                                        Ask questions like “Where did we lose the most time this week?”
-                                        and get a clear, visual summary — instantly.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- RIGHT SIDE - ASSISTANT EXAMPLE -->
-                        <div class="col-lg-6">
-                            <div class="bg-black bg-opacity-50 rounded-4 p-3 p-md-4 small">
-                                <div class="text-secondary text-uppercase mb-2">
-                                    Sentinel Assistant · Example
-                                </div>
-
-                                <div class="mb-3">
-                                    <span class="fw-semibold text-info">You:</span>
-                                    <span> We’ve had multiple maintenance events on the same conveyor this month. Anything stand out?</span>
-                                </div>
-
-                                <div class="mb-2">
-                                    <span class="fw-semibold text-primary">Sentinel:</span>
-                                    <span>
-                                        Conveyor #3 shows <strong>3 maintenance events</strong> in the past 21 days. Several share
-                                        similar drive-chain related symptoms following extended changeovers.
-                                    </span>
-                                </div>
-
-                                <div class="mb-2">
-                                    <span class="fw-semibold text-primary">Sentinel:</span>
-                                    <span>
-                                        In similar cases, teams have reviewed start-up procedures, inspection intervals,
-                                        and PM coverage to understand contributing factors.
-                                    </span>
-                                </div>
-
-                                <div>
-                                    <span class="fw-semibold text-primary">Sentinel:</span>
-                                    <span>
-                                        Let me know if you’d like a summary of related events, trends, or contributing signals.
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-
-    <!-- =========================
-         ARCHITECTURE / HOW IT FITS
-    ========================== -->
-    <section class="pb-5">
-        <div class="container-xl">
-            <div class="text-center mb-4">
-                <h2 class="h2 fw-semibold">How Sentinel Manufacturing Core Suite™ fits into your stack.</h2>
-                <p class="text-secondary mb-0">
-                    Sentinel Manufacturing Core Suite™ doesn’t try to replace your CMMS, ERP, or MES. It gives operations and maintenance
-                    the live, opinionated layer those systems never had.
-                </p>
-            </div>
-
-            <div class="row g-4">
-                <div class="col-md-4">
+                <div class="col-md-6 col-lg-3">
                     <div class="sol-card h-100">
                         <div class="card-body p-4">
-                            <h3 class="h6 fw-semibold text-secondary text-uppercase mb-2">Data in</h3>
-                            <ul class="small text-secondary mb-0">
-                                <li>EM / maintenance requests from operators</li>
-                                <li>Work orders and PMs (optionally from CMMS)</li>
-                                <li>Production counts &amp; downtime codes</li>
-                                <li>Optional signals from PLC / historian</li>
-                                <li>Parts, SKUs, and BOMs from ERP / SAP</li>
-                            </ul>
+                            <h3 class="h5 fw-semibold mb-2">Context before AI</h3>
+                            <p class="small text-secondary mb-0">We build contextual models that align equipment, signals, production and business data before applying analytics or AI.</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-6 col-lg-3">
                     <div class="sol-card h-100">
                         <div class="card-body p-4">
-                            <h3 class="h6 fw-semibold text-secondary text-uppercase mb-2">Sentinel core</h3>
-                            <ul class="small text-secondary mb-0">
-                                <li>Unified operational data model (site/area/line/asset)</li>
-                                <li>Workflow engine for EM, PM, and tasks</li>
-                                <li>Real-time dashboards &amp; notifications</li>
-                                <li>AI services for recommendations &amp; search</li>
-                                <li>Role-based access &amp; audit logging</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="sol-card h-100">
-                        <div class="card-body p-4">
-                            <h3 class="h6 fw-semibold text-secondary text-uppercase mb-2">Data out</h3>
-                            <ul class="small text-secondary mb-0">
-                                <li>Dashboards for maintenance, ops, and leadership</li>
-                                <li>Exports for finance, CI, and analytics teams</li>
-                                <li>APIs for CMMS, ERP, or data lake integration</li>
-                                <li>Signals for predictive projects and CI work</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-    </section>
-
-    <!-- =========================
-         SECURITY / RELIABILITY
-    ========================== -->
-    <section class="pb-5">
-        <div class="container-xl">
-            <div class="sol-card h-100">
-                <div class="card-body p-4">
-                    <div class="row g-4 align-items-start">
-                        <div class="col-lg-6">
-                            <h2 class="h4 fw-semibold mb-3">Built for manufacturing-critical uptime.</h2>
-                            <p class="text-secondary mb-3">
-                                If operations are watching Sentinel Manufacturing Core Suite™ during a shift, it has to be there.
-                                The platform is engineered with manufacturing-critical reliability in mind.
-                            </p>
-                            <ul class="small text-secondary mb-0">
-                                <li>Environment separation (dev / test / production)</li>
-                                <li>Role-based access with audit logging</li>
-                                <li>HTTPS and modern encryption standards</li>
-                                <li>Regular backups and disaster-recovery planning</li>
-                                <li>Options for on-premises connectivity to plant networks</li>
-                            </ul>
-                        </div>
-                        <div class="col-lg-6">
-                            <h2 class="h6 fw-semibold mb-3 text-secondary text-uppercase">
-                                Support for your rollout
-                            </h2>
-                            <ul class="small text-secondary mb-3">
-                                <li>Guided onboarding for sites, areas, and work centers</li>
-                                <li>Best-practice templates for EM, PM, and downtime reasons</li>
-                                <li>Playbooks for rollout by line, area, or plant</li>
-                                <li>Training resources for operators, technicians, and leaders</li>
-                            </ul>
-                            <a asp-controller="Home" asp-action="Resources"
-                               class="btn-sentinel-ghost me-2">
-                                Explore resources
-                            </a>
-                            <a asp-controller="Home" asp-action="Contact" asp-route-topic="pilot-rollout">
-                                Plan a pilot rollout
-                            </a>
+                            <h3 class="h5 fw-semibold mb-2">Human authority &amp; evidence</h3>
+                            <p class="small text-secondary mb-0">AI supports decisions where it adds clear value; operators retain authority over consequential actions.</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
-
-    <!-- =========================
-         FINAL CTA
-    ========================== -->
-    @await Html.PartialAsync("_CtaStrip",
-    new CtaStripModel
-    {
-        Title = "Ready to see if Sentinel fits your site?",
-        Body = "Share a bit about your plant, your lines, and what’s hurting most. We’ll suggest where Sentinel could plug in — starting small and growing from there.",
-        PrimaryText = "Talk to us about your site",
-        PrimaryAction = "Contact",
-        PrimaryController = "Home",
-        SecondaryText = "Or review tiers & pricing first →",
-        SecondaryAction = "Pricing",
-        SecondaryController = "Home"
-    })
-
 
 </main>
-

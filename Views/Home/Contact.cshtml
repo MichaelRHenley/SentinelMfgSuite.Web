@@ -9,21 +9,21 @@
     {
         "LaunchList" => "Join the launch list",
         "PilotRollout" => "Plan a pilot rollout",
-        "SiteConversation" => "Talk to us about your site",
+        "SiteConversation" => "Discuss your manufacturing challenge",
         "EnterpriseMultiSite" => "Talk about Enterprise & multi-site",
         "PricingConversation" => "Book a pricing conversation",
         "AdvancedWaitlist" => "Join the Advanced Tier Waitlist",
-        _ => "Talk about a custom build"
+        _ => "Discuss your manufacturing challenge"
     };
 
     var intro = topic switch
     {
         "LaunchList" => "Tell us a bit about your plant and where you are on your digital roadmap. We'll send launch updates, early-access details, and pilot opportunities.",
         "PilotRollout" => "Share where your lines stand today and what a good pilot would look like. We'll map out a realistic, low-risk rollout plan.",
-        "SiteConversation" => "Tell us about your site, your constraints, and what's hurting the most. We'll see how Sentinel can fit your reality.",
+        "SiteConversation" => "Tell us what you're trying to improve, the systems and data you already have, and where the current gaps are. Sentinel can help determine the practical next step — from an initial readiness assessment to integration, applied industrial intelligence or architecture support.",
         "EnterpriseMultiSite" => "If you're thinking multi-site or enterprise rollout, give us a sense of your footprint and systems. We'll talk through architecture and phasing.",
         "PricingConversation" => "Share your footprint and needs so we can talk through the right tier mix, projected costs, and expected ROI.",
-        _ => "If you need something sooner than the public launch — or you want Sentinel tuned to your reality — we can talk about a guided, custom build on the same platform we're productizing."
+        _ => "Tell us what you're trying to improve, the systems and data you already have, and where the current gaps are. Sentinel can help determine the practical next step — from an initial readiness assessment to integration, applied industrial intelligence or architecture support."
     };
 }
 
@@ -39,10 +39,11 @@
                 <p class="text-secondary mb-3">@intro</p>
 
                 <ul class="text-secondary small mb-4">
-                    <li>Emergency maintenance + live responder workflow</li>
-                    <li>Work center dashboards and downtime tracking</li>
-                    <li>Parts &amp; BOM intelligence tied into your systems</li>
-                    <li>Roadmap toward IoT and predictive maintenance</li>
+                    <li>Industrial AI readiness and opportunity assessment</li>
+                    <li>OT and IT data integration</li>
+                    <li>Manufacturing context and information architecture</li>
+                    <li>Reliability, production, quality and scheduling use cases</li>
+                    <li>Technology and integration partnerships</li>
                 </ul>
 
                 @if (ViewBag.SuccessMessage != null)
@@ -58,10 +59,10 @@
                         "LaunchList" => "Anything you'd like us to know? (optional but helpful)",
                         "AdvancedWaitlist" => "Anything you'd like us to know? (optional but helpful)",
                         "PilotRollout" => "What would a good pilot look like?",
-                        "SiteConversation" => "What's hurting most right now?",
+                        "SiteConversation" => "What manufacturing challenge are you trying to solve?",
                         "EnterpriseMultiSite" => "What does your footprint look like today?",
                         "PricingConversation" => "What should we know about your footprint and budget?",
-                        _ => "What are you hoping to build?"
+                        _ => "What manufacturing challenge are you trying to solve?"
                     };
 
                     var notesPlaceholder = topic switch
@@ -121,7 +122,7 @@
                     <div class="card-body p-4">
                         <h2 class="h6 text-uppercase text-secondary mb-3">Direct contact</h2>
                         <p class="small mb-2">Email: <strong>support@sentinelaisystems.net</strong></p>
-                        <p class="small text-secondary">Tell us a bit about your goals, your current tools, and where downtime is hurting most. We'll follow up with a focused, no-fluff conversation.</p>
+                        <p class="small text-secondary">Tell us about the problem, your current systems and what a successful outcome would look like. We'll follow up to understand whether Sentinel is a good fit.</p>
                     </div>
                 </div>
             </div>
