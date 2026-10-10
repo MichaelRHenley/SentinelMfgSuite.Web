@@ -1,34 +1,111 @@
-﻿@{
-    ViewData["Title"] = "Thank you";
+﻿
+@{
+    ViewData["Title"] = "Message received";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
+<style>
+    .sentinel-thanks {
+        min-height: 45vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4rem 1.5rem;
+    }
+
+    .sentinel-thanks-content {
+        max-width: 650px;
+        width: 100%;
+        text-align: center;
+    }
+
+    .sentinel-thanks-icon {
+        width: 76px;
+        height: 76px;
+        margin: 0 auto 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgba(0, 190, 255, 0.10);
+        border: 1px solid rgba(0, 190, 255, 0.35);
+        color: #38caff;
+        font-size: 2.5rem;
+    }
+
+    .sentinel-thanks h1 {
+        font-size: clamp(2rem, 4vw, 3rem);
+        font-weight: 700;
+        letter-spacing: -0.035em;
+        margin-bottom: 1.25rem;
+    }
+
+    .sentinel-thanks-description {
+        color: #aab8cf;
+        font-size: 1.1rem;
+        line-height: 1.8;
+        margin-bottom: 2.5rem;
+    }
+
+    .sentinel-thanks-actions {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .sentinel-thanks-actions a {
+        text-decoration: none;
+    }
+
+    @@media (max-width: 576px) {
+        .sentinel-thanks {
+            min-height: 65vh;
+        }
+
+        .sentinel-thanks-actions {
+            flex-direction: column;
+        }
+
+        .sentinel-thanks-actions a {
+            width: 100%;
+            max-width: 280px;
+            text-align: center;
+        }
+    }
+</style>
+
 <div class="sentinel-page sentinel-page--contact">
-    <div class="container py-5">
-        <div class="row justify-content-center">
-            <div class="col-lg-7">
+    <section class="sentinel-thanks">
+        <div class="sentinel-thanks-content">
 
-                <h1 class="h3 fw-semibold mb-3">
-                    Thanks — we’ve received your message
-                </h1>
+            <div class="sentinel-thanks-icon" aria-hidden="true">
+                &#10003;
+            </div>
 
-                <p class="text-secondary mb-4">
-                    We’ll review what you sent and follow up by email. In the meantime,
-                    feel free to keep exploring the platform and tiers.
-                </p>
+            <h1>Message received.</h1>
 
-                <a asp-controller="Home" asp-action="Index"
-                   class="btn-sentinel-primary me-2">
+            <p class="sentinel-thanks-description">
+                Thank you for reaching out to Sentinel AI Systems.
+                Your inquiry has been received, and we'll review
+                your message and follow up by email.
+            </p>
+
+            <div class="sentinel-thanks-actions">
+                <a asp-controller="Home"
+                   asp-action="Index"
+                   class="btn-sentinel-primary">
                     Back to home
                 </a>
 
-                <a asp-controller="Home" asp-action="Platform"
-                   class="btn btn-outline-light mt-3 mt-sm-0">
-                    Review the platform
+                <a asp-controller="Home"
+                   asp-action="Platform"
+                   class="btn btn-outline-light">
+                    Explore our platform
                 </a>
-
             </div>
-        </div>
-    </div>
-</div>
 
+        </div>
+    </section>
+</div>

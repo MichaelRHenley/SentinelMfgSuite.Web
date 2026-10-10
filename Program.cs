@@ -40,7 +40,7 @@ builder.Services.AddControllersWithViews();
 builder.Services.Configure<EmailSettings>(
     builder.Configuration.GetSection("Email"));
 
-builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IEmailSender, SesEmailSender>();
 
 
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
