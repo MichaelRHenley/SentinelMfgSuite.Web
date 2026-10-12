@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SentinelMfgSuite.Web.Models;
+using SentinelMfgSuite.Web.Models.Assessments;
 using SentinelMfgSuite.Web.Models.Tenants;
 
 namespace SentinelMfgSuite.Web.Data
@@ -65,6 +66,78 @@ namespace SentinelMfgSuite.Web.Data
             modelBuilder.Entity<TenantUserRole>(b =>
             {
                 b.HasKey(x => new { x.TenantId, x.UserId, x.Role });
+            });
+
+            // Assessment domain
+            modelBuilder.Entity<Assessment>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.Title).HasMaxLength(200);
+                b.Property(x => x.SiteName).HasMaxLength(200);
+                b.Property(x => x.ContactEmail).HasMaxLength(320);
+
+                // store enum as smallint
+                b.Property(x => x.Status).HasColumnType("smallint").IsRequired();
+
+                // UTC timestamps as timestamptz
+                b.Property(x => x.CreatedUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.UpdatedUtc).HasColumnType("timestamp with time zone");
+
+                b.Property(x => x.Notes).HasMaxLength(2000);
+                b.Property(x => x.OwnerUserId).HasMaxLength(200);
+            });
+
+            modelBuilder.Entity<AssessmentInvitation>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.Email).IsRequired().HasMaxLength(320);
+                b.Property(x => x.TokenHash).IsRequired().HasMaxLength(200);
+
+                b.Property(x => x.CreatedUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.ExpiresUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.RevokedUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.LastAccessUtc).HasColumnType("timestamp with time zone");
+
+                // unique token hash for fast lookup
+                b.HasIndex(x => x.TokenHash).IsUnique();
+
+                // assessment FK - restrict deletes
+                b.HasOne<Assessment>()
+                    .WithMany()
+                    .HasForeignKey(x => x.AssessmentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<AssessmentResponse>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                // store response body as jsonb
+                b.Property(x => x.Data).HasColumnType("jsonb").IsRequired();
+
+                b.Property(x => x.IsDraft).IsRequired();
+
+                b.Property(x => x.LastSavedUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.SubmittedUtc).HasColumnType("timestamp with time zone");
+
+                // concurrency token
+                b.Property(x => x.ConcurrencyStamp).IsConcurrencyToken().HasMaxLength(100);
+
+                // One response per invitation
+                b.HasIndex(x => x.InvitationId).IsUnique();
+
+                // foreign keys - restrict deletes
+                b.HasOne<Assessment>()
+                    .WithMany()
+                    .HasForeignKey(x => x.AssessmentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne<AssessmentInvitation>()
+                    .WithOne()
+                    .HasForeignKey<AssessmentResponse>(x => x.InvitationId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }
