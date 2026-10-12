@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<OutputType>Exe</OutputType>
+	<TargetFramework>net8.0</TargetFramework>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<Nullable>enable</Nullable>
+	<!-- Keep GenerateAssemblyInfo false to avoid duplicate assembly attributes when referencing the web project -->
+	<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	<!-- Avoid generating TargetFrameworkAttribute in the tool to prevent duplicate attribute when referencing the web project. -->
+	<GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\..\SentinelMfgSuite.Web.csproj" />
+  </ItemGroup>
+
+</Project>

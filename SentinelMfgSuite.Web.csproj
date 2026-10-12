@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>f5b5945e-39a1-4eba-8179-ebbff1651f34</UserSecretsId>
+    <!-- Note: assembly attribute generation is controlled per-tool. ProvisionAdmin disables GenerateAssemblyInfo and TargetFrameworkAttribute in its own csproj. -->
+    <!-- To avoid duplicate attribute errors when building the ProvisionAdmin tool that references this project, disable generation here as well. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,5 +31,7 @@
   <ItemGroup>
     <Folder Include="App_Data\" />
   </ItemGroup>
+
+  <!-- Tools/ProvisionAdmin is a separate project; do not include the project file as content in the web project. -->
 
 </Project>
