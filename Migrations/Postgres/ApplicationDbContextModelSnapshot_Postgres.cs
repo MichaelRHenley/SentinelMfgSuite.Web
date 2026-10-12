@@ -39,6 +39,35 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                 b.ToTable("AspNetRoleClaims");
             });
 
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.ApplicationUser", b =>
+            {
+                b.Property<string>("Id").HasColumnType("text");
+                b.Property<string>("ConcurrencyStamp").IsConcurrencyToken().HasColumnType("text");
+                b.Property<string>("DisplayName").HasColumnType("text");
+                b.Property<string>("CompanyName").HasColumnType("text");
+                b.Property<Guid?>("TenantId").HasColumnType("uuid");
+                b.Property<int>("ProvisioningState").HasColumnType("integer").HasDefaultValue(0);
+
+                b.Property<string>("UserName").HasMaxLength(256).HasColumnType("character varying(256)");
+                b.Property<string>("NormalizedUserName").HasMaxLength(256).HasColumnType("character varying(256)");
+                b.Property<string>("Email").HasMaxLength(256).HasColumnType("character varying(256)");
+                b.Property<string>("NormalizedEmail").HasMaxLength(256).HasColumnType("character varying(256)");
+                b.Property<bool>("EmailConfirmed").HasColumnType("boolean");
+                b.Property<string>("PasswordHash").HasColumnType("text");
+                b.Property<string>("SecurityStamp").HasColumnType("text");
+                b.Property<string>("PhoneNumber").HasColumnType("text");
+                b.Property<bool>("PhoneNumberConfirmed").HasColumnType("boolean");
+                b.Property<bool>("TwoFactorEnabled").HasColumnType("boolean");
+                b.Property<DateTimeOffset?>("LockoutEnd").HasColumnType("timestamp with time zone");
+                b.Property<bool>("LockoutEnabled").HasColumnType("boolean");
+                b.Property<int>("AccessFailedCount").HasColumnType("integer");
+
+                b.HasKey("Id");
+                b.HasIndex("NormalizedEmail");
+                b.HasIndex("NormalizedUserName").IsUnique();
+                b.ToTable("AspNetUsers");
+            });
+
             // ... further snapshot entries would mirror the Postgres migration. Kept concise here.
         }
     }
