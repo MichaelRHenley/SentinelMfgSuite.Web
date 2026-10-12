@@ -4,6 +4,8 @@ using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models;
 using SentinelMfgSuite.Web.Services;
 using SentinelMfgSuite.Web.Services.Provisioning;
+using Microsoft.AspNetCore.HttpOverrides;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -72,7 +74,11 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
-
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedProto,
+    KnownProxies = { IPAddress.Loopback, IPAddress.IPv6Loopback }
+});
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 

@@ -30,9 +30,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@title - Sentinel AI Systems</title>
 
-    <meta name="description" content="Sentinel AI Systems is a Canadian industrial intelligence engineering company that helps manufacturers connect operational technology, business systems, and industrial data so people, applications, analytics and AI can work with meaningful manufacturing context." />
-    <meta name="keywords" content="manufacturing, CMMS, downtime, smart factory, predictive maintenance, IoT, Sentinel" />
-
+    @{ var pageDescription = ViewData["Description"] as string ?? "Sentinel AI Systems helps Canadian manufacturers connect industrial data, integrate operational systems, and build the foundation for analytics and industrial AI."; }
+    <meta name="description" content="@pageDescription" />
+    <link rel="canonical" href="@($"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.Path}")" />
     <link rel="icon" type="image/png" href="~/img/sentinel-favicon.png" />
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/SentinelMfgSuite.Web.styles.css" asp-append-version="true" />

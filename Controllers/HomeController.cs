@@ -50,6 +50,12 @@ namespace SentinelMfgSuite.Web.Controllers
         [HttpGet("solutions")]
         public IActionResult Solutions() => View("Solutions");
 
+        [HttpGet("services/industrial-ai-readiness")]
+        public IActionResult IndustrialAIReadiness()
+        {
+            return View();
+        }
+
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
@@ -208,6 +214,7 @@ Message:
                     // continue - lead already saved
                 }
 
+                TempData["LeadSubmitted"] = true;
                 return RedirectToAction("ContactThanks");
             }
             catch (DbUpdateException dbEx)
@@ -226,7 +233,11 @@ Message:
         }
 
         [HttpGet]
-        public IActionResult ContactThanks() => View();
+        public IActionResult ContactThanks()
+        {
+            ViewBag.TrackLead = TempData["LeadSubmitted"] is bool submitted && submitted;
+            return View();
+        }
 
         public IActionResult AdvancedWaitlist()
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -117,8 +118,13 @@ namespace SentinelMfgSuite.ProvisionAdmin
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseNpgsql(connStr));
 
-            // Configure Identity services to match application usage
-            services.AddIdentity<ApplicationUser, IdentityRole>(options => { })
+            // Configure Identity services to match the web application (keeps same validation rules)
+            services.AddDefaultIdentity<ApplicationUser>(options =>
+            {
+                // Match production: allow sign-in without confirmed account for this tooling scenario
+                options.SignIn.RequireConfirmedAccount = false;
+            })
+                .AddRoles<IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationDbContext>()
                 .AddDefaultTokenProviders();
 
@@ -145,7 +151,7 @@ namespace SentinelMfgSuite.ProvisionAdmin
                     var r = await roleManager.CreateAsync(new IdentityRole(roleName));
                     if (!r.Succeeded)
                     {
-                        logger.LogError("Failed to create role: {errors}", string.Join(';', r.Errors));
+                        logger.LogError("Failed to create role: {errors}", FormatIdentityErrors(r.Errors));
                         return 3;
                     }
                 }
@@ -168,7 +174,7 @@ namespace SentinelMfgSuite.ProvisionAdmin
                     var createResult = await userManager.CreateAsync(user, adminPassword);
                     if (!createResult.Succeeded)
                     {
-                        logger.LogError("Failed to create user: {errors}", string.Join(';', createResult.Errors));
+                        logger.LogError("Failed to create user: {errors}", FormatIdentityErrors(createResult.Errors));
                         return 4;
                     }
                 }
@@ -183,7 +189,7 @@ namespace SentinelMfgSuite.ProvisionAdmin
                     var addRoleResult = await userManager.AddToRoleAsync(user, roleName);
                     if (!addRoleResult.Succeeded)
                     {
-                        logger.LogError("Failed to add role to user: {errors}", string.Join(';', addRoleResult.Errors));
+                        logger.LogError("Failed to add role to user: {errors}", FormatIdentityErrors(addRoleResult.Errors));
                         return 5;
                     }
                 }
@@ -201,6 +207,12 @@ namespace SentinelMfgSuite.ProvisionAdmin
                 logger.LogError("Provisioning failed due to an internal error. Check server logs with appropriate access rights.");
                 return 10;
             }
+        }
+
+        private static string FormatIdentityErrors(System.Collections.Generic.IEnumerable<IdentityError> errors)
+        {
+            if (errors == null) return string.Empty;
+            return string.Join("; ", errors.Select(e => $"{e.Code}: {e.Description}"));
         }
 
         private static string ReadPassword(string prompt)

@@ -1,5 +1,4 @@
-﻿
-@{
+﻿@{
     ViewData["Title"] = "Message received";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
@@ -55,9 +54,9 @@
         gap: 1rem;
     }
 
-    .sentinel-thanks-actions a {
-        text-decoration: none;
-    }
+        .sentinel-thanks-actions a {
+            text-decoration: none;
+        }
 
     @@media (max-width: 576px) {
         .sentinel-thanks {
@@ -68,11 +67,11 @@
             flex-direction: column;
         }
 
-        .sentinel-thanks-actions a {
-            width: 100%;
-            max-width: 280px;
-            text-align: center;
-        }
+            .sentinel-thanks-actions a {
+                width: 100%;
+                max-width: 280px;
+                text-align: center;
+            }
     }
 </style>
 
@@ -109,3 +108,17 @@
         </div>
     </section>
 </div>
+
+@section Scripts {
+    <!-- Lead tracking enabled: @(ViewBag.TrackLead == true) -->
+    @if (ViewBag.TrackLead == true)
+    {
+        <script>
+            if (typeof gtag === 'function') {
+                gtag('event', 'generate_lead', {
+                    lead_source: 'website_contact_form'
+                });
+            }
+        </script>
+    }
+}
