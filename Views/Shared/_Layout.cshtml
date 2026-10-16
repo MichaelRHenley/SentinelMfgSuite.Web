@@ -38,23 +38,27 @@
     <link rel="stylesheet" href="~/SentinelMfgSuite.Web.styles.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-7R9BEEH432"></script>
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag() { dataLayer.push(arguments); }
-        gtag('js', new Date());
-        gtag('config', 'G-7R9BEEH432');
-    </script>
+    @{ var disableThirdPartyScripts = ViewData["DisableThirdPartyScripts"] is true; }
+    @if (!disableThirdPartyScripts)
+    {
+        <!-- Google tag (gtag.js) -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-7R9BEEH432"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag() { dataLayer.push(arguments); }
+            gtag('js', new Date());
+            gtag('config', 'G-7R9BEEH432');
+        </script>
 
-    <!-- Microsoft Clarity -->
-    <script>
-        (function (c, l, a, r, i, t, y) {
-            c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments) };
-            t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i;
-            y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
-        })(window, document, "clarity", "script", "ukl6dgxpfg");
-    </script>
+        <!-- Microsoft Clarity -->
+        <script>
+            (function (c, l, a, r, i, t, y) {
+                c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments) };
+                t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i;
+                y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
+            })(window, document, "clarity", "script", "ukl6dgxpfg");
+        </script>
+    }
 
     @* Keep layout CSS OUT of the layout. Move everything below into site.css.
        If you truly need page-specific layout styles, put them in site.css under a section and scope by body class. *@

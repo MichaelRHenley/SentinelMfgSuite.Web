@@ -1,0 +1,1270 @@
+@model SentinelMfgSuite.Web.Models.Assessments.AssessmentQuestionnairePageViewModel
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using SentinelMfgSuite.Web.Models.Assessments.Questionnaire
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnvironment
+@{
+    ViewData["Title"] = "Industrial Data & AI Readiness Questionnaire";
+    ViewData["Description"] = "Sentinel Industrial Data & AI Readiness questionnaire.";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var serializerOptions = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+    serializerOptions.Converters.Add(new JsonStringEnumConverter());
+
+    var definitionJson = JsonSerializer.Serialize(Model.Definition, serializerOptions);
+    var initialResponseJson = QuestionnaireResponseV1Serializer.Serialize(Model.InitialResponse);
+    var q06ChoicesJson = JsonSerializer.Serialize(Model.PriorityChoicesByValue, serializerOptions);
+    var saveDraftUrlJson = JsonSerializer.Serialize(Model.SaveDraftUrl, serializerOptions);
+    var submitUrlJson = JsonSerializer.Serialize($"/assessment/questionnaire/{Model.InvitationId:D}/submit", serializerOptions);
+    var invitationTokenJson = JsonSerializer.Serialize(Model.InvitationToken, serializerOptions);
+    var initialConcurrencyStampJson = JsonSerializer.Serialize(Model.InitialConcurrencyStamp, serializerOptions);
+    var canSaveDraftJson = JsonSerializer.Serialize(Model.CanSaveDraft, serializerOptions);
+}
+
+<main class="sentinel-main">
+    <section class="sentinel-hero py-4 py-lg-5">
+        <div class="container">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-8">
+                    <h1 class="h2 fw-semibold mb-2">Industrial Data &amp; AI Readiness Questionnaire</h1>
+                    @if (Model.IsReadOnly)
+                    {
+                        <p class="text-secondary mb-0">This assessment has been submitted. Your responses are available for read-only review.</p>
+                    }
+                    else
+                    {
+                        <p class="text-secondary mb-0">Complete six sections and 30 questions. Draft completion is allowed. <strong>Unknown / Not sure</strong> selections are preserved as explicit answers.</p>
+                    }
+                </div>
+                <div class="col-lg-4">
+                    <div class="card sentinel-card border-0 rounded-4 h-100">
+                        <div class="card-body p-3 p-md-4">
+                            <div class="small text-uppercase text-secondary mb-1">Current response state</div>
+                            <div class="h5 fw-semibold mb-1">@Model.StatusLabel</div>
+                            <div class="text-secondary small">Sections: @Model.TotalSections · Questions: @Model.TotalQuestions</div>
+                            @if (Model.IsReadOnly)
+                            {
+                                <div class="alert alert-info mt-3 mb-0" role="status">Submitted responses are read-only.</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="container pb-5">
+        <div class="card sentinel-card border-0 rounded-4">
+            <div class="card-body p-3 p-md-4 p-lg-5">
+                <div class="d-flex flex-column flex-md-row justify-content-between gap-2 align-items-md-center mb-3">
+                    <div>
+                        <div class="small text-secondary text-uppercase">Section progress</div>
+                        <div id="sectionProgressLabel" class="fw-semibold"></div>
+                    </div>
+                    @if (Model.IsReadOnly)
+                    {
+                        <div class="text-secondary small">This assessment has been submitted. Your responses are available for read-only review.</div>
+                    }
+                    else
+                    {
+                        <div class="text-secondary small">Use Save Draft to preserve progress or Submit Assessment to finalize your responses.</div>
+                    }
+                </div>
+
+                <div class="progress mb-4" style="height: 0.65rem;">
+                    <div id="sectionProgressBar" class="progress-bar bg-info" role="progressbar" style="width: 0%;"></div>
+                </div>
+
+                <nav class="mb-4" aria-label="Questionnaire sections">
+                    <div class="d-flex flex-wrap gap-2" id="sectionTabs">
+                        @for (var i = 0; i < Model.Definition.Sections.Count; i++)
+                        {
+                            var sectionDef = Model.Definition.Sections[i];
+                            <button type="button" class="btn btn-outline-info btn-sm aq-section-tab" data-section-index="@i">@(i + 1). @sectionDef.Title</button>
+                        }
+                    </div>
+                </nav>
+
+                <form id="questionnaireForm" novalidate>
+                    @Html.AntiForgeryToken()
+                    @for (var sectionIndex = 0; sectionIndex < Model.Definition.Sections.Count; sectionIndex++)
+                    {
+                        var sectionDef = Model.Definition.Sections[sectionIndex];
+                        <section class="aq-section" data-section-index="@sectionIndex" @(sectionIndex == 0 ? "" : "hidden")>
+                            <header class="mb-4">
+                                <h2 class="h4 fw-semibold mb-1">@(sectionIndex + 1). @sectionDef.Title</h2>
+                                @if (!string.IsNullOrWhiteSpace(sectionDef.Description))
+                                {
+                                    <p class="text-secondary mb-0">@sectionDef.Description</p>
+                                }
+                            </header>
+
+                            @foreach (var question in sectionDef.Questions)
+                            {
+                                <article class="mb-4 pb-3 border-bottom border-secondary-subtle aq-question"
+                                         data-question-id="@question.Id"
+                                         data-question-type="@question.Type"
+                                         data-question-optional="@question.IsOptional.ToString().ToLowerInvariant()">
+                                    <h3 class="h6 fw-semibold mb-3">
+                                        @question.Id.ToUpperInvariant() — @question.Text
+                                        @if (!question.IsOptional)
+                                        {
+                                            <span class="text-info" title="Required on submission">*</span>
+                                        }
+                                    </h3>
+
+                                    @switch (question.Type)
+                                    {
+                                        case QuestionType.Text:
+                                        {
+                                            <input type="text" class="form-control aq-input-text" data-question-id="@question.Id" @(Model.IsReadOnly ? "readonly" : null) />
+                                            break;
+                                        }
+                                        case QuestionType.LongText:
+                                        {
+                                            <textarea rows="3" class="form-control aq-input-text" data-question-id="@question.Id" @(Model.IsReadOnly ? "readonly" : null)></textarea>
+                                            break;
+                                        }
+                                        case QuestionType.SingleSelect:
+                                        {
+                                            if (question.Choices is not null && question.Choices.Count > 0)
+                                            {
+                                                <div class="d-grid gap-2">
+                                                    @foreach (var choice in question.Choices)
+                                                    {
+                                                        var choiceId = $"{question.Id}_{choice.Value}";
+                                                        <div class="form-check">
+                                                            <input class="form-check-input aq-input-single" type="radio" name="@question.Id" id="@choiceId" value="@choice.Value" @(Model.IsReadOnly ? "disabled" : null) />
+                                                            <label class="form-check-label" for="@choiceId">@choice.Label</label>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else if (string.Equals(question.Id, "q07", StringComparison.Ordinal))
+                                            {
+                                                <div class="d-grid gap-2" id="q07PriorityOptions">
+                                                    <div class="text-secondary small">Select up to three challenges in Q06 to populate these options.</div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="text-secondary small">No options available.</div>
+                                            }
+
+                                            break;
+                                        }
+                                        case QuestionType.MultiSelect:
+                                        {
+                                            <div class="d-grid gap-2">
+                                                @if (question.Choices is not null)
+                                                {
+                                                    foreach (var choice in question.Choices)
+                                                    {
+                                                        var choiceId = $"{question.Id}_{choice.Value}";
+                                                        <div class="form-check">
+                                                            <input class="form-check-input aq-input-multi" type="checkbox" name="@question.Id" id="@choiceId" value="@choice.Value" @(Model.IsReadOnly ? "disabled" : null) />
+                                                            <label class="form-check-label" for="@choiceId">@choice.Label</label>
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                            if (question.MaxSelections is not null)
+                                            {
+                                                <p class="small text-secondary mt-2 mb-0">Select up to @question.MaxSelections choices.</p>
+                                            }
+                                            break;
+                                        }
+                                        case QuestionType.Composite:
+                                        {
+                                            if (question.RepeatableFields is not null)
+                                            {
+                                                <div class="row g-3 aq-composite" data-question-id="@question.Id">
+                                                    @foreach (var field in question.RepeatableFields)
+                                                    {
+                                                        <div class="col-12 @(field.Type == QuestionType.LongText ? "" : "col-md-6") aq-field" data-field-id="@field.Id" data-field-type="@field.Type">
+                                                            <label class="form-label mb-1">@field.Label
+                                                                @if (!field.IsOptional)
+                                                                {
+                                                                    <span class="text-info" title="Required on submission">*</span>
+                                                                }
+                                                            </label>
+                                                            @if (field.Type == QuestionType.Text)
+                                                            {
+                                                                <input type="text" class="form-control aq-composite-text" @(Model.IsReadOnly ? "readonly" : null) />
+                                                            }
+                                                            else if (field.Type == QuestionType.LongText)
+                                                            {
+                                                                <textarea class="form-control aq-composite-text" rows="2" @(Model.IsReadOnly ? "readonly" : null)></textarea>
+                                                            }
+                                                            else if (field.Type == QuestionType.SingleSelect && field.ChoicesArray is not null)
+                                                            {
+                                                                <select class="form-select aq-composite-select" @(Model.IsReadOnly ? "disabled" : null)>
+                                                                    <option value="">Select…</option>
+                                                                    @foreach (var choice in field.ChoicesArray)
+                                                                    {
+                                                                        <option value="@choice.Value">@choice.Label</option>
+                                                                    }
+                                                                </select>
+                                                            }
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            break;
+                                        }
+                                        case QuestionType.Repeatable:
+                                        {
+                                            <div class="aq-repeatable" data-question-id="@question.Id" data-max-occurrences="@(question.MaxOccurrences ?? 0)">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="small text-secondary">Add up to @(question.MaxOccurrences ?? 0) records.</span>
+                                                    <button type="button" class="btn btn-sm btn-outline-info aq-repeatable-add" @(Model.IsReadOnly ? "disabled" : null)>Add data source</button>
+                                                </div>
+                                                <div class="aq-repeatable-rows"></div>
+                                            </div>
+
+                                            if (question.RepeatableFields is not null)
+                                            {
+                                                <template id="repeatable-template-@question.Id">
+                                                    <div class="card bg-dark bg-opacity-50 border-secondary-subtle mb-3 aq-repeatable-row">
+                                                        <div class="card-body">
+                                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                                <div class="fw-semibold">Data source record</div>
+                                                                <button type="button" class="btn btn-sm btn-outline-light aq-repeatable-remove" @(Model.IsReadOnly ? "disabled" : null)>Remove</button>
+                                                            </div>
+                                                            <div class="row g-3">
+                                                                @foreach (var field in question.RepeatableFields)
+                                                                {
+                                                                    <div class="col-12 col-md-6 aq-field" data-field-id="@field.Id" data-field-type="@field.Type">
+                                                                        <label class="form-label mb-1">@field.Label
+                                                                            @if (!field.IsOptional)
+                                                                            {
+                                                                                <span class="text-info" title="Required on submission">*</span>
+                                                                            }
+                                                                        </label>
+                                                                        @if (field.Type == QuestionType.Text || field.Type == QuestionType.LongText)
+                                                                        {
+                                                                            <input type="text" class="form-control aq-repeatable-text" @(Model.IsReadOnly ? "readonly" : null) />
+                                                                        }
+                                                                        else if (field.Type == QuestionType.SingleSelect && field.ChoicesArray is not null)
+                                                                        {
+                                                                            <select class="form-select aq-repeatable-select" @(Model.IsReadOnly ? "disabled" : null)>
+                                                                                <option value="">Select…</option>
+                                                                                @foreach (var choice in field.ChoicesArray)
+                                                                                {
+                                                                                    <option value="@choice.Value">@choice.Label</option>
+                                                                                }
+                                                                            </select>
+                                                                        }
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            }
+                                            break;
+                                        }
+                                    }
+
+                                    @if (question.SupplementalFields is not null && question.SupplementalFields.Length > 0)
+                                    {
+                                        <div class="row g-3 mt-1 aq-supplemental" data-question-id="@question.Id">
+                                            @foreach (var field in question.SupplementalFields)
+                                            {
+                                                <div class="col-12 col-md-8 aq-supplemental-field" data-supplemental-id="@field.Id" data-trigger-choice="@field.TriggerChoiceValue" hidden>
+                                                    <label class="form-label mb-1">@field.Label</label>
+                                                    <input type="text" class="form-control aq-supplemental-input" @(Model.IsReadOnly ? "readonly" : null) />
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </article>
+                            }
+                        </section>
+                    }
+                </form>
+
+                @if (!Model.IsReadOnly)
+                {
+                    <div id="saveDraftStatus" class="small text-secondary mt-3" role="status" aria-live="polite">Changes are not saved until you select Save Draft.</div>
+                    <div id="saveDraftMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                    <div id="saveDraftValidation" class="alert alert-warning d-none mt-3 mb-0" role="alert">
+                        <div class="fw-semibold mb-2">Please review the following items:</div>
+                        <ul id="saveDraftValidationList" class="mb-0"></ul>
+                    </div>
+                    <div id="submitStatus" class="small text-secondary mt-3" role="status" aria-live="polite">Submit Assessment finalizes your questionnaire and locks further editing after confirmation.</div>
+                    <div id="submitMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                    <div id="submitValidation" class="alert alert-warning d-none mt-3 mb-0" role="alert">
+                        <div class="fw-semibold mb-2">Please review the following items:</div>
+                        <ul id="submitValidationList" class="mb-0"></ul>
+                    </div>
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mt-4">
+                        <button id="prevSectionBtn" type="button" class="btn btn-outline-light" disabled>Previous section</button>
+                        <div class="d-flex flex-column flex-sm-row gap-2">
+                            <button id="saveDraftBtn" type="button" class="btn btn-outline-info" @(Model.CanSaveDraft ? null : "disabled")>Save Draft</button>
+                            <button id="submitBtn" type="button" class="btn-sentinel-primary" @(Model.CanSaveDraft ? null : "disabled")>Submit Assessment</button>
+                            <button id="nextSectionBtn" type="button" class="btn btn-outline-info">Next section</button>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button id="reloadAfterConflictBtn" type="button" class="btn btn-sm btn-outline-light d-none">Reload questionnaire</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mt-4">
+                        <button id="prevSectionBtn" type="button" class="btn btn-outline-light">Previous section</button>
+                        <div class="d-flex flex-column flex-sm-row gap-2">
+                            <button id="nextSectionBtn" type="button" class="btn btn-outline-info">Next section</button>
+                        </div>
+                    </div>
+                }
+                <input type="hidden" id="questionnairePayload" />
+            </div>
+        </div>
+    </section>
+</main>
+
+<script type="application/json" id="questionnaire-definition-json">@Html.Raw(definitionJson)</script>
+<script type="application/json" id="questionnaire-initial-response-json">@Html.Raw(initialResponseJson)</script>
+<script type="application/json" id="q06-choices-json">@Html.Raw(q06ChoicesJson)</script>
+
+@section Scripts {
+<script>
+(() => {
+    const definition = JSON.parse(document.getElementById('questionnaire-definition-json').textContent);
+    const initialResponse = JSON.parse(document.getElementById('questionnaire-initial-response-json').textContent);
+    const q06ChoiceMap = JSON.parse(document.getElementById('q06-choices-json').textContent);
+    const saveDraftUrl = @Html.Raw(saveDraftUrlJson);
+    const submitUrl = @Html.Raw(submitUrlJson);
+    const invitationToken = @Html.Raw(invitationTokenJson);
+    const canSaveDraft = @Html.Raw(canSaveDraftJson);
+    const initialConcurrencyStamp = @Html.Raw(initialConcurrencyStampJson);
+    const isReadOnly = @Model.IsReadOnly.ToString().ToLowerInvariant();
+    const isDevelopment = @HostEnvironment.IsDevelopment().ToString().ToLowerInvariant();
+    const exclusiveValues = new Set(['unknown', 'none', 'not_collected', 'no_known']);
+
+    const sectionElements = Array.from(document.querySelectorAll('.aq-section'));
+    const sectionTabs = Array.from(document.querySelectorAll('.aq-section-tab'));
+    const progressLabel = document.getElementById('sectionProgressLabel');
+    const progressBar = document.getElementById('sectionProgressBar');
+    const prevBtn = document.getElementById('prevSectionBtn');
+    const nextBtn = document.getElementById('nextSectionBtn');
+    const payloadInput = document.getElementById('questionnairePayload');
+    const saveDraftBtn = document.getElementById('saveDraftBtn');
+    const saveDraftStatus = document.getElementById('saveDraftStatus');
+    const saveDraftMessage = document.getElementById('saveDraftMessage');
+    const saveDraftValidation = document.getElementById('saveDraftValidation');
+    const saveDraftValidationList = document.getElementById('saveDraftValidationList');
+    const submitStatus = document.getElementById('submitStatus');
+    const submitMessage = document.getElementById('submitMessage');
+    const submitValidation = document.getElementById('submitValidation');
+    const submitValidationList = document.getElementById('submitValidationList');
+    const submitBtn = document.getElementById('submitBtn');
+    const reloadAfterConflictBtn = document.getElementById('reloadAfterConflictBtn');
+    const questionnaireForm = document.getElementById('questionnaireForm');
+
+    let currentSectionIndex = 0;
+    let responseState = {
+        schemaVersion: definition.schemaVersion || '1.0',
+        answers: initialResponse?.answers || {}
+    };
+    let concurrencyStamp = initialConcurrencyStamp || null;
+    let saveRequestInFlight = false;
+    let submitRequestInFlight = false;
+
+    const questionsById = new Map();
+    definition.sections.forEach(section => section.questions.forEach(question => questionsById.set(question.id, question)));
+
+    function setSection(index) {
+        currentSectionIndex = Math.max(0, Math.min(index, sectionElements.length - 1));
+        sectionElements.forEach((el, idx) => {
+            el.hidden = idx !== currentSectionIndex;
+        });
+
+        sectionTabs.forEach(tab => {
+            const isActive = Number(tab.dataset.sectionIndex) === currentSectionIndex;
+            tab.classList.toggle('active', isActive);
+        });
+
+        const section = definition.sections[currentSectionIndex];
+        progressLabel.textContent = `Section ${currentSectionIndex + 1} of ${definition.sections.length}: ${section.title}`;
+        const pct = ((currentSectionIndex + 1) / definition.sections.length) * 100;
+        progressBar.style.width = `${pct}%`;
+
+        prevBtn.disabled = currentSectionIndex === 0;
+        nextBtn.disabled = currentSectionIndex === sectionElements.length - 1;
+    }
+
+    function showStatus(message) {
+        saveDraftStatus.textContent = message;
+    }
+
+    function hideAlert(element) {
+        element.className = 'alert d-none mt-3 mb-0';
+        element.textContent = '';
+    }
+
+    function showMessage(target, kind, message) {
+        target.classList.remove('d-none');
+        target.classList.remove('alert-success', 'alert-warning', 'alert-danger', 'alert-info');
+        target.classList.add(`alert-${kind}`);
+        target.textContent = message;
+    }
+
+    function clearValidationErrors(target, listTarget) {
+        target.classList.add('d-none');
+        listTarget.innerHTML = '';
+    }
+
+    function showValidationErrors(target, listTarget, errors) {
+        clearValidationErrors(target, listTarget);
+        (errors || []).forEach(error => {
+            const item = document.createElement('li');
+            const scope = [error.questionId, error.fieldId].filter(Boolean).join(' / ');
+            item.textContent = scope ? `${scope}: ${error.message}` : error.message;
+            listTarget.appendChild(item);
+        });
+
+        if (listTarget.children.length > 0) {
+            target.classList.remove('d-none');
+        }
+    }
+
+    function setSaveInProgress(inProgress) {
+        saveRequestInFlight = inProgress;
+        if (!saveDraftBtn) {
+            return;
+        }
+
+        if (inProgress) {
+            saveDraftBtn.disabled = true;
+            saveDraftBtn.textContent = 'Saving…';
+            return;
+        }
+
+        saveDraftBtn.textContent = 'Save Draft';
+        saveDraftBtn.disabled = isReadOnly || !canSaveDraft;
+    }
+
+    function setSubmitInProgress(inProgress) {
+        submitRequestInFlight = inProgress;
+        if (!submitBtn) {
+            return;
+        }
+
+        if (inProgress) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting…';
+            return;
+        }
+
+        submitBtn.textContent = 'Submit Assessment';
+        submitBtn.disabled = isReadOnly || !canSaveDraft;
+    }
+
+    function hideSubmissionControls() {
+        if (saveDraftBtn) {
+            saveDraftBtn.closest('.d-flex.flex-column.flex-sm-row.gap-2')?.classList.add('d-none');
+        }
+
+        if (submitBtn) {
+            submitBtn.closest('.d-flex.flex-column.flex-sm-row.gap-2')?.classList.add('d-none');
+        }
+
+        if (saveDraftStatus) {
+            saveDraftStatus.classList.add('d-none');
+        }
+
+        if (saveDraftMessage) {
+            saveDraftMessage.classList.add('d-none');
+        }
+
+        if (saveDraftValidation) {
+            saveDraftValidation.classList.add('d-none');
+        }
+
+        if (submitStatus) {
+            submitStatus.classList.add('d-none');
+        }
+
+        if (submitMessage) {
+            submitMessage.classList.add('d-none');
+        }
+
+        if (submitValidation) {
+            submitValidation.classList.add('d-none');
+        }
+
+        if (reloadAfterConflictBtn) {
+            reloadAfterConflictBtn.classList.add('d-none');
+        }
+    }
+
+    function disableQuestionnaireEditing() {
+        document.querySelectorAll('#questionnaireForm input, #questionnaireForm select, #questionnaireForm textarea').forEach(el => {
+            el.setAttribute('disabled', 'disabled');
+            el.setAttribute('readonly', 'readonly');
+        });
+
+        document.querySelectorAll('.aq-repeatable-add, .aq-repeatable-remove').forEach(el => {
+            el.setAttribute('disabled', 'disabled');
+        });
+
+        if (saveDraftBtn) {
+            saveDraftBtn.disabled = true;
+        }
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+        }
+    }
+
+    async function saveDraft() {
+        if (!canSaveDraft || isReadOnly || saveRequestInFlight) {
+            return;
+        }
+
+        syncFromDom();
+        const collectedAnswerCount = Object.keys(responseState.answers || {}).length;
+        if (isDevelopment) {
+            const renderedQuestionContainers = document.querySelectorAll('.aq-question').length;
+            const definedQuestionCount = definition.sections.reduce((total, section) => total + section.questions.length, 0);
+            console.debug('Questionnaire Save Draft diagnostic', {
+                renderedQuestionContainers,
+                collectedAnswerCount,
+                definedQuestionCount,
+                collectionLoopExecuted: true
+            });
+        }
+
+        if (collectedAnswerCount === 0) {
+            showMessage(saveDraftMessage, 'danger', 'No questionnaire answers were collected. Draft was not saved.');
+            showStatus('Draft not saved.');
+            return;
+        }
+
+        clearValidationErrors(saveDraftValidation, saveDraftValidationList);
+        hideAlert(saveDraftMessage);
+        reloadAfterConflictBtn.classList.add('d-none');
+
+        const antiforgeryInput = questionnaireForm.querySelector('input[name="__RequestVerificationToken"]');
+        const antiforgeryToken = antiforgeryInput ? antiforgeryInput.value : '';
+
+        if (!antiforgeryToken) {
+            showMessage(saveDraftMessage, 'danger', 'Unable to save draft right now. Please refresh and try again.');
+            showStatus('Draft not saved.');
+            return;
+        }
+
+        setSaveInProgress(true);
+        showStatus('Saving draft…');
+
+        try {
+            const response = await fetch(saveDraftUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': antiforgeryToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    invitationToken,
+                    questionnairePayload: payloadInput.value,
+                    concurrencyStamp
+                })
+            });
+
+            let result = null;
+            try {
+                result = await response.json();
+            } catch {
+                result = null;
+            }
+
+            if (!response.ok || !result || !result.state) {
+                showMessage(saveDraftMessage, 'danger', 'Unable to save draft right now. Please try again.');
+                showStatus('Draft not saved.');
+                return;
+            }
+
+            switch (result.state) {
+                case 'saved':
+                    concurrencyStamp = result.concurrencyStamp || concurrencyStamp;
+                    showMessage(saveDraftMessage, 'success', 'Draft saved successfully.');
+                    showStatus('Draft saved.');
+                    break;
+                case 'validation-error':
+                    showMessage(saveDraftMessage, 'warning', result.message || 'Please review the questionnaire fields and try again.');
+                    showValidationErrors(saveDraftValidation, saveDraftValidationList, result.errors || []);
+                    showStatus('Draft not saved.');
+                    break;
+                case 'conflict':
+                    showMessage(saveDraftMessage, 'warning', result.message || 'This questionnaire was changed in another session.');
+                    if (result.canReload) {
+                        reloadAfterConflictBtn.classList.remove('d-none');
+                    }
+                    showStatus('Draft not saved due to a concurrency conflict.');
+                    break;
+                case 'already-submitted':
+                    showMessage(saveDraftMessage, 'info', result.message || 'This questionnaire has already been submitted.');
+                    disableQuestionnaireEditing();
+                    showStatus('Editing disabled because this questionnaire is submitted.');
+                    if (result.canReload) {
+                        reloadAfterConflictBtn.classList.remove('d-none');
+                    }
+                    break;
+                case 'access-denied':
+                    showMessage(saveDraftMessage, 'danger', result.message || 'This assessment invitation is not available.');
+                    disableQuestionnaireEditing();
+                    showStatus('Draft not saved. Invitation unavailable.');
+                    break;
+                default:
+                    showMessage(saveDraftMessage, 'danger', 'Unable to save draft right now. Please try again.');
+                    showStatus('Draft not saved.');
+                    break;
+            }
+        } catch {
+            showMessage(saveDraftMessage, 'danger', 'Unable to save draft right now. Please try again.');
+            showStatus('Draft not saved.');
+        } finally {
+            setSaveInProgress(false);
+        }
+    }
+
+    async function submitAssessment() {
+        if (!canSaveDraft || isReadOnly || submitRequestInFlight) {
+            return;
+        }
+
+        const confirmed = window.confirm('Are you ready to finalize your assessment? You will not be able to edit it after submission.');
+        if (!confirmed) {
+            return;
+        }
+
+        syncFromDom();
+        const collectedAnswerCount = Object.keys(responseState.answers || {}).length;
+        if (isDevelopment) {
+            const renderedQuestionContainers = document.querySelectorAll('.aq-question').length;
+            const definedQuestionCount = definition.sections.reduce((total, section) => total + section.questions.length, 0);
+            console.debug('Questionnaire Submit diagnostic', {
+                renderedQuestionContainers,
+                collectedAnswerCount,
+                definedQuestionCount,
+                collectionLoopExecuted: true
+            });
+        }
+
+        if (collectedAnswerCount === 0) {
+            showMessage(submitMessage, 'danger', 'No questionnaire answers were collected. Submission was not sent.');
+            showSubmitStatus('Submission not sent.');
+            return;
+        }
+
+        clearValidationErrors(submitValidation, submitValidationList);
+        hideAlert(submitMessage);
+        reloadAfterConflictBtn.classList.add('d-none');
+
+        const antiforgeryInput = questionnaireForm.querySelector('input[name="__RequestVerificationToken"]');
+        const antiforgeryToken = antiforgeryInput ? antiforgeryInput.value : '';
+
+        if (!antiforgeryToken) {
+            showMessage(submitMessage, 'danger', 'Unable to submit right now. Please refresh and try again.');
+            showSubmitStatus('Submission not sent.');
+            return;
+        }
+
+        setSubmitInProgress(true);
+        showSubmitStatus('Submitting assessment…');
+
+        try {
+            const response = await fetch(submitUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': antiforgeryToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    invitationToken,
+                    questionnairePayload: payloadInput.value,
+                    concurrencyStamp
+                })
+            });
+
+            let result = null;
+            try {
+                result = await response.json();
+            } catch {
+                result = null;
+            }
+
+            if (!response.ok || !result || !result.state) {
+                showMessage(submitMessage, 'danger', 'Unable to submit right now. Please try again.');
+                showSubmitStatus('Submission not sent.');
+                return;
+            }
+
+            switch (result.state) {
+                case 'submitted':
+                    showMessage(submitMessage, 'success', result.message || 'Questionnaire submitted successfully.');
+                    showSubmitStatus('Submission successful. Loading read-only view…');
+                    disableQuestionnaireEditing();
+                    setTimeout(() => window.location.reload(), 750);
+                    break;
+                case 'validation-error':
+                    showMessage(submitMessage, 'warning', result.message || 'Please review the questionnaire fields and try again.');
+                    showValidationErrors(submitValidation, submitValidationList, result.errors || []);
+                    showSubmitStatus('Submission not sent.');
+                    break;
+                case 'conflict':
+                    showMessage(submitMessage, 'warning', result.message || 'This questionnaire was changed in another session. Reload to review the latest version before submitting again.');
+                    if (result.canReload) {
+                        reloadAfterConflictBtn.classList.remove('d-none');
+                    }
+                    showSubmitStatus('Submission not sent due to a concurrency conflict.');
+                    break;
+                case 'already-submitted':
+                    showMessage(submitMessage, 'info', result.message || 'This questionnaire has already been submitted.');
+                    disableQuestionnaireEditing();
+                    showSubmitStatus('Submission blocked because this questionnaire is already submitted.');
+                    if (result.canReload) {
+                        reloadAfterConflictBtn.classList.remove('d-none');
+                    }
+                    break;
+                case 'access-denied':
+                    showMessage(submitMessage, 'danger', result.message || 'This assessment invitation is not available.');
+                    disableQuestionnaireEditing();
+                    showSubmitStatus('Submission not sent. Invitation unavailable.');
+                    break;
+                default:
+                    showMessage(submitMessage, 'danger', 'Unable to submit right now. Please try again.');
+                    showSubmitStatus('Submission not sent.');
+                    break;
+            }
+        } catch {
+            showMessage(submitMessage, 'danger', 'Unable to submit right now. Please try again.');
+            showSubmitStatus('Submission not sent.');
+        } finally {
+            setSubmitInProgress(false);
+        }
+    }
+
+    function showSubmitStatus(message) {
+        submitStatus.textContent = message;
+    }
+
+    function isExclusive(value) {
+        return exclusiveValues.has(value);
+    }
+
+    function updateMultiSelectMutualExclusivity(questionElement, changedInput) {
+        const checkboxes = Array.from(questionElement.querySelectorAll('.aq-input-multi'));
+        if (!changedInput || !changedInput.checked) {
+            return;
+        }
+
+        if (isExclusive(changedInput.value)) {
+            checkboxes.forEach(cb => {
+                if (cb !== changedInput) {
+                    cb.checked = false;
+                }
+            });
+            return;
+        }
+
+        checkboxes.forEach(cb => {
+            if (cb !== changedInput && isExclusive(cb.value)) {
+                cb.checked = false;
+            }
+        });
+    }
+
+    function enforceQ06Limit() {
+        const q06 = document.querySelector('.aq-question[data-question-id="q06"]');
+        if (!q06) {
+            return;
+        }
+
+        const checkboxes = Array.from(q06.querySelectorAll('.aq-input-multi'));
+        const checked = checkboxes.filter(cb => cb.checked);
+        const max = 3;
+        const hasReachedMax = checked.length >= max;
+
+        checkboxes.forEach(cb => {
+            if (isReadOnly) {
+                cb.disabled = true;
+                return;
+            }
+
+            if (cb.checked) {
+                cb.disabled = false;
+                return;
+            }
+
+            cb.disabled = hasReachedMax;
+        });
+    }
+
+    function renderQ07Options() {
+        const q07 = document.querySelector('.aq-question[data-question-id="q07"]');
+        if (!q07) {
+            return;
+        }
+
+        const container = q07.querySelector('#q07PriorityOptions');
+        if (!container) {
+            return;
+        }
+
+        const selectedQ06 = responseState.answers.q06?.selectedValues || [];
+        const currentSelected = responseState.answers.q07?.selected || null;
+
+        container.innerHTML = '';
+
+        if (!selectedQ06.length) {
+            const help = document.createElement('div');
+            help.className = 'text-secondary small';
+            help.textContent = 'Select up to three challenges in Q06 to populate these options.';
+            container.appendChild(help);
+
+            delete responseState.answers.q07;
+            return;
+        }
+
+        const validSet = new Set(selectedQ06);
+        if (currentSelected && !validSet.has(currentSelected)) {
+            delete responseState.answers.q07;
+        }
+
+        selectedQ06.forEach(value => {
+            const id = `q07_${value}`;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'form-check';
+
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'q07';
+            input.value = value;
+            input.id = id;
+            input.className = 'form-check-input aq-input-single';
+            input.disabled = isReadOnly;
+            input.checked = responseState.answers.q07?.selected === value;
+
+            const label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.htmlFor = id;
+            label.textContent = q06ChoiceMap[value] || value;
+
+            wrapper.appendChild(input);
+            wrapper.appendChild(label);
+            container.appendChild(wrapper);
+        });
+    }
+
+    function createRepeatableRow(questionId, questionDef, record) {
+        const template = document.getElementById(`repeatable-template-${questionId}`);
+        const clone = template.content.firstElementChild.cloneNode(true);
+
+        const fields = Array.from(clone.querySelectorAll('.aq-field'));
+        fields.forEach(fieldEl => {
+            const fieldId = fieldEl.dataset.fieldId;
+            const fieldType = fieldEl.dataset.fieldType;
+            const answer = record?.[fieldId] || {};
+
+            if (fieldType === 'Text' || fieldType === 'LongText') {
+                const input = fieldEl.querySelector('.aq-repeatable-text');
+                input.value = answer.text || '';
+            } else if (fieldType === 'SingleSelect') {
+                const select = fieldEl.querySelector('.aq-repeatable-select');
+                select.value = answer.selected || '';
+            }
+        });
+
+        const removeBtn = clone.querySelector('.aq-repeatable-remove');
+        removeBtn.addEventListener('click', () => {
+            clone.remove();
+            syncFromDom();
+            updateQ13Controls();
+        });
+
+        return clone;
+    }
+
+    function updateQ13Controls() {
+        const q13 = document.querySelector('.aq-repeatable[data-question-id="q13"]');
+        if (!q13) {
+            return;
+        }
+
+        const max = Number(q13.dataset.maxOccurrences || '5');
+        const addBtn = q13.querySelector('.aq-repeatable-add');
+        const rowCount = q13.querySelectorAll('.aq-repeatable-row').length;
+
+        if (isReadOnly) {
+            addBtn.disabled = true;
+            return;
+        }
+
+        addBtn.disabled = rowCount >= max;
+    }
+
+    function renderRepeatable(questionId) {
+        const questionDef = questionsById.get(questionId);
+        const container = document.querySelector(`.aq-repeatable[data-question-id="${questionId}"]`);
+        if (!questionDef || !container) {
+            return;
+        }
+
+        const rowsHost = container.querySelector('.aq-repeatable-rows');
+        rowsHost.innerHTML = '';
+
+        const records = responseState.answers[questionId]?.repeatable || [];
+        records.forEach(record => {
+            rowsHost.appendChild(createRepeatableRow(questionId, questionDef, record));
+        });
+
+        container.querySelector('.aq-repeatable-add').addEventListener('click', () => {
+            const currentRows = rowsHost.querySelectorAll('.aq-repeatable-row').length;
+            if (currentRows >= (questionDef.maxOccurrences || 5)) {
+                return;
+            }
+
+            rowsHost.appendChild(createRepeatableRow(questionId, questionDef, {}));
+            syncFromDom();
+            updateQ13Controls();
+        });
+
+        updateQ13Controls();
+    }
+
+    function applySupplementalVisibility(questionElement, questionDef) {
+        const supplementalFields = Array.from(questionElement.querySelectorAll('.aq-supplemental-field'));
+        if (!supplementalFields.length) {
+            return;
+        }
+
+        const selected = questionElement.querySelector('.aq-input-single:checked')?.value || null;
+        const selectedValues = Array.from(questionElement.querySelectorAll('.aq-input-multi:checked')).map(x => x.value);
+
+        supplementalFields.forEach(field => {
+            const trigger = field.dataset.triggerChoice;
+            const shouldShow = !trigger || trigger === selected || selectedValues.includes(trigger);
+            field.hidden = !shouldShow;
+            if (!shouldShow) {
+                const input = field.querySelector('.aq-supplemental-input');
+                if (input) {
+                    input.value = '';
+                }
+            }
+        });
+    }
+
+    function readFieldAnswer(fieldElement) {
+        const fieldType = fieldElement.dataset.fieldType;
+
+        if (fieldType === 'Text' || fieldType === 'LongText') {
+            const input = fieldElement.querySelector('input,textarea');
+            const value = input.value.trim();
+            return value ? { text: value } : null;
+        }
+
+        if (fieldType === 'SingleSelect') {
+            const select = fieldElement.querySelector('select');
+            return select.value ? { selected: select.value } : null;
+        }
+
+        return null;
+    }
+
+    function readQuestionAnswer(questionDef) {
+        const questionEl = document.querySelector(`.aq-question[data-question-id="${questionDef.id}"]`);
+        if (!questionEl) {
+            return null;
+        }
+
+        if (questionDef.type === 'Text' || questionDef.type === 'LongText') {
+            const input = questionEl.querySelector('.aq-input-text');
+            const value = input.value.trim();
+            return value ? { text: value } : null;
+        }
+
+        if (questionDef.type === 'SingleSelect') {
+            const selected = questionEl.querySelector('.aq-input-single:checked')?.value;
+            if (!selected) {
+                return null;
+            }
+
+            const answer = { selected };
+            const supplemental = readSupplemental(questionEl);
+            if (Object.keys(supplemental).length) {
+                answer.supplemental = supplemental;
+            }
+
+            return answer;
+        }
+
+        if (questionDef.type === 'MultiSelect') {
+            const selectedValues = Array.from(questionEl.querySelectorAll('.aq-input-multi:checked')).map(x => x.value);
+            if (!selectedValues.length) {
+                return null;
+            }
+
+            const answer = { selectedValues };
+            const supplemental = readSupplemental(questionEl);
+            if (Object.keys(supplemental).length) {
+                answer.supplemental = supplemental;
+            }
+
+            return answer;
+        }
+
+        if (questionDef.type === 'Composite') {
+            const composite = {};
+            questionEl.querySelectorAll('.aq-field').forEach(fieldEl => {
+                const fieldId = fieldEl.dataset.fieldId;
+                const answer = readFieldAnswer(fieldEl);
+                if (answer) {
+                    composite[fieldId] = answer;
+                }
+            });
+
+            return Object.keys(composite).length ? { composite } : null;
+        }
+
+        if (questionDef.type === 'Repeatable') {
+            const repeatable = [];
+            questionEl.querySelectorAll('.aq-repeatable-row').forEach(row => {
+                const record = {};
+                row.querySelectorAll('.aq-field').forEach(fieldEl => {
+                    const fieldId = fieldEl.dataset.fieldId;
+                    const answer = readFieldAnswer(fieldEl);
+                    if (answer) {
+                        record[fieldId] = answer;
+                    }
+                });
+
+                if (Object.keys(record).length) {
+                    repeatable.push(record);
+                }
+            });
+
+            return repeatable.length ? { repeatable } : null;
+        }
+
+        return null;
+    }
+
+    function readSupplemental(questionEl) {
+        const supplemental = {};
+        questionEl.querySelectorAll('.aq-supplemental-field').forEach(field => {
+            if (field.hidden) {
+                return;
+            }
+
+            const key = field.dataset.supplementalId;
+            const input = field.querySelector('.aq-supplemental-input');
+            const value = input.value.trim();
+            if (value) {
+                supplemental[key] = value;
+            }
+        });
+        return supplemental;
+    }
+
+    function syncFromDom() {
+        const answers = {};
+
+        definition.sections.forEach(section => {
+            section.questions.forEach(question => {
+                const answer = readQuestionAnswer(question);
+                if (answer) {
+                    answers[question.id] = answer;
+                }
+            });
+        });
+
+        const q06Values = answers.q06?.selectedValues || [];
+        if (answers.q07?.selected && !q06Values.includes(answers.q07.selected)) {
+            delete answers.q07;
+        }
+
+        responseState = {
+            schemaVersion: definition.schemaVersion,
+            answers
+        };
+
+        payloadInput.value = JSON.stringify(responseState);
+
+        renderQ07Options();
+        enforceQ06Limit();
+        updateQ13Controls();
+    }
+
+    function loadAnswerIntoDom(questionDef, answer) {
+        const questionEl = document.querySelector(`.aq-question[data-question-id="${questionDef.id}"]`);
+        if (!questionEl || !answer) {
+            return;
+        }
+
+        if (questionDef.type === 'Text' || questionDef.type === 'LongText') {
+            const input = questionEl.querySelector('.aq-input-text');
+            if (input) {
+                input.value = answer.text || '';
+            }
+            return;
+        }
+
+        if (questionDef.type === 'SingleSelect') {
+            const input = questionEl.querySelector(`.aq-input-single[value="${CSS.escape(answer.selected || '')}"]`);
+            if (input) {
+                input.checked = true;
+            }
+        }
+
+        if (questionDef.type === 'MultiSelect') {
+            (answer.selectedValues || []).forEach(value => {
+                const input = questionEl.querySelector(`.aq-input-multi[value="${CSS.escape(value)}"]`);
+                if (input) {
+                    input.checked = true;
+                }
+            });
+        }
+
+        if (questionDef.type === 'Composite' && answer.composite) {
+            questionEl.querySelectorAll('.aq-field').forEach(fieldEl => {
+                const fieldId = fieldEl.dataset.fieldId;
+                const fieldAnswer = answer.composite[fieldId];
+                if (!fieldAnswer) {
+                    return;
+                }
+
+                const fieldType = fieldEl.dataset.fieldType;
+                if (fieldType === 'Text' || fieldType === 'LongText') {
+                    const input = fieldEl.querySelector('input,textarea');
+                    input.value = fieldAnswer.text || '';
+                } else if (fieldType === 'SingleSelect') {
+                    const select = fieldEl.querySelector('select');
+                    select.value = fieldAnswer.selected || '';
+                }
+            });
+        }
+
+        if (answer.supplemental) {
+            Object.entries(answer.supplemental).forEach(([key, value]) => {
+                const field = questionEl.querySelector(`.aq-supplemental-field[data-supplemental-id="${CSS.escape(key)}"]`);
+                if (!field) {
+                    return;
+                }
+                const input = field.querySelector('.aq-supplemental-input');
+                input.value = value || '';
+            });
+        }
+    }
+
+    function bindEvents() {
+        sectionTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                setSection(Number(tab.dataset.sectionIndex));
+            });
+        });
+
+        prevBtn.addEventListener('click', () => setSection(currentSectionIndex - 1));
+        nextBtn.addEventListener('click', () => setSection(currentSectionIndex + 1));
+
+        if (saveDraftBtn) {
+            saveDraftBtn.addEventListener('click', async () => {
+                await saveDraft();
+            });
+        }
+
+        if (submitBtn) {
+            submitBtn.addEventListener('click', async () => {
+                await submitAssessment();
+            });
+        }
+
+        if (reloadAfterConflictBtn) {
+            reloadAfterConflictBtn.addEventListener('click', () => {
+                window.location.reload();
+            });
+        }
+
+        document.querySelectorAll('.aq-question').forEach(questionEl => {
+            questionEl.addEventListener('change', event => {
+                const questionId = questionEl.dataset.questionId;
+                const input = event.target;
+
+                if (questionEl.dataset.questionType === 'MultiSelect') {
+                    updateMultiSelectMutualExclusivity(questionEl, input);
+                }
+
+                if (questionId === 'q06') {
+                    enforceQ06Limit();
+                }
+
+                const questionDef = questionsById.get(questionId);
+                if (questionDef) {
+                    applySupplementalVisibility(questionEl, questionDef);
+                }
+
+                syncFromDom();
+            });
+
+            questionEl.addEventListener('input', () => {
+                syncFromDom();
+            });
+        });
+    }
+
+    function initializeDomFromResponse() {
+        Object.entries(responseState.answers || {}).forEach(([questionId, answer]) => {
+            const questionDef = questionsById.get(questionId);
+            if (!questionDef) {
+                return;
+            }
+
+            if (questionDef.type === 'Repeatable' && questionId === 'q13') {
+                return;
+            }
+
+            loadAnswerIntoDom(questionDef, answer);
+        });
+
+        definition.sections.forEach(section => {
+            section.questions.forEach(question => {
+                const questionEl = document.querySelector(`.aq-question[data-question-id="${question.id}"]`);
+                if (questionEl) {
+                    applySupplementalVisibility(questionEl, question);
+                }
+            });
+        });
+    }
+
+    function initialize() {
+        renderRepeatable('q13');
+        initializeDomFromResponse();
+        renderQ07Options();
+        bindEvents();
+        setSection(0);
+        syncFromDom();
+        setSaveInProgress(false);
+
+        if (isReadOnly || !canSaveDraft) {
+            disableQuestionnaireEditing();
+        } else {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    initialize();
+})();
+</script>
+}

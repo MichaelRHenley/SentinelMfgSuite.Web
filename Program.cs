@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models;
 using SentinelMfgSuite.Web.Services;
+using SentinelMfgSuite.Web.Services.Assessments;
 using SentinelMfgSuite.Web.Services.Provisioning;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
@@ -49,6 +50,8 @@ builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, TenantProvider>();
+builder.Services.AddScoped<IAssessmentInvitationAccessService, AssessmentInvitationAccessService>();
+builder.Services.AddScoped<IAssessmentQuestionnaireService, AssessmentQuestionnaireService>();
 
 builder.Services.AddScoped<
     IUserClaimsPrincipalFactory<ApplicationUser>,

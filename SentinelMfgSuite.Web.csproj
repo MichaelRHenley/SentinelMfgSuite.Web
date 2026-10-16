@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>f5b5945e-39a1-4eba-8179-ebbff1651f34</UserSecretsId>
     <!-- Exclude the Tools/ProvisionAdmin build outputs and intermediate files from SDK default items to avoid long path/metadata issues. -->
-    <DefaultItemExcludes>Tools\ProvisionAdmin\**;$(DefaultItemExcludes)</DefaultItemExcludes>
+    <DefaultItemExcludes>Tools\ProvisionAdmin\**;SentinelMfgSuite.Web.Tests\**;$(DefaultItemExcludes)</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
