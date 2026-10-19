@@ -26,7 +26,7 @@ public class AssessmentQuestionnaireControllerTests
     {
         var accessService = new StubAssessmentInvitationAccessService(AssessmentInvitationAccessResult.Denied());
         var questionnaireService = new StubAssessmentQuestionnaireService(
-            loadResult: AssessmentQuestionnaireLoadResult.Success(new QuestionnaireResponseV1(), null, false),
+            loadResult: AssessmentQuestionnaireLoadResult.Success(new QuestionnaireResponseV1(), null, false, QuestionnaireV1.Definition),
             saveResult: AssessmentQuestionnaireSaveResult.Success("stamp-1"));
         var controller = CreateController(accessService, questionnaireService);
 
@@ -41,13 +41,35 @@ public class AssessmentQuestionnaireControllerTests
     }
 
     [Fact]
+    public async Task SaveDraft_Returns_Generic_Unavailable_For_Unsupported_Questionnaire_Version()
+    {
+        var questionnaireService = new StubAssessmentQuestionnaireService(
+            loadResult: AssessmentQuestionnaireLoadResult.AccessDenied(),
+            saveResult: AssessmentQuestionnaireSaveResult.UnsupportedQuestionnaireVersion());
+        var controller = CreateController(
+            new StubAssessmentInvitationAccessService(AssessmentInvitationAccessResult.Denied()),
+            questionnaireService);
+
+        var result = await controller.SaveDraft(
+            Guid.NewGuid(),
+            new AssessmentQuestionnaireController.SaveDraftRequest("opaque-token", "{}", null));
+
+        var json = Assert.IsType<JsonResult>(result);
+        var payload = Assert.IsType<AssessmentQuestionnaireController.SaveDraftResponse>(json.Value);
+        Assert.Equal("unavailable", payload.State);
+        Assert.DoesNotContain("Unsupported", payload.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(payload.Errors);
+        AssertInvitationHeaders(controller);
+    }
+
+    [Fact]
     public async Task Entry_Returns_Enabled_Start_Link_For_Authorized_NotStarted_Invitation()
     {
         var invitationId = Guid.NewGuid();
         var accessService = new StubAssessmentInvitationAccessService(
             AssessmentInvitationAccessResult.Authorized(Guid.NewGuid(), invitationId, null, AssessmentInvitationResponseState.NotStarted, false));
         var questionnaireService = new StubAssessmentQuestionnaireService(
-            loadResult: AssessmentQuestionnaireLoadResult.Success(new QuestionnaireResponseV1(), null, false),
+            loadResult: AssessmentQuestionnaireLoadResult.Success(new QuestionnaireResponseV1(), null, false, QuestionnaireV1.Definition),
             saveResult: AssessmentQuestionnaireSaveResult.Success("stamp-1"));
         var controller = CreateController(accessService, questionnaireService);
 
@@ -74,7 +96,7 @@ public class AssessmentQuestionnaireControllerTests
         var accessService = new StubAssessmentInvitationAccessService(
             AssessmentInvitationAccessResult.Authorized(Guid.NewGuid(), invitationId, null, AssessmentInvitationResponseState.NotStarted, false));
         var questionnaireService = new StubAssessmentQuestionnaireService(
-            loadResult: AssessmentQuestionnaireLoadResult.Success(new QuestionnaireResponseV1(), "stamp-1", false),
+            loadResult: AssessmentQuestionnaireLoadResult.Success(new QuestionnaireResponseV1(), "stamp-1", false, QuestionnaireV1.Definition),
             saveResult: AssessmentQuestionnaireSaveResult.Success("stamp-2"));
         var controller = CreateController(accessService, questionnaireService);
 
@@ -109,7 +131,7 @@ public class AssessmentQuestionnaireControllerTests
         var accessService = new StubAssessmentInvitationAccessService(
             AssessmentInvitationAccessResult.Authorized(Guid.NewGuid(), invitationId, Guid.NewGuid(), AssessmentInvitationResponseState.Submitted, true));
         var questionnaireService = new StubAssessmentQuestionnaireService(
-            loadResult: AssessmentQuestionnaireLoadResult.Success(response, "stamp-1", true),
+            loadResult: AssessmentQuestionnaireLoadResult.Success(response, "stamp-1", true, QuestionnaireV1.Definition),
             saveResult: AssessmentQuestionnaireSaveResult.AlreadySubmitted());
         var controller = CreateController(accessService, questionnaireService);
 
@@ -246,6 +268,114 @@ public class AssessmentQuestionnaireControllerTests
         AssertInvitationHeaders(controller);
     }
 
+    [Fact]
+    public async Task Questionnaire_Renders_V1_Definition_With_30_Questions()
+    {
+        var invitationId = Guid.NewGuid();
+        var accessService = new StubAssessmentInvitationAccessService(
+            AssessmentInvitationAccessResult.Authorized(Guid.NewGuid(), invitationId, null, AssessmentInvitationResponseState.NotStarted, false));
+        var questionnaireService = new StubAssessmentQuestionnaireService(
+            loadResult: AssessmentQuestionnaireLoadResult.Success(new QuestionnaireResponseV1(), "stamp-1", false, QuestionnaireV1.Definition),
+            saveResult: AssessmentQuestionnaireSaveResult.Success("stamp-2"));
+        var controller = CreateController(accessService, questionnaireService);
+
+        var result = await controller.Questionnaire(invitationId, "opaque-token");
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<AssessmentQuestionnairePageViewModel>(view.Model);
+        Assert.Same(QuestionnaireV1.Definition, model.Definition);
+        Assert.Equal(QuestionnaireV1.Definition.Sections.Count, model.TotalSections);
+        Assert.Equal(30, model.TotalQuestions);
+        AssertInvitationHeaders(controller);
+    }
+
+    [Fact]
+    public async Task Questionnaire_Resolves_Definition_From_Assessment_Not_Response_Payload()
+    {
+        // The definition on the view model must come from the service's resolved
+        // AssessmentQuestionnaireLoadResult.Definition (derived from Assessment.QuestionnaireVersion),
+        // not from any schema-version field embedded in the submitted/draft JSON payload.
+        var invitationId = Guid.NewGuid();
+        var response = new QuestionnaireResponseV1
+        {
+            SchemaVersion = "not-a-real-version",
+            Answers = new Dictionary<string, QuestionAnswer>()
+        };
+
+        var accessService = new StubAssessmentInvitationAccessService(
+            AssessmentInvitationAccessResult.Authorized(Guid.NewGuid(), invitationId, null, AssessmentInvitationResponseState.NotStarted, false));
+        var questionnaireService = new StubAssessmentQuestionnaireService(
+            loadResult: AssessmentQuestionnaireLoadResult.Success(response, "stamp-1", false, QuestionnaireV1.Definition),
+            saveResult: AssessmentQuestionnaireSaveResult.Success("stamp-2"));
+        var controller = CreateController(accessService, questionnaireService);
+
+        var result = await controller.Questionnaire(invitationId, "opaque-token");
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<AssessmentQuestionnairePageViewModel>(view.Model);
+        Assert.Same(QuestionnaireV1.Definition, model.Definition);
+    }
+
+    [Fact]
+    public async Task Questionnaire_Returns_Controlled_Unavailable_Response_For_Unsupported_Version()
+    {
+        var invitationId = Guid.NewGuid();
+        var accessService = new StubAssessmentInvitationAccessService(
+            AssessmentInvitationAccessResult.Authorized(Guid.NewGuid(), invitationId, null, AssessmentInvitationResponseState.NotStarted, false));
+        var questionnaireService = new StubAssessmentQuestionnaireService(
+            loadResult: AssessmentQuestionnaireLoadResult.UnsupportedQuestionnaireVersion(),
+            saveResult: AssessmentQuestionnaireSaveResult.Success("stamp-2"));
+        var controller = CreateController(accessService, questionnaireService);
+
+        var result = await controller.Questionnaire(invitationId, "opaque-token");
+
+        var view = Assert.IsType<ViewResult>(result);
+        Assert.Equal("Entry", view.ViewName);
+        var model = Assert.IsType<AssessmentQuestionnaireWelcomeViewModel>(view.Model);
+        Assert.False(model.IsInvitationAvailable);
+        Assert.Equal("Unavailable", model.StatusLabel);
+        AssertInvitationHeaders(controller);
+    }
+
+    [Fact]
+    public async Task Questionnaire_Returns_Controlled_Unavailable_Response_For_Missing_Version()
+    {
+        var invitationId = Guid.NewGuid();
+        var accessService = new StubAssessmentInvitationAccessService(
+            AssessmentInvitationAccessResult.Authorized(Guid.NewGuid(), invitationId, null, AssessmentInvitationResponseState.NotStarted, false));
+        var questionnaireService = new StubAssessmentQuestionnaireService(
+            loadResult: AssessmentQuestionnaireLoadResult.UnsupportedQuestionnaireVersion(),
+            saveResult: AssessmentQuestionnaireSaveResult.Success("stamp-2"));
+        var controller = CreateController(accessService, questionnaireService);
+
+        var result = await controller.Questionnaire(invitationId, "opaque-token");
+
+        var view = Assert.IsType<ViewResult>(result);
+        Assert.Equal("Entry", view.ViewName);
+        var model = Assert.IsType<AssessmentQuestionnaireWelcomeViewModel>(view.Model);
+        Assert.False(model.IsInvitationAvailable);
+        AssertInvitationHeaders(controller);
+    }
+
+    [Fact]
+    public async Task Entry_And_Expiry_Authorization_Behavior_Remains_Unchanged_For_Denied_Access()
+    {
+        var accessService = new StubAssessmentInvitationAccessService(AssessmentInvitationAccessResult.Denied());
+        var questionnaireService = new StubAssessmentQuestionnaireService(
+            loadResult: AssessmentQuestionnaireLoadResult.AccessDenied(),
+            saveResult: AssessmentQuestionnaireSaveResult.Success("stamp-1"));
+        var controller = CreateController(accessService, questionnaireService);
+
+        var result = await controller.Questionnaire(Guid.NewGuid(), "opaque-token");
+
+        var view = Assert.IsType<ViewResult>(result);
+        Assert.Equal("Entry", view.ViewName);
+        var model = Assert.IsType<AssessmentQuestionnaireWelcomeViewModel>(view.Model);
+        Assert.False(model.IsInvitationAvailable);
+        Assert.Equal(0, questionnaireService.LoadCallCount);
+        AssertInvitationHeaders(controller);
+    }
+
     private static AssessmentQuestionnaireController CreateController(
         IAssessmentInvitationAccessService accessService,
         StubAssessmentQuestionnaireService questionnaireService)
@@ -284,11 +414,16 @@ public class AssessmentQuestionnaireControllerTests
     {
         private readonly AssessmentQuestionnaireLoadResult _loadResult;
         private readonly AssessmentQuestionnaireSaveResult _saveResult;
+        private readonly AssessmentQuestionnaireSubmitResult _submitResult;
 
-        public StubAssessmentQuestionnaireService(AssessmentQuestionnaireLoadResult loadResult, AssessmentQuestionnaireSaveResult saveResult)
+        public StubAssessmentQuestionnaireService(
+            AssessmentQuestionnaireLoadResult loadResult,
+            AssessmentQuestionnaireSaveResult saveResult,
+            AssessmentQuestionnaireSubmitResult? submitResult = null)
         {
             _loadResult = loadResult;
             _saveResult = saveResult;
+            _submitResult = submitResult ?? AssessmentQuestionnaireSubmitResult.AccessDenied();
         }
 
         public int LoadCallCount { get; private set; }
@@ -320,6 +455,6 @@ public class AssessmentQuestionnaireControllerTests
         }
 
         public Task<AssessmentQuestionnaireSubmitResult> SubmitAsync(Guid invitationId, string? invitationToken, string? questionnairePayload, string? concurrencyStamp, CancellationToken ct = default)
-            => Task.FromResult(AssessmentQuestionnaireSubmitResult.AccessDenied());
+            => Task.FromResult(_submitResult);
     }
 }

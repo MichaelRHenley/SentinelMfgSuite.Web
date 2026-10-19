@@ -7,6 +7,9 @@
 bin/
 obj/
 
+# Test results
+SentinelMfgSuite.Web.Tests/TestResults/
+
 # ASP.NET / logs
 logs/
 *.log

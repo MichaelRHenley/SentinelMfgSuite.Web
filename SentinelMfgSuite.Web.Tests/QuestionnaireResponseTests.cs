@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Xunit;
@@ -20,6 +21,206 @@ namespace SentinelMfgSuite.Web.Tests
 
             Assert.NotNull(outResp);
             Assert.Equal("1.0", outResp!.SchemaVersion);
+        }
+
+        [Fact]
+        public void V2_Response_RoundTrips_Schema_And_New_Answers()
+        {
+            var response = CreateV2Response();
+
+            var json = QuestionnaireResponseV1Serializer.Serialize(response);
+            var roundTrip = QuestionnaireResponseV1Serializer.Deserialize(json);
+
+            Assert.NotNull(roundTrip);
+            Assert.Equal("2.0", roundTrip!.SchemaVersion);
+            Assert.Equal("generally_accurate", roundTrip.Answers["q31"].Selected);
+            Assert.Equal("investigate_improve", roundTrip.Answers["q32"].Selected);
+            Assert.Equal("North Plant", roundTrip.Answers["q01"].Composite!["facility_name"].Text);
+            Assert.Equal("11-25", roundTrip.Answers["q04"].Selected);
+        }
+
+        [Fact]
+        public void V3_Response_RoundTrips_New_Question_Answer_Keys_And_Values()
+        {
+            var response = CreateV3Response();
+
+            var serialized = QuestionnaireResponseV1Serializer.Serialize(response);
+            var roundTrip = QuestionnaireResponseV1Serializer.Deserialize(serialized);
+
+            Assert.NotNull(roundTrip);
+            Assert.Equal("3.0", roundTrip!.SchemaVersion);
+            Assert.Equal("nearly_all", roundTrip.Answers["q33"].Selected);
+            Assert.Equal("usually_on_time", roundTrip.Answers["q34"].Selected);
+            Assert.Equal("routine_checks", roundTrip.Answers["q35"].Selected);
+            Assert.Equal("rarely_missing", roundTrip.Answers["q36"].Selected);
+            Assert.Contains("\"q33\"", serialized, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Q17\"", serialized, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void V3_Validation_Accepts_Required_Questions_With_Explicit_Unknown()
+        {
+            var response = CreateV3Response();
+            response.Answers["q33"].Selected = "unknown";
+            response.Answers["q34"].Selected = "unknown";
+            response.Answers["q35"].Selected = "unknown";
+            response.Answers["q36"].Selected = "unknown";
+
+            var result = QuestionnaireResponseV1Validator.Validate(response, QuestionnaireV3.Definition, QuestionnaireValidationMode.Submission);
+
+            Assert.True(result.IsValid);
+            Assert.Empty(result.Errors);
+        }
+
+        [Theory]
+        [InlineData("q33")]
+        [InlineData("q34")]
+        [InlineData("q35")]
+        [InlineData("q36")]
+        public void V3_Submission_Requires_Each_New_Question(string questionId)
+        {
+            var response = CreateV3Response();
+            response.Answers.Remove(questionId);
+
+            var result = QuestionnaireResponseV1Validator.Validate(response, QuestionnaireV3.Definition, QuestionnaireValidationMode.Submission);
+
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, error => error.QuestionId == questionId && error.Message == "Question is required for submission.");
+        }
+
+        [Theory]
+        [InlineData("1.0", "q01", "Q01")]
+        [InlineData("2.0", "q01", "Q01")]
+        [InlineData("3.0", "q33", "Q17")]
+        [InlineData("3.0", "q34", "Q18")]
+        [InlineData("3.0", "q35", "Q25")]
+        [InlineData("3.0", "q36", "Q26")]
+        public void Submission_Required_Question_Error_Preserves_Id_And_Resolves_Display_Number(
+            string schemaVersion,
+            string questionId,
+            string displayNumber)
+        {
+            var definition = QuestionnaireDefinitionResolver.Resolve(schemaVersion);
+            var response = new QuestionnaireResponseV1 { SchemaVersion = schemaVersion };
+
+            var result = QuestionnaireResponseV1Validator.Validate(response, definition, QuestionnaireValidationMode.Submission);
+            var error = Assert.Single(result.Errors.Where(error => error.QuestionId == questionId));
+            var question = Assert.Single(definition.Sections.SelectMany(section => section.Questions).Where(question => question.Id == error.QuestionId));
+
+            Assert.Equal("Question is required for submission.", error.Message);
+            Assert.Equal(questionId, error.QuestionId);
+            Assert.Equal(displayNumber, question.DisplayNumber);
+        }
+
+        [Theory]
+        [InlineData("q33", "not-a-coverage-value")]
+        [InlineData("q34", "not-a-reliability-value")]
+        [InlineData("q35", "not-a-validation-value")]
+        [InlineData("q36", "not-a-completeness-value")]
+        public void V3_Validation_Rejects_Unsupported_New_Question_Values(string questionId, string value)
+        {
+            var response = CreateV3Response();
+            response.Answers[questionId].Selected = value;
+
+            var result = QuestionnaireResponseV1Validator.Validate(response, QuestionnaireV3.Definition, QuestionnaireValidationMode.Draft);
+
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, error => error.QuestionId == questionId && error.Message.Contains("not a supported choice value", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void V2_Validation_Accepts_New_And_Inherited_Answers()
+        {
+            var result = QuestionnaireResponseV1Validator.Validate(
+                CreateV2Response(),
+                QuestionnaireV2.Definition,
+                QuestionnaireValidationMode.Draft);
+
+            Assert.True(result.IsValid);
+            Assert.Empty(result.Errors);
+        }
+
+        [Theory]
+        [InlineData("q31", "invalid_reliability")]
+        [InlineData("q32", "invalid_decision_use")]
+        public void V2_Validation_Rejects_Invalid_New_Question_Choices(string questionId, string choice)
+        {
+            var response = CreateV2Response();
+            response.Answers[questionId].Selected = choice;
+
+            var result = QuestionnaireResponseV1Validator.Validate(
+                response,
+                QuestionnaireV2.Definition,
+                QuestionnaireValidationMode.Draft);
+
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, error => error.QuestionId == questionId && error.Message.Contains("not a supported choice value", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void V2_Validation_Rejects_Unknown_Question_Id_Using_Existing_Rule()
+        {
+            var response = CreateV2Response();
+            response.Answers["q99"] = new QuestionAnswer { Text = "Unexpected" };
+
+            var result = QuestionnaireResponseV1Validator.Validate(
+                response,
+                QuestionnaireV2.Definition,
+                QuestionnaireValidationMode.Draft);
+
+            Assert.Contains(result.Errors, error => error.QuestionId == "q99" && error.Message == "Unknown question ID.");
+        }
+
+        [Fact]
+        public void V2_Response_Validated_Against_V1_Is_Rejected()
+        {
+            var result = QuestionnaireResponseV1Validator.Validate(
+                CreateV2Response(),
+                QuestionnaireV1.Definition,
+                QuestionnaireValidationMode.Draft);
+
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, error => error.Message.Contains("Schema version must be '1.0'", StringComparison.Ordinal));
+            Assert.Contains(result.Errors, error => error.QuestionId == "q31" && error.Message == "Unknown question ID.");
+            Assert.Contains(result.Errors, error => error.QuestionId == "q32" && error.Message == "Unknown question ID.");
+        }
+
+        [Fact]
+        public void V1_Response_Validated_Against_V2_Is_Rejected()
+        {
+            var response = new QuestionnaireResponseV1
+            {
+                SchemaVersion = "1.0",
+                Answers = new Dictionary<string, QuestionAnswer>
+                {
+                    ["q04"] = new QuestionAnswer { Selected = "11-25" }
+                }
+            };
+
+            var result = QuestionnaireResponseV1Validator.Validate(
+                response,
+                QuestionnaireV2.Definition,
+                QuestionnaireValidationMode.Draft);
+
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Errors, error => error.Message.Contains("Schema version must be '2.0'", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void Historical_V1_Response_RoundTrip_Remains_Unchanged()
+        {
+            const string historicalJson = "{\"schemaVersion\":\"1.0\",\"answers\":{\"q04\":{\"selected\":\"11-25\"}}}";
+
+            var response = QuestionnaireResponseV1Serializer.Deserialize(historicalJson);
+            var serialized = QuestionnaireResponseV1Serializer.Serialize(response!);
+            var roundTrip = QuestionnaireResponseV1Serializer.Deserialize(serialized);
+
+            Assert.NotNull(roundTrip);
+            Assert.Equal("1.0", roundTrip!.SchemaVersion);
+            Assert.Single(roundTrip.Answers);
+            Assert.Equal("11-25", roundTrip.Answers["q04"].Selected);
+            Assert.DoesNotContain("q31", serialized, StringComparison.Ordinal);
+            Assert.DoesNotContain("q32", serialized, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -475,6 +676,26 @@ namespace SentinelMfgSuite.Web.Tests
                 }
             };
             return resp;
+        }
+
+        private static QuestionnaireResponseV1 CreateV2Response()
+        {
+            var response = CreateValidSubmissionResponse();
+            response.SchemaVersion = "2.0";
+            response.Answers["q31"] = new QuestionAnswer { Selected = "generally_accurate" };
+            response.Answers["q32"] = new QuestionAnswer { Selected = "investigate_improve" };
+            return response;
+        }
+
+        private static QuestionnaireResponseV1 CreateV3Response()
+        {
+            var response = CreateV2Response();
+            response.SchemaVersion = "3.0";
+            response.Answers["q33"] = new QuestionAnswer { Selected = "nearly_all" };
+            response.Answers["q34"] = new QuestionAnswer { Selected = "usually_on_time" };
+            response.Answers["q35"] = new QuestionAnswer { Selected = "routine_checks" };
+            response.Answers["q36"] = new QuestionAnswer { Selected = "rarely_missing" };
+            return response;
         }
 
         private static Dictionary<string, FieldAnswer> CreateValidDataSourceRecord(string sourceName, string systemType)

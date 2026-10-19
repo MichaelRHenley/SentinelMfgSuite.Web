@@ -4,6 +4,8 @@ using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models;
 using SentinelMfgSuite.Web.Services;
 using SentinelMfgSuite.Web.Services.Assessments;
+using SentinelMfgSuite.Web.Services.Assessments.Scoring;
+using SentinelMfgSuite.Web.Services.Assessments.Reports;
 using SentinelMfgSuite.Web.Services.Provisioning;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
@@ -39,11 +41,27 @@ builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
 // 3) MVC
 builder.Services.AddControllersWithViews();
 
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("SentinelAssessmentAdmin", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireRole("AssessmentAdmin");
+    });
+});
+
 // 4) Email
 builder.Services.Configure<EmailSettings>(
     builder.Configuration.GetSection("Email"));
 
-builder.Services.AddScoped<IEmailSender, SesEmailSender>();
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddScoped<IEmailSender, DevelopmentSuppressingEmailSender>();
+}
+else
+{
+    builder.Services.AddScoped<IEmailSender, SesEmailSender>();
+}
 
 
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
@@ -52,6 +70,17 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, TenantProvider>();
 builder.Services.AddScoped<IAssessmentInvitationAccessService, AssessmentInvitationAccessService>();
 builder.Services.AddScoped<IAssessmentQuestionnaireService, AssessmentQuestionnaireService>();
+builder.Services.AddScoped<IAssessmentProvisioningService, AssessmentProvisioningService>();
+builder.Services.AddScoped<IAssessmentInvitationIssuanceService, AssessmentInvitationIssuanceService>();
+builder.Services.AddScoped<IAssessmentInvitationIssuanceTransactionParticipant, AssessmentInvitationIssuanceService>();
+builder.Services.AddScoped<IAssessmentInvitationReplacementEligibilityService, AssessmentInvitationReplacementEligibilityService>();
+builder.Services.AddScoped<IAssessmentInvitationDeliveryService, AssessmentInvitationDeliveryService>();
+builder.Services.AddScoped<IAssessmentInvitationSendService, AssessmentInvitationSendService>();
+builder.Services.AddScoped<IAssessmentInvitationReplacementSendService, AssessmentInvitationReplacementSendService>();
+builder.Services.AddScoped<IAssessmentReportService, AssessmentReportService>();
+builder.Services.AddScoped<IAssessmentReportRevisionContentService, AssessmentReportRevisionContentService>();
+builder.Services.AddSingleton<IAssessmentReportContentValidator, AssessmentReportContentValidator>();
+builder.Services.AddSingleton<IReadinessScoringService, ReadinessScoringService>();
 
 builder.Services.AddScoped<
     IUserClaimsPrincipalFactory<ApplicationUser>,

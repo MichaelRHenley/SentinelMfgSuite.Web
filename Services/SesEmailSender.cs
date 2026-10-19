@@ -18,7 +18,7 @@ namespace SentinelMfgSuite.Web.Services
                 RegionEndpoint.CACentral1);
         }
 
-        public async Task SendAsync(
+        public async Task<EmailSendResult> SendAsync(
             string toEmail,
             string subject,
             string htmlBody)
@@ -55,6 +55,8 @@ namespace SentinelMfgSuite.Web.Services
             };
 
             await _ses.SendEmailAsync(request);
+
+            return EmailSendResult.Accepted();
         }
     }
 }

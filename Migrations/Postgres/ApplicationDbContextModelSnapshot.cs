@@ -251,6 +251,13 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("QuestionnaireVersion")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("1.0");
+
                     b.Property<string>("SiteName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -288,6 +295,26 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DeliveryAcceptedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DeliveryAttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("DeliveryFailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("DeliveryLastAttemptUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<short>("DeliveryStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(320)
@@ -318,6 +345,171 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                         .IsUnique();
 
                     b.ToTable("AssessmentInvitation");
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssessmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("QuestionnaireVersion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("ResponseSubmittedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SubmittedResponseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentId");
+
+                    b.HasIndex("SubmittedResponseId")
+                        .IsUnique();
+
+                    b.ToTable("AssessmentReports");
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApprovedByUserId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ApprovedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AssessmentReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConsultantContentJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ConsultantContentSchemaVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("AssumptionsAndLimitations")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExecutiveSummary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("IssuedByUserId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("IssuedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NextSteps")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long?>("PdfLengthBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PdfSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PdfStorageKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ReportTemplateVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ScopeAndMethodology")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ScoringContractVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ScoringSnapshot")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("ScoringSnapshotSchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("Status")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("SubmittedForReviewByUserId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("SubmittedForReviewUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentReportId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("AssessmentReportRevisions", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssessmentReportRevision_RevisionNumber_Positive", "\"RevisionNumber\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentResponse", b =>
@@ -568,6 +760,36 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentReport", b =>
+                {
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.Assessment", "Assessment")
+                        .WithMany()
+                        .HasForeignKey("AssessmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.AssessmentResponse", "SubmittedResponse")
+                        .WithMany()
+                        .HasForeignKey("SubmittedResponseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Assessment");
+
+                    b.Navigation("SubmittedResponse");
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevision", b =>
+                {
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.AssessmentReport", "AssessmentReport")
+                        .WithMany("Revisions")
+                        .HasForeignKey("AssessmentReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AssessmentReport");
+                });
+
             modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentResponse", b =>
                 {
                     b.HasOne("SentinelMfgSuite.Web.Models.Assessments.Assessment", null)
@@ -592,6 +814,11 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                         .IsRequired();
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentReport", b =>
+                {
+                    b.Navigation("Revisions");
                 });
 #pragma warning restore 612, 618
         }

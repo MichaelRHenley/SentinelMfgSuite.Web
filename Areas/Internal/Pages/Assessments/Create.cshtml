@@ -1,0 +1,61 @@
+@page
+@model SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.CreateModel
+@{
+    ViewData["Title"] = "Create Assessment";
+    ViewData["Description"] = "Create a draft assessment for internal Sentinel administration.";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<main class="sentinel-main">
+    <section class="sentinel-hero py-4 py-lg-5">
+        <div class="container">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-8">
+                    <h1 class="h2 fw-semibold mb-2">Create Assessment</h1>
+                    <p class="text-secondary mb-0">Create a draft assessment record. Invitations and delivery are not triggered from this form.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="container pb-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card sentinel-card border-0 rounded-4">
+                    <div class="card-body p-4 p-md-5">
+                        <form method="post" novalidate>
+                            <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+                            <div class="mb-3">
+                                <label asp-for="Input.AssessmentTitle" class="form-label"></label>
+                                <input asp-for="Input.AssessmentTitle" class="form-control" autocomplete="off" />
+                                <span asp-validation-for="Input.AssessmentTitle" class="text-danger"></span>
+                            </div>
+
+                            <div class="mb-3">
+                                <label asp-for="Input.SiteName" class="form-label"></label>
+                                <input asp-for="Input.SiteName" class="form-control" autocomplete="off" />
+                                <span asp-validation-for="Input.SiteName" class="text-danger"></span>
+                            </div>
+
+                            <div class="mb-4">
+                                <label asp-for="Input.CustomerContactEmail" class="form-label"></label>
+                                <input asp-for="Input.CustomerContactEmail" class="form-control" autocomplete="email" />
+                                <span asp-validation-for="Input.CustomerContactEmail" class="text-danger"></span>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="submit" class="btn-sentinel-primary">Create Draft Assessment</button>
+                                <a href="/Internal/Assessments" class="btn btn-outline-light">Cancel</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

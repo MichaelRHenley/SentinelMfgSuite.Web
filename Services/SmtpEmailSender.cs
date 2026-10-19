@@ -14,7 +14,7 @@ namespace SentinelMfgSuite.Web.Services
             _settings = options.Value;
         }
 
-        public async Task SendAsync(string toEmail, string subject, string htmlBody)
+        public async Task<EmailSendResult> SendAsync(string toEmail, string subject, string htmlBody)
         {
             using var client = new SmtpClient(_settings.Host, _settings.Port)
             {
@@ -33,6 +33,8 @@ namespace SentinelMfgSuite.Web.Services
             message.To.Add(toEmail);
 
             await client.SendMailAsync(message);
+
+            return EmailSendResult.Accepted();
         }
     }
 }

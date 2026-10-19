@@ -21,11 +21,6 @@ public sealed class QuestionnaireValidationResult
 
 public static class QuestionnaireResponseV1Validator
 {
-    private static readonly QuestionnaireDefinition Definition = QuestionnaireV1.Definition;
-    private static readonly Dictionary<string, QuestionDefinition> QuestionsById = Definition.Sections
-        .SelectMany(section => section.Questions)
-        .ToDictionary(question => question.Id, StringComparer.Ordinal);
-
     private static readonly HashSet<string> ExclusiveChoiceValues = new(StringComparer.Ordinal)
     {
         "unknown",
@@ -35,7 +30,14 @@ public static class QuestionnaireResponseV1Validator
     };
 
     public static QuestionnaireValidationResult Validate(QuestionnaireResponseV1? response, QuestionnaireValidationMode mode)
+        => Validate(response, QuestionnaireV1.Definition, mode);
+
+    public static QuestionnaireValidationResult Validate(
+        QuestionnaireResponseV1? response,
+        QuestionnaireDefinition definition,
+        QuestionnaireValidationMode mode)
     {
+        ArgumentNullException.ThrowIfNull(definition);
         var result = new QuestionnaireValidationResult();
 
         if (response is null)
@@ -44,14 +46,18 @@ public static class QuestionnaireResponseV1Validator
             return result;
         }
 
-        if (!string.Equals(response.SchemaVersion, Definition.SchemaVersion, StringComparison.Ordinal))
+        if (!string.Equals(response.SchemaVersion, definition.SchemaVersion, StringComparison.Ordinal))
         {
-            result.Errors.Add(new QuestionnaireValidationError(string.Empty, null, $"Schema version must be '{Definition.SchemaVersion}'."));
+            result.Errors.Add(new QuestionnaireValidationError(string.Empty, null, $"Schema version must be '{definition.SchemaVersion}'."));
         }
+
+        var questionsById = definition.Sections
+            .SelectMany(section => section.Questions)
+            .ToDictionary(question => question.Id, StringComparer.Ordinal);
 
         foreach (var answerEntry in response.Answers)
         {
-            if (!QuestionsById.TryGetValue(answerEntry.Key, out var question))
+            if (!questionsById.TryGetValue(answerEntry.Key, out var question))
             {
                 result.Errors.Add(new QuestionnaireValidationError(answerEntry.Key, null, "Unknown question ID."));
                 continue;
@@ -64,7 +70,7 @@ public static class QuestionnaireResponseV1Validator
 
         if (mode == QuestionnaireValidationMode.Submission)
         {
-            ValidateRequiredQuestions(result, response);
+            ValidateRequiredQuestions(result, response, questionsById);
         }
 
         return result;
@@ -499,9 +505,12 @@ public static class QuestionnaireResponseV1Validator
         }
     }
 
-    private static void ValidateRequiredQuestions(QuestionnaireValidationResult result, QuestionnaireResponseV1 response)
+    private static void ValidateRequiredQuestions(
+        QuestionnaireValidationResult result,
+        QuestionnaireResponseV1 response,
+        IReadOnlyDictionary<string, QuestionDefinition> questionsById)
     {
-        foreach (var question in QuestionsById.Values.Where(question => !question.IsOptional))
+        foreach (var question in questionsById.Values.Where(question => !question.IsOptional))
         {
             if (!response.Answers.TryGetValue(question.Id, out var answer))
             {

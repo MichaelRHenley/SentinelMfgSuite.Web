@@ -9,6 +9,7 @@ public enum AssessmentQuestionnaireLoadState
     Success = 0,
     AccessDenied = 1,
     ValidationFailure = 2,
+    UnsupportedQuestionnaireVersion = 3,
 }
 
 public enum AssessmentQuestionnaireSaveState
@@ -18,6 +19,7 @@ public enum AssessmentQuestionnaireSaveState
     ValidationFailure = 2,
     ConcurrencyConflict = 3,
     AlreadySubmitted = 4,
+    UnsupportedQuestionnaireVersion = 5,
 }
 
 public sealed record AssessmentQuestionnaireLoadResult(
@@ -25,18 +27,22 @@ public sealed record AssessmentQuestionnaireLoadResult(
     QuestionnaireResponseV1? Response,
     string? ConcurrencyStamp,
     bool IsReadOnly,
-    IReadOnlyList<QuestionnaireValidationError> ValidationErrors)
+    IReadOnlyList<QuestionnaireValidationError> ValidationErrors,
+    QuestionnaireDefinition? Definition = null)
 {
     public bool IsSuccess => State == AssessmentQuestionnaireLoadState.Success;
 
-    public static AssessmentQuestionnaireLoadResult Success(QuestionnaireResponseV1 response, string? concurrencyStamp, bool isReadOnly)
-        => new(AssessmentQuestionnaireLoadState.Success, response, concurrencyStamp, isReadOnly, Array.Empty<QuestionnaireValidationError>());
+    public static AssessmentQuestionnaireLoadResult Success(QuestionnaireResponseV1 response, string? concurrencyStamp, bool isReadOnly, QuestionnaireDefinition definition)
+        => new(AssessmentQuestionnaireLoadState.Success, response, concurrencyStamp, isReadOnly, Array.Empty<QuestionnaireValidationError>(), definition);
 
     public static AssessmentQuestionnaireLoadResult AccessDenied()
         => new(AssessmentQuestionnaireLoadState.AccessDenied, null, null, false, Array.Empty<QuestionnaireValidationError>());
 
     public static AssessmentQuestionnaireLoadResult ValidationFailure(IReadOnlyList<QuestionnaireValidationError> errors, bool isReadOnly = false)
         => new(AssessmentQuestionnaireLoadState.ValidationFailure, null, null, isReadOnly, errors);
+
+    public static AssessmentQuestionnaireLoadResult UnsupportedQuestionnaireVersion()
+        => new(AssessmentQuestionnaireLoadState.UnsupportedQuestionnaireVersion, null, null, false, Array.Empty<QuestionnaireValidationError>());
 }
 
 public sealed record AssessmentQuestionnaireSaveResult(
@@ -60,6 +66,9 @@ public sealed record AssessmentQuestionnaireSaveResult(
 
     public static AssessmentQuestionnaireSaveResult AlreadySubmitted()
         => new(AssessmentQuestionnaireSaveState.AlreadySubmitted, null, Array.Empty<QuestionnaireValidationError>());
+
+    public static AssessmentQuestionnaireSaveResult UnsupportedQuestionnaireVersion()
+        => new(AssessmentQuestionnaireSaveState.UnsupportedQuestionnaireVersion, null, Array.Empty<QuestionnaireValidationError>());
 }
 
 public enum AssessmentQuestionnaireSubmitState
@@ -69,6 +78,7 @@ public enum AssessmentQuestionnaireSubmitState
     ValidationFailure = 2,
     ConcurrencyConflict = 3,
     AlreadySubmitted = 4,
+    UnsupportedQuestionnaireVersion = 5,
 }
 
 public sealed record AssessmentQuestionnaireSubmitResult(
@@ -92,4 +102,7 @@ public sealed record AssessmentQuestionnaireSubmitResult(
 
     public static AssessmentQuestionnaireSubmitResult AlreadySubmitted()
         => new(AssessmentQuestionnaireSubmitState.AlreadySubmitted, null, Array.Empty<QuestionnaireValidationError>());
+
+    public static AssessmentQuestionnaireSubmitResult UnsupportedQuestionnaireVersion()
+        => new(AssessmentQuestionnaireSubmitState.UnsupportedQuestionnaireVersion, null, Array.Empty<QuestionnaireValidationError>());
 }

@@ -267,6 +267,7 @@ public record ConditionDefinition(string QuestionId, string Operator, string Exp
 public class QuestionDefinition
 {
     public string Id { get; }
+    public string DisplayNumber { get; }
     public string Text { get; }
     public QuestionType Type { get; }
     public List<Choice>? Choices { get; }
@@ -288,9 +289,10 @@ public class QuestionDefinition
     public QuestionDefinition(string id, string text, QuestionType type, Choice[]? choices = null,
         bool isOptional = true, ConditionDefinition? visibilityCondition = null, int? minSelections = null, int? maxSelections = null,
         bool requiresDiscovery = false, FieldDefinition[]? repeatableFields = null, int? maxOccurrences = null,
-        SupplementalFieldDefinition[]? supplementalFields = null)
+        SupplementalFieldDefinition[]? supplementalFields = null, string? displayNumber = null)
     {
         Id = id;
+        DisplayNumber = displayNumber ?? id.ToUpperInvariant();
         Text = text;
         Type = type;
         Choices = choices is null ? null : new List<Choice>(choices);

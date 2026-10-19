@@ -93,4 +93,48 @@ public class QuestionnaireResponseV1SanitizerTests
         Assert.True(sanitized.Answers.ContainsKey("q07"));
         Assert.Equal("quality", sanitized.Answers["q07"].Selected);
     }
+
+    [Fact]
+    public void SanitizeForClient_V2_Preserves_Valid_Q31_And_Q32_Answers()
+    {
+        var source = new QuestionnaireResponseV1
+        {
+            SchemaVersion = "2.0",
+            Answers = new Dictionary<string, QuestionAnswer>
+            {
+                ["q04"] = new QuestionAnswer { Selected = "11-25" },
+                ["q31"] = new QuestionAnswer { Selected = "generally_accurate" },
+                ["q32"] = new QuestionAnswer { Selected = "investigate_improve" },
+                ["q99"] = new QuestionAnswer { Text = "remove" }
+            }
+        };
+
+        var sanitized = QuestionnaireResponseV1Sanitizer.SanitizeForClient(QuestionnaireV2.Definition, source);
+
+        Assert.Equal("2.0", sanitized.SchemaVersion);
+        Assert.Equal("11-25", sanitized.Answers["q04"].Selected);
+        Assert.Equal("generally_accurate", sanitized.Answers["q31"].Selected);
+        Assert.Equal("investigate_improve", sanitized.Answers["q32"].Selected);
+        Assert.DoesNotContain("q99", sanitized.Answers.Keys);
+    }
+
+    [Fact]
+    public void SanitizeForClient_V2_Drops_Invalid_Q31_And_Q32_Choices_Without_Rewriting_Source()
+    {
+        var source = new QuestionnaireResponseV1
+        {
+            SchemaVersion = "2.0",
+            Answers = new Dictionary<string, QuestionAnswer>
+            {
+                ["q31"] = new QuestionAnswer { Selected = "invalid_reliability" },
+                ["q32"] = new QuestionAnswer { Selected = "invalid_decision_use" }
+            }
+        };
+
+        var sanitized = QuestionnaireResponseV1Sanitizer.SanitizeForClient(QuestionnaireV2.Definition, source);
+
+        Assert.Empty(sanitized.Answers);
+        Assert.Equal("invalid_reliability", source.Answers["q31"].Selected);
+        Assert.Equal("invalid_decision_use", source.Answers["q32"].Selected);
+    }
 }

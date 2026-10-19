@@ -28,13 +28,32 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
             return AssessmentQuestionnaireLoadResult.AccessDenied();
         }
 
+        var assessment = await _db.Set<Assessment>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == access.AssessmentId.Value, ct);
+
+        if (assessment is null)
+        {
+            return AssessmentQuestionnaireLoadResult.AccessDenied();
+        }
+
+        QuestionnaireDefinition definition;
+        try
+        {
+            definition = QuestionnaireDefinitionResolver.Resolve(assessment.QuestionnaireVersion);
+        }
+        catch (ArgumentException)
+        {
+            return AssessmentQuestionnaireLoadResult.UnsupportedQuestionnaireVersion();
+        }
+
         var response = await _db.Set<AssessmentResponse>()
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.InvitationId == access.InvitationId.Value, ct);
 
         if (response is null)
         {
-            return AssessmentQuestionnaireLoadResult.Success(CreateEmptyResponse(), null, access.IsReadOnly);
+            return AssessmentQuestionnaireLoadResult.Success(CreateEmptyResponse(definition), null, access.IsReadOnly, definition);
         }
 
         if (response.AssessmentId != access.AssessmentId.Value)
@@ -48,7 +67,17 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
             return AssessmentQuestionnaireLoadResult.ValidationFailure(errors, access.IsReadOnly);
         }
 
-        return AssessmentQuestionnaireLoadResult.Success(deserialized!, response.ConcurrencyStamp, access.IsReadOnly);
+        if (!string.Equals(deserialized!.SchemaVersion, definition.SchemaVersion, StringComparison.Ordinal))
+        {
+            return AssessmentQuestionnaireLoadResult.ValidationFailure(
+                new[]
+                {
+                    new QuestionnaireValidationError(string.Empty, null, $"Schema version must be '{definition.SchemaVersion}'.")
+                },
+                access.IsReadOnly);
+        }
+
+        return AssessmentQuestionnaireLoadResult.Success(deserialized, response.ConcurrencyStamp, access.IsReadOnly, definition);
     }
 
     public async Task<AssessmentQuestionnaireSaveResult> SaveDraftAsync(Guid invitationId, string? invitationToken, string? questionnairePayload, string? concurrencyStamp, CancellationToken ct = default)
@@ -62,6 +91,17 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
         if (access.IsReadOnly || access.ResponseState == AssessmentInvitationResponseState.Submitted)
         {
             return AssessmentQuestionnaireSaveResult.AlreadySubmitted();
+        }
+
+        var (assessmentExists, definition) = await ResolveAssessmentDefinitionAsync(access.AssessmentId.Value, ct);
+        if (!assessmentExists)
+        {
+            return AssessmentQuestionnaireSaveResult.AccessDenied();
+        }
+
+        if (definition is null)
+        {
+            return AssessmentQuestionnaireSaveResult.UnsupportedQuestionnaireVersion();
         }
 
         if (string.IsNullOrWhiteSpace(questionnairePayload))
@@ -86,7 +126,7 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
             });
         }
 
-        var validation = QuestionnaireResponseV1Validator.Validate(deserialized, QuestionnaireValidationMode.Draft);
+        var validation = QuestionnaireResponseV1Validator.Validate(deserialized, definition, QuestionnaireValidationMode.Draft);
         if (!validation.IsValid)
         {
             return AssessmentQuestionnaireSaveResult.ValidationFailure(validation.Errors);
@@ -164,6 +204,17 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
             return AssessmentQuestionnaireSubmitResult.AlreadySubmitted();
         }
 
+        var (assessmentExists, definition) = await ResolveAssessmentDefinitionAsync(access.AssessmentId.Value, ct);
+        if (!assessmentExists)
+        {
+            return AssessmentQuestionnaireSubmitResult.AccessDenied();
+        }
+
+        if (definition is null)
+        {
+            return AssessmentQuestionnaireSubmitResult.UnsupportedQuestionnaireVersion();
+        }
+
         if (string.IsNullOrWhiteSpace(questionnairePayload))
         {
             return AssessmentQuestionnaireSubmitResult.ValidationFailure(new[]
@@ -186,7 +237,7 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
             });
         }
 
-        var validation = QuestionnaireResponseV1Validator.Validate(deserialized, QuestionnaireValidationMode.Submission);
+        var validation = QuestionnaireResponseV1Validator.Validate(deserialized, definition, QuestionnaireValidationMode.Submission);
         if (!validation.IsValid)
         {
             return AssessmentQuestionnaireSubmitResult.ValidationFailure(validation.Errors);
@@ -279,10 +330,31 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
         }
     }
 
-    private static QuestionnaireResponseV1 CreateEmptyResponse()
+    private async Task<(bool AssessmentExists, QuestionnaireDefinition? Definition)> ResolveAssessmentDefinitionAsync(Guid assessmentId, CancellationToken ct)
+    {
+        var assessment = await _db.Set<Assessment>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == assessmentId, ct);
+
+        if (assessment is null)
+        {
+            return (false, null);
+        }
+
+        try
+        {
+            return (true, QuestionnaireDefinitionResolver.Resolve(assessment.QuestionnaireVersion));
+        }
+        catch (ArgumentException)
+        {
+            return (true, null);
+        }
+    }
+
+    private static QuestionnaireResponseV1 CreateEmptyResponse(QuestionnaireDefinition definition)
         => new()
         {
-            SchemaVersion = "1.0",
+            SchemaVersion = definition.SchemaVersion,
             Answers = new Dictionary<string, QuestionAnswer>()
         };
 

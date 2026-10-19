@@ -1,0 +1,108 @@
+@page
+@model SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.IndexModel
+@{
+    ViewData["Title"] = "Assessment Administration";
+    ViewData["Description"] = "Internal Sentinel assessment administration dashboard.";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<main class="sentinel-main">
+    <section class="sentinel-hero py-4 py-lg-5">
+        <div class="container">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-8">
+                    <h1 class="h2 fw-semibold mb-2">Assessment Administration</h1>
+                    <p class="text-secondary mb-0">Read-only internal dashboard for assessment lifecycle, invitation delivery and questionnaire completion tracking.</p>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card sentinel-card border-0 rounded-4 h-100">
+                        <div class="card-body p-3 p-md-4">
+                            <div class="small text-uppercase text-secondary mb-1">Assessments</div>
+                            <div class="h5 fw-semibold mb-1">@Model.Assessments.Count</div>
+                            <div class="text-secondary small mb-3">Sorted newest first</div>
+                            <a href="/Internal/Assessments/Create" class="btn-sentinel-primary">Create Assessment</a>
+                            <a href="/Internal/AssessmentReport/Sample" class="btn btn-outline-info mt-2">Sample Report Preview</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="container pb-5">
+        <div class="card sentinel-card border-0 rounded-4">
+            <div class="card-body p-3 p-md-4 p-lg-5">
+                @if (TempData["AssessmentCreateStatus"] is string createStatus && !string.IsNullOrWhiteSpace(createStatus))
+                {
+                    <div class="alert alert-success" role="status">@createStatus</div>
+                }
+
+                @if (!Model.HasAssessments)
+                {
+                    <div class="alert alert-info mb-0" role="status">
+                        No assessments have been created yet.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Assessment title</th>
+                                    <th>Site name</th>
+                                    <th>Contact email</th>
+                                    <th>Assessment status</th>
+                                    <th>Invitation delivery status</th>
+                                    <th>Invitation expiration</th>
+                                    <th>Questionnaire submission status</th>
+                                    <th>Created date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var assessment in Model.Assessments)
+                                {
+                                    <tr>
+                                        <td>@assessment.Title</td>
+                                        <td>@assessment.SiteName</td>
+                                        <td>@assessment.ContactEmail</td>
+                                        <td>
+                                            <span class="badge rounded-pill @assessment.AssessmentStatusClass">@assessment.AssessmentStatus</span>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                <span class="badge rounded-pill @assessment.InvitationStateClass">@assessment.InvitationState</span>
+                                                <span class="badge rounded-pill @assessment.InvitationDeliveryStatusClass">@assessment.InvitationDeliveryStatus</span>
+                                            </div>
+                                        </td>
+                                        <td>@(assessment.InvitationExpiresUtc.HasValue ? assessment.InvitationExpiresUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "—")</td>
+                                        <td>
+                                            <span class="badge rounded-pill @assessment.QuestionnaireStatusClass">@assessment.QuestionnaireSubmissionStatus</span>
+                                        </td>
+                                        <td>@assessment.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>
+                                            @if (assessment.IsDraftAssessment)
+                                            {
+                                                <a href="/Internal/Assessments/@assessment.AssessmentId/SendInvitation" class="btn-sentinel-primary btn-sm">Send Invitation</a>
+                                            }
+                                            @if (assessment.IsInvitationReplaceEligible && assessment.LatestInvitationId.HasValue)
+                                            {
+                                                <a href="/Internal/Assessments/@assessment.AssessmentId/ReplaceInvitation/@assessment.LatestInvitationId" class="btn-sentinel-primary btn-sm">Replace Invitation</a>
+                                            }
+                                            @if (assessment.IsResponseSubmitted)
+                                            {
+                                                <a href="/Internal/Assessments/@assessment.AssessmentId/ReviewResponses" class="btn btn-outline-info btn-sm">Review Responses</a>
+                                                <a asp-page="/Assessments/Report" asp-area="Internal" asp-route-assessmentId="@assessment.AssessmentId" asp-route-submittedResponseId="@assessment.SubmittedResponseId" class="btn btn-outline-light btn-sm">Edit Draft Report</a>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+</main>

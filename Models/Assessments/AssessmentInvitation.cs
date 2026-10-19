@@ -2,6 +2,15 @@ using System;
 
 namespace SentinelMfgSuite.Web.Models.Assessments;
 
+public enum AssessmentInvitationDeliveryStatus : short
+{
+    Pending = 0,
+    Sending = 1,
+    Accepted = 2,
+    Failed = 3,
+    OutcomeUnknown = 4
+}
+
 public class AssessmentInvitation
 {
     public Guid Id { get; set; }
@@ -21,6 +30,12 @@ public class AssessmentInvitation
 
     public DateTime? LastAccessUtc { get; set; }
     public int AccessCount { get; set; }
+
+    public AssessmentInvitationDeliveryStatus DeliveryStatus { get; set; } = AssessmentInvitationDeliveryStatus.Pending;
+    public int DeliveryAttemptCount { get; set; }
+    public DateTime? DeliveryLastAttemptUtc { get; set; }
+    public DateTime? DeliveryAcceptedUtc { get; set; }
+    public string? DeliveryFailureCode { get; set; }
 
     public string? CreatedByUserId { get; set; }
 }

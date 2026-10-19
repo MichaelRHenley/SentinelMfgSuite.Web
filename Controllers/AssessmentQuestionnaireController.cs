@@ -56,16 +56,16 @@ public class AssessmentQuestionnaireController : Controller
         }
 
         var load = await _questionnaireService.LoadDraftAsync(invitationId, invitationToken, ct);
-        if (load.State != AssessmentQuestionnaireLoadState.Success)
+        if (load.State != AssessmentQuestionnaireLoadState.Success || load.Definition is null)
         {
             return View("Entry", CreateUnavailableModel());
         }
 
         var initialResponse = QuestionnaireResponseV1Sanitizer.SanitizeForClient(
-            QuestionnaireV1.Definition,
+            load.Definition,
             load.Response ?? new QuestionnaireResponseV1());
 
-        return View(CreateQuestionnaireModel(access, invitationId, invitationToken, load.ConcurrencyStamp, initialResponse));
+        return View(CreateQuestionnaireModel(access, invitationId, invitationToken, load.ConcurrencyStamp, load.Definition, initialResponse));
     }
 
     [HttpPost("/assessment/questionnaire/{invitationId:guid}/draft")]
@@ -122,6 +122,13 @@ public class AssessmentQuestionnaireController : Controller
                 ConcurrencyStamp: null,
                 Errors: Array.Empty<SaveDraftValidationError>(),
                 CanReload: true)),
+
+            AssessmentQuestionnaireSaveState.UnsupportedQuestionnaireVersion => Json(new SaveDraftResponse(
+                State: "unavailable",
+                Message: "This questionnaire is not available. Please contact your Sentinel coordinator.",
+                ConcurrencyStamp: null,
+                Errors: Array.Empty<SaveDraftValidationError>(),
+                CanReload: false)),
 
             _ => Json(new SaveDraftResponse(
                 State: "access-denied",
@@ -186,6 +193,13 @@ public class AssessmentQuestionnaireController : Controller
                 ConcurrencyStamp: null,
                 Errors: Array.Empty<SaveDraftValidationError>(),
                 CanReload: true)),
+
+            AssessmentQuestionnaireSubmitState.UnsupportedQuestionnaireVersion => Json(new SubmitResponse(
+                State: "unavailable",
+                Message: "This questionnaire is not available. Please contact your Sentinel coordinator.",
+                ConcurrencyStamp: null,
+                Errors: Array.Empty<SaveDraftValidationError>(),
+                CanReload: false)),
 
             _ => Json(new SubmitResponse(
                 State: "access-denied",
@@ -272,6 +286,7 @@ public class AssessmentQuestionnaireController : Controller
         Guid invitationId,
         string? invitationToken,
         string? concurrencyStamp,
+        QuestionnaireDefinition definition,
         QuestionnaireResponseV1 initialResponse)
     {
         var statusLabel = access.ResponseState switch
@@ -282,7 +297,7 @@ public class AssessmentQuestionnaireController : Controller
             _ => "Not Started"
         };
 
-        var q06Choices = QuestionnaireV1.Definition.Sections
+        var q06Choices = definition.Sections
             .SelectMany(section => section.Questions)
             .Single(question => string.Equals(question.Id, "q06", StringComparison.Ordinal))
             .Choices ?? new List<Choice>();
@@ -301,9 +316,9 @@ public class AssessmentQuestionnaireController : Controller
             CanSaveDraft = !isReadOnly,
             SaveDraftUrl = $"/assessment/questionnaire/{invitationId:D}/draft",
             InitialConcurrencyStamp = concurrencyStamp,
-            TotalSections = QuestionnaireV1.Definition.Sections.Count,
-            TotalQuestions = QuestionnaireV1.Definition.Sections.Sum(section => section.Questions.Count),
-            Definition = QuestionnaireV1.Definition,
+            TotalSections = definition.Sections.Count,
+            TotalQuestions = definition.Sections.Sum(section => section.Questions.Count),
+            Definition = definition,
             InitialResponse = initialResponse,
             PriorityChoicesByValue = priorityChoices
         };

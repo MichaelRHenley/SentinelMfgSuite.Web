@@ -29,4 +29,7 @@ public class Assessment
 
     // Optional owner (admin) who created the assessment
     public string? OwnerUserId { get; set; }
+
+    // Questionnaire schema version bound to this assessment (e.g. "1.0")
+    public string QuestionnaireVersion { get; set; } = "1.0";
 }

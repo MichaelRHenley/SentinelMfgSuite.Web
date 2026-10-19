@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models;
 
@@ -30,87 +31,40 @@ namespace SentinelMfgSuite.ProvisionAdmin
                 return 2;
             }
 
-            // Attempt to read connection string from /etc/sentinel/sentinel-web.env
-            string? connStr = null;
             const string envPath = "/etc/sentinel/sentinel-web.env";
+            string? connStr;
+            string connectionSource;
             try
             {
-                if (System.IO.File.Exists(envPath))
+                var resolved = await ResolveConnectionStringAsync(envPath);
+                if (!resolved.Success || string.IsNullOrWhiteSpace(resolved.ConnectionString))
                 {
-                    var lines = await System.IO.File.ReadAllLinesAsync(envPath);
-                    var dict = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var line in lines)
-                    {
-                        var trimmed = line.Trim();
-                        if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#")) continue;
-                        // support optional 'export KEY=VALUE' style
-                        if (trimmed.StartsWith("export ", StringComparison.OrdinalIgnoreCase))
-                        {
-                            trimmed = trimmed.Substring(7).Trim();
-                        }
-                        var idx = trimmed.IndexOf('=');
-                        if (idx <= 0) continue;
-                        var key = trimmed.Substring(0, idx).Trim();
-                        var val = trimmed.Substring(idx + 1).Trim().Trim('"').Trim('\'');
-                        dict[key] = val;
-                    }
-
-                    // Common key candidates (first match wins)
-                    var candidates = new[] {
-                        "CONNECTION_STRING",
-                        "ConnectionStrings__DefaultConnection",
-                        "ConnectionStrings:DefaultConnection",
-                        "DefaultConnection",
-                        "ASPNETCORE_ConnectionStrings__DefaultConnection",
-                        "ASPNETCORE_DefaultConnection",
-                        "DATABASE_URL"
-                    };
-
-                    foreach (var c in candidates)
-                    {
-                        // dictionary is case-insensitive; try both literal and normalized forms
-                        if (dict.TryGetValue(c, out var v) && !string.IsNullOrWhiteSpace(v))
-                        {
-                            connStr = v;
-                            break;
-                        }
-
-                        // also try lower/upper variants for dotnet style env names using __
-                        var alt = c.Replace(':', '_');
-                        if (dict.TryGetValue(alt, out v) && !string.IsNullOrWhiteSpace(v))
-                        {
-                            connStr = v;
-                            break;
-                        }
-                    }
+                    Console.Error.WriteLine($"ERROR: {resolved.ErrorMessage}");
+                    return 4;
                 }
-                else
-                {
-                    // /etc/sentinel/sentinel-web.env not present; fall through to environment
-                }
+
+                connStr = resolved.ConnectionString;
+                connectionSource = resolved.Source;
             }
             catch (UnauthorizedAccessException)
             {
                 Console.Error.WriteLine($"ERROR: Cannot read {envPath} due to permissions. Run this tool as a user that can read the file or provide the connection string via environment variable.");
                 return 3;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.Error.WriteLine($"ERROR: Failed reading {envPath}: {ex.Message}");
+                Console.Error.WriteLine("ERROR: Failed to resolve connection configuration securely.");
                 return 3;
             }
 
-            // Fallback to existing environment variables if not found in file
-            if (string.IsNullOrWhiteSpace(connStr))
+            var validation = ValidateDevelopmentConnectionTarget(connStr);
+            if (!validation.Success)
             {
-                connStr = Environment.GetEnvironmentVariable("CONNECTION_STRING") ?? Environment.GetEnvironmentVariable("DefaultConnection");
-            }
-
-            if (string.IsNullOrWhiteSpace(connStr))
-            {
-                Console.Error.WriteLine("ERROR: Connection string not found in /etc/sentinel/sentinel-web.env or environment variables. Provide the connection string securely.");
+                Console.Error.WriteLine($"ERROR: {validation.ErrorMessage}");
                 return 4;
             }
+
+            Console.WriteLine($"Using connection configuration from {connectionSource}. Target accepted for local development provisioning.");
 
             var services = new ServiceCollection();
             services.AddLogging(builder => builder.AddSimpleConsole(options => { options.SingleLine = true; }));
@@ -214,6 +168,138 @@ namespace SentinelMfgSuite.ProvisionAdmin
             if (errors == null) return string.Empty;
             return string.Join("; ", errors.Select(e => $"{e.Code}: {e.Description}"));
         }
+
+        private static async Task<(bool Success, string? ConnectionString, string Source, string ErrorMessage)> ResolveConnectionStringAsync(string envPath)
+        {
+            var values = new HashSet<string>(StringComparer.Ordinal);
+
+            if (System.IO.File.Exists(envPath))
+            {
+                var lines = await System.IO.File.ReadAllLinesAsync(envPath);
+                var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var line in lines)
+                {
+                    var trimmed = line.Trim();
+                    if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#")) continue;
+                    if (trimmed.StartsWith("export ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        trimmed = trimmed.Substring(7).Trim();
+                    }
+
+                    var idx = trimmed.IndexOf('=');
+                    if (idx <= 0) continue;
+                    var key = trimmed.Substring(0, idx).Trim();
+                    var val = trimmed.Substring(idx + 1).Trim().Trim('"').Trim('\'');
+                    if (!string.IsNullOrWhiteSpace(val))
+                    {
+                        dict[key] = val;
+                    }
+                }
+
+                foreach (var key in ConnectionStringCandidates)
+                {
+                    if (dict.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
+                    {
+                        values.Add(value.Trim());
+                    }
+
+                    var altKey = key.Replace(':', '_');
+                    if (dict.TryGetValue(altKey, out var altValue) && !string.IsNullOrWhiteSpace(altValue))
+                    {
+                        values.Add(altValue.Trim());
+                    }
+                }
+
+                if (values.Count > 1)
+                {
+                    return (false, null, "configuration file", "Ambiguous connection configuration detected in /etc/sentinel/sentinel-web.env. Ensure exactly one PostgreSQL connection string is configured.");
+                }
+
+                if (values.Count == 1)
+                {
+                    return (true, values.Single(), "configuration file", string.Empty);
+                }
+            }
+
+            var envConnectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+            var envDefaultConnection = Environment.GetEnvironmentVariable("DefaultConnection");
+
+            var envValues = new HashSet<string>(StringComparer.Ordinal);
+            if (!string.IsNullOrWhiteSpace(envConnectionString))
+            {
+                envValues.Add(envConnectionString.Trim());
+            }
+
+            if (!string.IsNullOrWhiteSpace(envDefaultConnection))
+            {
+                envValues.Add(envDefaultConnection.Trim());
+            }
+
+            if (envValues.Count > 1)
+            {
+                return (false, null, "environment variables", "Ambiguous connection configuration detected in environment variables. Ensure exactly one PostgreSQL connection string is configured.");
+            }
+
+            if (envValues.Count == 1)
+            {
+                return (true, envValues.Single(), "environment variables", string.Empty);
+            }
+
+            return (false, null, "none", "Connection string not found in /etc/sentinel/sentinel-web.env or environment variables. Provide exactly one secure local development connection string.");
+        }
+
+        private static (bool Success, string ErrorMessage) ValidateDevelopmentConnectionTarget(string connectionString)
+        {
+            NpgsqlConnectionStringBuilder builder;
+            try
+            {
+                builder = new NpgsqlConnectionStringBuilder(connectionString);
+            }
+            catch
+            {
+                return (false, "Connection configuration is invalid and could not be parsed as a PostgreSQL connection string.");
+            }
+
+            if (string.IsNullOrWhiteSpace(builder.Host))
+            {
+                return (false, "Connection configuration is missing a PostgreSQL host.");
+            }
+
+            if (builder.Host.Contains(','))
+            {
+                return (false, "Connection configuration is ambiguous. Multiple PostgreSQL hosts are not allowed for this development-only utility.");
+            }
+
+            var host = builder.Host.Trim();
+            if (!string.Equals(host, "localhost", StringComparison.Ordinal)
+                && !string.Equals(host, "127.0.0.1", StringComparison.Ordinal))
+            {
+                return (false, "Provisioning is restricted to local PostgreSQL hosts (localhost or 127.0.0.1) for development safety.");
+            }
+
+            if (string.IsNullOrWhiteSpace(builder.Database))
+            {
+                return (false, "Connection configuration is missing a PostgreSQL database name.");
+            }
+
+            if (!string.Equals(builder.Database.Trim(), "sentinel_dev", StringComparison.Ordinal))
+            {
+                return (false, "Provisioning is restricted to database 'sentinel_dev' for development safety.");
+            }
+
+            return (true, string.Empty);
+        }
+
+        private static readonly string[] ConnectionStringCandidates =
+        {
+            "CONNECTION_STRING",
+            "ConnectionStrings__DefaultConnection",
+            "ConnectionStrings:DefaultConnection",
+            "DefaultConnection",
+            "ASPNETCORE_ConnectionStrings__DefaultConnection",
+            "ASPNETCORE_DefaultConnection",
+            "DATABASE_URL"
+        };
 
         private static string ReadPassword(string prompt)
         {

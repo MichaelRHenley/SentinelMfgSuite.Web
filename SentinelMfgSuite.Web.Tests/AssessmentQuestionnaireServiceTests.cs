@@ -20,13 +20,14 @@ public class AssessmentQuestionnaireServiceTests
     {
         await using var fixture = await TestDbFixture.CreateAsync();
         var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access);
         var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
 
         var result = await service.LoadDraftAsync(access.InvitationId, "token");
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(result.Response);
-        Assert.Equal("1.0", result.Response!.SchemaVersion);
+        Assert.Equal(QuestionnaireV1.Definition.SchemaVersion, result.Response!.SchemaVersion);
         Assert.Empty(result.Response.Answers);
         Assert.Null(result.ConcurrencyStamp);
         Assert.False(result.IsReadOnly);
@@ -68,6 +69,125 @@ public class AssessmentQuestionnaireServiceTests
     }
 
     [Fact]
+    public async Task LoadDraftAsync_V2_Preserves_Q31_Q32_Answers_And_Schema_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.Draft);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "2.0");
+        var response = CreateValidV2Response();
+        var serializedResponse = QuestionnaireResponseV1Serializer.Serialize(response);
+        fixture.Db.Add(new AssessmentResponse
+        {
+            Id = access.ResponseId!.Value,
+            AssessmentId = access.AssessmentId,
+            InvitationId = access.InvitationId,
+            Data = serializedResponse,
+            IsDraft = true,
+            LastSavedUtc = DateTime.UtcNow,
+            ConcurrencyStamp = "v2-stamp"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+        var result = await service.LoadDraftAsync(access.InvitationId, "token");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("2.0", result.Definition!.SchemaVersion);
+        Assert.Equal("2.0", result.Response!.SchemaVersion);
+        Assert.Equal("generally_accurate", result.Response.Answers["q31"].Selected);
+        Assert.Equal("investigate_improve", result.Response.Answers["q32"].Selected);
+        Assert.Equal("v2-stamp", result.ConcurrencyStamp);
+        fixture.Db.ChangeTracker.Clear();
+        Assert.Equal(serializedResponse,
+            (await fixture.Db.Set<AssessmentResponse>().AsNoTracking().SingleAsync()).Data);
+    }
+
+    [Fact]
+    public async Task LoadDraftAsync_V3_Preserves_New_Answers_And_Schema_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.Draft);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "3.0");
+        var response = CreateValidV3Response();
+        var serialized = QuestionnaireResponseV1Serializer.Serialize(response);
+        fixture.Db.Add(new AssessmentResponse
+        {
+            Id = access.ResponseId!.Value,
+            AssessmentId = access.AssessmentId,
+            InvitationId = access.InvitationId,
+            Data = serialized,
+            IsDraft = true,
+            LastSavedUtc = DateTime.UtcNow,
+            ConcurrencyStamp = "v3-stamp"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var result = await new AssessmentQuestionnaireService(fixture.Db, access.Service).LoadDraftAsync(access.InvitationId, "token");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("3.0", result.Definition!.SchemaVersion);
+        Assert.Equal("nearly_all", result.Response!.Answers["q33"].Selected);
+        Assert.Equal("usually_on_time", result.Response.Answers["q34"].Selected);
+        Assert.Equal("routine_checks", result.Response.Answers["q35"].Selected);
+        Assert.Equal("rarely_missing", result.Response.Answers["q36"].Selected);
+        Assert.Equal(serialized, (await fixture.Db.Set<AssessmentResponse>().AsNoTracking().SingleAsync()).Data);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_V3_Persists_New_Answers_And_Schema_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "3.0");
+
+        var result = await new AssessmentQuestionnaireService(fixture.Db, access.Service).SaveDraftAsync(
+            access.InvitationId,
+            "token",
+            QuestionnaireResponseV1Serializer.Serialize(CreateValidV3Response()),
+            null);
+
+        Assert.True(result.IsSuccess);
+        var persisted = await fixture.Db.Set<AssessmentResponse>().AsNoTracking().SingleAsync();
+        var roundTrip = QuestionnaireResponseV1Serializer.Deserialize(persisted.Data);
+        Assert.Equal("3.0", roundTrip!.SchemaVersion);
+        Assert.Equal("nearly_all", roundTrip.Answers["q33"].Selected);
+        Assert.Equal("usually_on_time", roundTrip.Answers["q34"].Selected);
+        Assert.Equal("routine_checks", roundTrip.Answers["q35"].Selected);
+        Assert.Equal("rarely_missing", roundTrip.Answers["q36"].Selected);
+    }
+
+    [Fact]
+    public async Task LoadDraftAsync_Rejects_Stored_Response_Schema_Version_Mismatch_Without_Rewriting()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.Draft);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access);
+        var storedResponse = new QuestionnaireResponseV1 { SchemaVersion = "2.0" };
+        var serializedResponse = QuestionnaireResponseV1Serializer.Serialize(storedResponse);
+        fixture.Db.Add(new AssessmentResponse
+        {
+            Id = access.ResponseId!.Value,
+            AssessmentId = access.AssessmentId,
+            InvitationId = access.InvitationId,
+            Data = serializedResponse,
+            IsDraft = true,
+            LastSavedUtc = DateTime.UtcNow,
+            ConcurrencyStamp = "stamp-1"
+        });
+        await fixture.Db.SaveChangesAsync();
+
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+        var result = await service.LoadDraftAsync(access.InvitationId, "token");
+
+        Assert.Equal(AssessmentQuestionnaireLoadState.ValidationFailure, result.State);
+        Assert.Contains(result.ValidationErrors, error => error.Message.Contains("Schema version", StringComparison.Ordinal));
+        fixture.Db.ChangeTracker.Clear();
+        var persisted = await fixture.Db.Set<AssessmentResponse>().AsNoTracking().SingleAsync();
+        Assert.Equal(serializedResponse, persisted.Data);
+        Assert.Equal("2.0", QuestionnaireResponseV1Serializer.Deserialize(persisted.Data)!.SchemaVersion);
+    }
+
+    [Fact]
     public async Task SaveDraftAsync_Creates_First_Draft()
     {
         await using var fixture = await TestDbFixture.CreateAsync();
@@ -94,6 +214,121 @@ public class AssessmentQuestionnaireServiceTests
         Assert.True(persisted.IsDraft);
         Assert.Null(persisted.SubmittedUtc);
         Assert.Equal(result.ConcurrencyStamp, persisted.ConcurrencyStamp);
+        Assert.Equal(QuestionnaireV1.Definition.SchemaVersion,
+            QuestionnaireResponseV1Serializer.Deserialize(persisted.Data)!.SchemaVersion);
+        Assert.Equal("1.0", (await fixture.Db.Set<Assessment>().AsNoTracking().SingleAsync()).QuestionnaireVersion);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_V2_Persists_Q31_Q32_And_Schema_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "2.0");
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+        var response = CreateValidV2Response();
+
+        var result = await service.SaveDraftAsync(
+            access.InvitationId,
+            "token",
+            QuestionnaireResponseV1Serializer.Serialize(response),
+            null);
+
+        Assert.True(result.IsSuccess);
+        var persisted = await fixture.Db.Set<AssessmentResponse>().AsNoTracking().SingleAsync();
+        var roundTrip = QuestionnaireResponseV1Serializer.Deserialize(persisted.Data);
+        Assert.NotNull(roundTrip);
+        Assert.Equal("2.0", roundTrip!.SchemaVersion);
+        Assert.Equal("generally_accurate", roundTrip.Answers["q31"].Selected);
+        Assert.Equal("investigate_improve", roundTrip.Answers["q32"].Selected);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_Rejects_Response_Schema_Version_Mismatch()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access);
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+        var response = CreateValidSubmissionResponse();
+        response.SchemaVersion = "2.0";
+
+        var result = await service.SaveDraftAsync(
+            access.InvitationId,
+            "token",
+            QuestionnaireResponseV1Serializer.Serialize(response),
+            null);
+
+        Assert.Equal(AssessmentQuestionnaireSaveState.ValidationFailure, result.State);
+        Assert.Contains(result.ValidationErrors, error => error.Message.Contains("Schema version", StringComparison.Ordinal));
+        Assert.Empty(await fixture.Db.Set<AssessmentResponse>().ToListAsync());
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_Rejects_Blank_Assessment_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: " ");
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+        var payload = QuestionnaireResponseV1Serializer.Serialize(new QuestionnaireResponseV1());
+
+        var result = await service.SaveDraftAsync(access.InvitationId, "token", payload, null);
+
+        Assert.Equal(AssessmentQuestionnaireSaveState.UnsupportedQuestionnaireVersion, result.State);
+        Assert.Empty(await fixture.Db.Set<AssessmentResponse>().ToListAsync());
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_Rejects_Unsupported_Assessment_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "4.0");
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+        var payload = QuestionnaireResponseV1Serializer.Serialize(new QuestionnaireResponseV1());
+
+        var result = await service.SaveDraftAsync(access.InvitationId, "token", payload, null);
+
+        Assert.Equal(AssessmentQuestionnaireSaveState.UnsupportedQuestionnaireVersion, result.State);
+        Assert.Empty(await fixture.Db.Set<AssessmentResponse>().ToListAsync());
+    }
+
+    [Fact]
+    public async Task SubmitAsync_Rejects_Response_Schema_Version_Mismatch()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access);
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+        var response = CreateValidSubmissionResponse();
+        response.SchemaVersion = "2.0";
+
+        var result = await service.SubmitAsync(
+            access.InvitationId,
+            "token",
+            QuestionnaireResponseV1Serializer.Serialize(response),
+            null);
+
+        Assert.Equal(AssessmentQuestionnaireSubmitState.ValidationFailure, result.State);
+        Assert.Contains(result.ValidationErrors, error => error.Message.Contains("Schema version", StringComparison.Ordinal));
+        Assert.Empty(await fixture.Db.Set<AssessmentResponse>().ToListAsync());
+    }
+
+    [Fact]
+    public async Task SubmitAsync_Rejects_Unsupported_Assessment_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "4.0");
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+
+        var result = await service.SubmitAsync(access.InvitationId, "token", CreateValidSubmissionPayload(), null);
+
+        Assert.Equal(AssessmentQuestionnaireSubmitState.UnsupportedQuestionnaireVersion, result.State);
+        Assert.Empty(await fixture.Db.Set<AssessmentResponse>().ToListAsync());
+        var assessment = await fixture.Db.Set<Assessment>().AsNoTracking().SingleAsync();
+        Assert.Equal(AssessmentStatus.InProgress, assessment.Status);
     }
 
     [Fact]
@@ -147,6 +382,7 @@ public class AssessmentQuestionnaireServiceTests
     {
         await using var fixture = await TestDbFixture.CreateAsync();
         var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access);
         var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
         var payload = QuestionnaireResponseV1Serializer.Serialize(new QuestionnaireResponseV1
         {
@@ -168,6 +404,7 @@ public class AssessmentQuestionnaireServiceTests
     {
         await using var fixture = await TestDbFixture.CreateAsync();
         var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access);
         var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
 
         var result = await service.SaveDraftAsync(access.InvitationId, "token", "{not-json", null);
@@ -318,6 +555,79 @@ public class AssessmentQuestionnaireServiceTests
         Assert.NotNull(response.SubmittedUtc);
         Assert.Equal(result.ConcurrencyStamp, response.ConcurrencyStamp);
         Assert.Equal(AssessmentStatus.Submitted, assessment.Status);
+        Assert.Equal("1.0", assessment.QuestionnaireVersion);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_V2_Persists_Q31_Q32_And_Schema_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "2.0");
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+
+        var result = await service.SubmitAsync(
+            access.InvitationId,
+            "token",
+            QuestionnaireResponseV1Serializer.Serialize(CreateValidV2Response()),
+            null);
+
+        Assert.True(result.IsSuccess);
+        fixture.Db.ChangeTracker.Clear();
+        var persisted = await fixture.Db.Set<AssessmentResponse>().AsNoTracking().SingleAsync();
+        var roundTrip = QuestionnaireResponseV1Serializer.Deserialize(persisted.Data);
+        Assert.NotNull(roundTrip);
+        Assert.Equal("2.0", roundTrip!.SchemaVersion);
+        Assert.Equal("generally_accurate", roundTrip.Answers["q31"].Selected);
+        Assert.Equal("investigate_improve", roundTrip.Answers["q32"].Selected);
+        Assert.False(persisted.IsDraft);
+        Assert.NotNull(persisted.SubmittedUtc);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_V3_Persists_New_Answers_And_Schema_Version()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "3.0");
+
+        var result = await new AssessmentQuestionnaireService(fixture.Db, access.Service).SubmitAsync(
+            access.InvitationId,
+            "token",
+            QuestionnaireResponseV1Serializer.Serialize(CreateValidV3Response()),
+            null);
+
+        Assert.True(result.IsSuccess);
+        var persisted = await fixture.Db.Set<AssessmentResponse>().AsNoTracking().SingleAsync();
+        var roundTrip = QuestionnaireResponseV1Serializer.Deserialize(persisted.Data);
+        Assert.Equal("3.0", roundTrip!.SchemaVersion);
+        Assert.Equal("nearly_all", roundTrip.Answers["q33"].Selected);
+        Assert.Equal("usually_on_time", roundTrip.Answers["q34"].Selected);
+        Assert.Equal("routine_checks", roundTrip.Answers["q35"].Selected);
+        Assert.Equal("rarely_missing", roundTrip.Answers["q36"].Selected);
+        Assert.False(persisted.IsDraft);
+        Assert.NotNull(persisted.SubmittedUtc);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_V2_Rejects_Invalid_Q31_Choice_Without_Persisting_Response()
+    {
+        await using var fixture = await TestDbFixture.CreateAsync();
+        var access = AuthorizedAccess(AssessmentInvitationResponseState.NotStarted);
+        await SeedAuthorizedEntitiesAsync(fixture.Db, access, questionnaireVersion: "2.0");
+        var service = new AssessmentQuestionnaireService(fixture.Db, access.Service);
+        var response = CreateValidV2Response();
+        response.Answers["q31"].Selected = "not-a-q31-choice";
+
+        var result = await service.SubmitAsync(
+            access.InvitationId,
+            "token",
+            QuestionnaireResponseV1Serializer.Serialize(response),
+            null);
+
+        Assert.Equal(AssessmentQuestionnaireSubmitState.ValidationFailure, result.State);
+        Assert.Contains(result.ValidationErrors, error => error.QuestionId == "q31");
+        Assert.Empty(await fixture.Db.Set<AssessmentResponse>().ToListAsync());
     }
 
     [Fact]
@@ -338,6 +648,12 @@ public class AssessmentQuestionnaireServiceTests
         Assert.False(response.IsDraft);
         Assert.NotNull(response.SubmittedUtc);
         Assert.Equal(AssessmentStatus.Submitted, assessment.Status);
+        Assert.Equal("1.0", assessment.QuestionnaireVersion);
+        var roundTrip = QuestionnaireResponseV1Serializer.Deserialize(response.Data);
+        Assert.NotNull(roundTrip);
+        Assert.Equal("1.0", roundTrip!.SchemaVersion);
+        Assert.DoesNotContain("q31", response.Data, StringComparison.Ordinal);
+        Assert.DoesNotContain("q32", response.Data, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -529,7 +845,11 @@ public class AssessmentQuestionnaireServiceTests
         return new AuthorizedAccessContext(assessmentId, invitationId, responseId, new StubAssessmentInvitationAccessService(result));
     }
 
-    private static async Task SeedAuthorizedEntitiesAsync(ApplicationDbContext db, AuthorizedAccessContext access, AssessmentStatus status = AssessmentStatus.InProgress)
+    private static async Task SeedAuthorizedEntitiesAsync(
+        ApplicationDbContext db,
+        AuthorizedAccessContext access,
+        AssessmentStatus status = AssessmentStatus.InProgress,
+        string? questionnaireVersion = "1.0")
     {
         db.Add(new Assessment
         {
@@ -537,7 +857,8 @@ public class AssessmentQuestionnaireServiceTests
             Status = status,
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow,
-            Title = "Assessment"
+            Title = "Assessment",
+            QuestionnaireVersion = questionnaireVersion ?? string.Empty
         });
 
         db.Add(new AssessmentInvitation
@@ -587,6 +908,26 @@ public class AssessmentQuestionnaireServiceTests
 
     private static string CreateValidSubmissionPayload()
         => QuestionnaireResponseV1Serializer.Serialize(CreateValidSubmissionResponse());
+
+    private static QuestionnaireResponseV1 CreateValidV2Response()
+    {
+        var response = CreateValidSubmissionResponse();
+        response.SchemaVersion = "2.0";
+        response.Answers["q31"] = new QuestionAnswer { Selected = "generally_accurate" };
+        response.Answers["q32"] = new QuestionAnswer { Selected = "investigate_improve" };
+        return response;
+    }
+
+    private static QuestionnaireResponseV1 CreateValidV3Response()
+    {
+        var response = CreateValidV2Response();
+        response.SchemaVersion = "3.0";
+        response.Answers["q33"] = new QuestionAnswer { Selected = "nearly_all" };
+        response.Answers["q34"] = new QuestionAnswer { Selected = "usually_on_time" };
+        response.Answers["q35"] = new QuestionAnswer { Selected = "routine_checks" };
+        response.Answers["q36"] = new QuestionAnswer { Selected = "rarely_missing" };
+        return response;
+    }
 
     private sealed record AuthorizedAccessContext(Guid AssessmentId, Guid InvitationId, Guid? ResponseId, StubAssessmentInvitationAccessService Service);
 

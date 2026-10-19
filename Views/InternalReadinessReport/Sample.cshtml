@@ -1,0 +1,202 @@
+@model SentinelMfgSuite.Web.Models.Assessments.Reports.SampleReadinessReportViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Sample Readiness Assessment Report";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>@ViewData["Title"] — Sentinel AI Systems</title>
+    <link rel="stylesheet" href="~/css/readiness-report.css" asp-append-version="true" />
+</head>
+<body class="report-preview">
+    <div class="preview-controls" role="region" aria-label="Sample report preview controls">
+        <div>
+            <strong>Internal sample preview</strong>
+            <span>Fictional content only. Not for customer distribution.</span>
+        </div>
+        <button type="button" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <div class="sample-watermark" aria-hidden="true">SAMPLE</div>
+
+    <main class="report-document">
+        <section class="report-page cover-page" aria-labelledby="report-title">
+            <header class="brand-lockup">
+                <img src="~/img/branding/sentinel emblem trans.png" alt="" />
+                <div><strong>Sentinel AI Systems</strong><span>Industrial Intelligence Engineering</span></div>
+            </header>
+            <div class="cover-rule"></div>
+            <p class="eyebrow">CONFIDENTIAL · SAMPLE / NOT FOR CUSTOMER DISTRIBUTION</p>
+            <h1 id="report-title">@Model.ReportTitle</h1>
+            <p class="cover-subtitle">A practical review of industrial data foundations, integration, analytics, and AI readiness.</p>
+            <dl class="cover-details">
+                <div><dt>Prepared for</dt><dd>@Model.CustomerName</dd></div>
+                <div><dt>Manufacturing site</dt><dd>@Model.SiteName</dd></div>
+                <div><dt>Report date</dt><dd>@Model.ReportDate</dd></div>
+                <div><dt>Revision</dt><dd>@Model.Revision</dd></div>
+            </dl>
+            <div class="cover-callout">
+                <strong>SAMPLE / NOT FOR CUSTOMER DISTRIBUTION</strong>
+                <span>All organizations, site details, findings, and scenario values in this prototype are fictional.</span>
+            </div>
+            <footer class="page-footer"><span>Sentinel AI Systems</span><span>Industrial Data &amp; AI Readiness Assessment</span></footer>
+        </section>
+
+        <section class="report-page" aria-labelledby="executive-summary">
+            <header class="page-heading"><span>01 · REPORT SUMMARY</span><strong>ILLUSTRATIVE SAMPLE</strong></header>
+            <h2 id="executive-summary">Executive summary</h2>
+            <p>@Model.ExecutiveSummary</p>
+            <div class="score-hero">
+                <div><span>ILLUSTRATIVE OVERALL READINESS</span><strong>@Model.OverallScore</strong><small>@Model.OverallMaturity maturity</small></div>
+                <p>@Model.ScenarioLabel</p>
+            </div>
+            <h3>Assessment scope and methodology</h3>
+            <ul class="report-list">
+                @foreach (var item in Model.ScopeItems)
+                {
+                    <li>@item</li>
+                }
+            </ul>
+            <div class="notice"><strong>Interpretation boundary</strong><p class="mb-0">Scores are deterministic summaries of mapped questionnaire responses. They are self-reported, not independently verified, and do not replace consultant judgment or evidence validation.</p></div>
+            <footer class="page-footer"><span>@Model.Confidentiality</span><span>Sample report · 1</span></footer>
+        </section>
+
+        <section class="report-page" aria-labelledby="readiness-profile">
+            <header class="page-heading"><span>02 · DETERMINISTIC SCORE SUMMARY</span><strong>V3 · ILLUSTRATIVE ONLY</strong></header>
+            <h2 id="readiness-profile">Readiness profile</h2>
+            <p>The following values illustrate a fully eligible V3 result. They are not calculated from an actual submitted response.</p>
+            <div class="table-wrap">
+                <table class="score-table">
+                    <thead><tr><th>Dimension</th><th>Weight</th><th>Raw score</th><th>Display / maturity</th><th>Evidence coverage</th></tr></thead>
+                    <tbody>
+                        @foreach (var dimension in Model.Dimensions)
+                        {
+                            <tr>
+                                <th>@dimension.Id · @dimension.Name</th>
+                                <td>@dimension.WeightPercent%</td>
+                                <td>@dimension.RawScore / 100</td>
+                                <td><strong>@dimension.Score / 100</strong><span class="table-subtitle">@dimension.Maturity</span></td>
+                                <td>@dimension.EvidenceCoverage</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <h3>Dimension interpretation</h3>
+            @foreach (var dimension in Model.Dimensions)
+            {
+                <article class="dimension-note">
+                    <h4>@dimension.Id · @dimension.Name <span>@dimension.Score/100 · @dimension.Maturity</span></h4>
+                    <p>@dimension.Interpretation</p>
+                </article>
+            }
+            <p class="method-note"><strong>V3 arithmetic:</strong> D1 87.5 × 30% + D2 62.5 × 45% + D3 50 × 25% = 66.875; the overall display rounds to 67 (midpoint away from zero), classified Established. Dimension displays are rounded independently.</p>
+            <footer class="page-footer"><span>@Model.Confidentiality</span><span>Sample report · 2</span></footer>
+        </section>
+
+        <section class="report-page" aria-labelledby="evidence-limits">
+            <header class="page-heading"><span>03 · EVIDENCE AND LIMITATIONS</span><strong>SEPARATE PRESENTATION EXAMPLE</strong></header>
+            <h2 id="evidence-limits">Evidence coverage and limitations</h2>
+            <p>Coverage represents the share of eligible mapped items with scoreable answers. It is not a measure of evidence quality, confidence, or independent verification.</p>
+            <div class="insufficient-example">
+                <span class="status-label">SEPARATE ILLUSTRATIVE PRESENTATION STATE</span>
+                <h3>Overall readiness: Insufficient Evidence</h3>
+                <p>This example is intentionally separate from the fully eligible score profile above. No unsupported score or maturity classification is assigned.</p>
+                <ul class="report-list">
+                    @foreach (var item in Model.InsufficientEvidenceExamples)
+                    {
+                        <li>@item</li>
+                    }
+                </ul>
+            </div>
+            <h3>Version-specific scoring limitations</h3>
+            <ul class="report-list">
+                <li><strong>V1:</strong> historical version; readiness scoring is unavailable.</li>
+                <li><strong>V2:</strong> D1 is not scored and the overall score is unavailable; eligible D2 and D3 results remain dimension-only.</li>
+                <li><strong>V3:</strong> an overall score is shown only when all three dimensions meet their evidence gates.</li>
+            </ul>
+            <footer class="page-footer"><span>@Model.Confidentiality</span><span>Sample report · 3</span></footer>
+        </section>
+
+        <section class="report-page" aria-labelledby="current-state">
+            <header class="page-heading"><span>04 · CONSULTANT INTERPRETATION</span><strong>FICTIONAL SCENARIO</strong></header>
+            <h2 id="current-state">Current-state findings and operational risks</h2>
+            <p class="section-intro">The following are fictional consultant-style observations for demonstrating report structure. They are not findings about a real site.</p>
+            <ol class="finding-list">
+                @foreach (var finding in Model.Findings)
+                {
+                    <li><p>@finding</p><span>Illustrative scenario · verification required</span></li>
+                }
+            </ol>
+            <h3>Integration and contextualization opportunities</h3>
+            <ul class="report-list">
+                @foreach (var opportunity in Model.Opportunities)
+                {
+                    <li>@opportunity</li>
+                }
+            </ul>
+            <h3>AI and analytics readiness considerations</h3>
+            <div class="two-column-notes">
+                <article><h4>Build foundations first</h4><p>Resolve ownership, identifier mapping, data access, quality controls, and operational context before scaling predictive or generative AI work.</p></article>
+                <article><h4>Start with a bounded use case</h4><p>Define a measurable manufacturing outcome, a human decision owner, and an appropriate validation baseline before selecting models or platforms.</p></article>
+            </div>
+            <footer class="page-footer"><span>@Model.Confidentiality</span><span>Sample report · 4</span></footer>
+        </section>
+
+        <section class="report-page" aria-labelledby="recommendations">
+            <header class="page-heading"><span>05 · PRIORITIZED ACTIONS</span><strong>CONSULTANT-AUTHORED EXAMPLE</strong></header>
+            <h2 id="recommendations">Prioritized recommendations</h2>
+            <p>These fictional recommendations demonstrate a practical format. Priorities and expected outcomes would require consultant review against verified site context.</p>
+            @foreach (var recommendation in Model.Recommendations)
+            {
+                <article class="recommendation-card">
+                    <span class="priority-tag">@recommendation.Priority</span>
+                    <div><h3>@recommendation.Title</h3><p><strong>Recommended action:</strong> @recommendation.Action</p><p><strong>Rationale:</strong> @recommendation.Rationale</p></div>
+                </article>
+            }
+            <footer class="page-footer"><span>@Model.Confidentiality</span><span>Sample report · 5</span></footer>
+        </section>
+
+        <section class="report-page" aria-labelledby="roadmap">
+            <header class="page-heading"><span>06 · IMPLEMENTATION SEQUENCE</span><strong>ILLUSTRATIVE ROADMAP</strong></header>
+            <h2 id="roadmap">30/60/90-day improvement roadmap</h2>
+            <p>Timing is illustrative and depends on customer capacity, access approvals, source-system constraints, and agreed scope.</p>
+            <div class="roadmap-list">
+                @foreach (var phase in Model.Roadmap)
+                {
+                    <article><span>@phase.Period</span><div><h3>@phase.Title</h3><p>@phase.Activities</p></div></article>
+                }
+            </div>
+            <h3>Assumptions, exclusions, and limitations</h3>
+            <ul class="report-list">
+                @foreach (var item in Model.AssumptionsAndExclusions)
+                {
+                    <li>@item</li>
+                }
+            </ul>
+            <footer class="page-footer"><span>@Model.Confidentiality</span><span>Sample report · 6</span></footer>
+        </section>
+
+        <section class="report-page final-page" aria-labelledby="next-steps">
+            <header class="page-heading"><span>07 · CLOSE AND REVIEW</span><strong>SAMPLE · INTERNAL PREVIEW</strong></header>
+            <h2 id="next-steps">Next steps and findings-review meeting</h2>
+            <p>In a live engagement, the consultant would review the prioritized findings and roadmap with the customer, confirm factual accuracy and assumptions, discuss evidence gaps, and agree on owners and follow-up decisions.</p>
+            <div class="meeting-panel">
+                <h3>Findings-review meeting</h3>
+                <ul class="report-list">
+                    <li>Walk through score eligibility, dimension results, coverage, and limitations.</li>
+                    <li>Validate observations and distinguish confirmed evidence from respondent statements.</li>
+                    <li>Prioritize practical next actions and identify decision owners.</li>
+                </ul>
+                <p><strong>Scheduling:</strong> To be agreed with the customer after report review.</p>
+            </div>
+            <div class="closing-brand"><img src="~/img/branding/sentinel emblem trans.png" alt="" /><strong>Sentinel AI Systems</strong><span>Connect industrial data. Contextualize operations. Enable informed action.</span></div>
+            <footer class="page-footer"><span>@Model.Confidentiality</span><span>Sample report · 7</span></footer>
+        </section>
+    </main>
+</body>
+</html>

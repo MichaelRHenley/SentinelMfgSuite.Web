@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SentinelMfgSuite.Web.Models.Assessments.Questionnaire;
+using SentinelMfgSuite.Web.Services.Assessments.Scoring;
 
 namespace SentinelMfgSuite.Web.Models.Assessments;
 
@@ -29,4 +30,8 @@ public sealed class AssessmentQuestionnairePageViewModel
     public QuestionnaireResponseV1 InitialResponse { get; init; } = new();
 
     public IReadOnlyDictionary<string, string> PriorityChoicesByValue { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    public ReadinessScoringResult? ReadinessScoring { get; init; }
+
+    public IReadOnlyDictionary<string, string> ScoringEvidenceLabelsByItemKey { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
 }

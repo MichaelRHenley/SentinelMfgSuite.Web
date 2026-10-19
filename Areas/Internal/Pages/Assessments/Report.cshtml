@@ -1,0 +1,313 @@
+@page "{assessmentId:guid}/{submittedResponseId:guid}"
+@model SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel
+@{
+    ViewData["Title"] = "Draft Consultant Report";
+    ViewData["Description"] = "Internal Draft report workspace for a submitted Sentinel assessment.";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<main class="sentinel-main">
+    <section class="sentinel-hero py-4 py-lg-5">
+        <div class="container">
+            <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
+                <div>
+                    <div class="small text-uppercase text-secondary">Internal consultant workspace</div>
+                    <h1 class="h2 fw-semibold mb-2">@Model.AssessmentTitle</h1>
+                    <p class="text-secondary mb-0">@Model.SiteName · Submitted @Model.SubmittedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</p>
+                </div>
+                <div class="text-lg-end">
+                    <span class="badge rounded-pill @(Model.RevisionStatus == SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft || !Model.RevisionStatus.HasValue ? "bg-warning text-dark" : "bg-secondary")">
+                        @(Model.RevisionStatus?.ToString() ?? "Draft not created") — internal only
+                    </span>
+                    @if (Model.RevisionStatus.HasValue)
+                    {
+                        <div class="small text-secondary mt-2">Revision @Model.RevisionNumber · @Model.RevisionStatus</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="container pb-5">
+        <div class="alert alert-warning" role="status">
+            Internal report workspace. This is not an approved customer report. Editing, review, approval, issuance, PDF generation, and customer delivery are not available here.
+        </div>
+
+        @if (!Model.RevisionId.HasValue)
+        {
+            <div class="card sentinel-card border-0 rounded-4">
+                <div class="card-body p-4">
+                    <h2 class="h4">No Draft report exists</h2>
+                    <p class="text-secondary">Create a Draft linked to this submitted questionnaire response. No report is created until you confirm this action.</p>
+                    <form method="post" asp-page-handler="CreateDraft">
+                        <input type="hidden" asp-for="AssessmentId" />
+                        <input type="hidden" asp-for="SubmittedResponseId" />
+                        <div asp-validation-summary="ModelOnly" class="text-danger mb-3" role="alert"></div>
+                        <button type="submit" class="btn-sentinel-primary">Create Draft Report</button>
+                        <a asp-page="/Assessments/Index" asp-area="Internal" class="btn btn-outline-light ms-2">Back to assessments</a>
+                    </form>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="row g-4">
+                <div class="col-12 col-xl-6">
+                    <section class="card sentinel-card border-0 rounded-4 h-100" aria-labelledby="evidenceHeading">
+                        <div class="card-body p-3 p-md-4">
+                            <h2 id="evidenceHeading" class="h4 fw-semibold">Evidence and scoring context</h2>
+                            <p class="small text-secondary">Submitted answers are read-only and sanitized. Scoring shown here is the frozen report snapshot.</p>
+                            @if (Model.Scoring is { } score)
+                            {
+                                <div class="border rounded-3 p-3 mb-3">
+                                    <div class="small text-uppercase text-secondary">Overall readiness</div>
+                                    <div class="h5 mb-1">@score.OverallStatus</div>
+                                    @if (score.OverallScore.HasValue)
+                                    {
+                                        <div>@score.OverallScore/100 · @score.Classification</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-secondary">No numeric score or classification is assigned.</div>
+                                    }
+                                    @if (score.WithholdingReasons.Count > 0)
+                                    {
+                                        <ul class="small mt-2 mb-0">
+                                            @foreach (var reason in score.WithholdingReasons)
+                                            {
+                                                <li>@reason</li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                                <div class="table-responsive mb-4">
+                                    <table class="table table-dark table-sm align-middle">
+                                        <thead><tr><th>Dimension</th><th>Status</th><th>Score</th><th>Evidence</th></tr></thead>
+                                        <tbody>
+                                            @foreach (var dimension in score.Dimensions)
+                                            {
+                                                <tr>
+                                                    <th>@dimension.Name</th>
+                                                    <td>@dimension.Status</td>
+                                                    <td>@(dimension.Score.HasValue ? $"{dimension.Score}/100 · {dimension.Classification}" : "Not scored")</td>
+                                                    <td>@dimension.ScoreableItems / @dimension.TotalItems</td>
+                                                </tr>
+                                                @if (dimension.WithholdingReasons.Count > 0)
+                                                {
+                                                    <tr><td colspan="4" class="small text-secondary">@string.Join("; ", dimension.WithholdingReasons)</td></tr>
+                                                }
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="alert alert-secondary">Frozen scoring snapshot is unavailable or unsupported.</div>
+                            }
+
+                            <h3 class="h5">Submitted questionnaire answers</h3>
+                            @if (Model.QuestionnaireSections.Count == 0)
+                            {
+                                <p class="text-secondary">No readable submitted answers are available.</p>
+                            }
+                            else
+                            {
+                                @foreach (var answerSection in Model.QuestionnaireSections)
+                                {
+                                    <div class="border-top pt-3 mt-3">
+                                        <h4 class="h6">@answerSection.Title</h4>
+                                        <dl class="mb-0">
+                                            @foreach (var answer in answerSection.Answers)
+                                            {
+                                                <dt class="small text-secondary">@answer.Number — @answer.Question</dt>
+                                                <dd class="mb-2">@answer.Answer</dd>
+                                            }
+                                        </dl>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </section>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <section class="card sentinel-card border-0 rounded-4 h-100" aria-labelledby="workspaceHeading">
+                        <div class="card-body p-3 p-md-4">
+                            <h2 id="workspaceHeading" class="h4 fw-semibold">Consultant report workspace</h2>
+                            <p class="text-secondary">Edit the Executive Summary Draft. Evidence and frozen scoring remain read-only in the adjacent panel.</p>
+                            @if (Model.SaveStatus is string saveStatus)
+                            {
+                                <div class="alert alert-success" role="status">@saveStatus</div>
+                            }
+                            <form method="post" asp-page-handler="SaveExecutiveSummary" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="executiveSummaryHeading">
+                                <input type="hidden" asp-for="AssessmentId" />
+                                <input type="hidden" asp-for="SubmittedResponseId" />
+                                <input type="hidden" asp-for="RevisionId" />
+                                <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                <h3 id="executiveSummaryHeading" class="h5 fw-semibold">Executive Summary editor</h3>
+                                <p class="small text-secondary">This area edits Draft consultant content only. Submitted answers and the scoring snapshot cannot be changed here.</p>
+                                @if (Model.LastSavedUtc.HasValue)
+                                {
+                                    <p class="small text-secondary">Last saved: <time datetime="@Model.LastSavedUtc.Value.ToUniversalTime().ToString("O")">@Model.LastSavedUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</time></p>
+                                }
+                                <div asp-validation-summary="All" class="text-danger mb-3" role="alert"></div>
+                                @if (Model.ValidationIssues.Count > 0)
+                                {
+                                    <div class="mb-3" role="status">
+                                        @foreach (var issue in Model.ValidationIssues)
+                                        {
+                                            <div class="alert @(issue.Severity == SentinelMfgSuite.Web.Services.Assessments.Reports.ReportContentValidationSeverity.Error ? "alert-danger" : "alert-warning") py-2 mb-2">
+                                                <strong>@issue.Severity:</strong> @issue.Message
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                <div class="mb-3">
+                                    <label asp-for="Input.State" class="form-label">Assessment state</label>
+                                    <select asp-for="Input.State" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState>()" class="form-select bg-dark text-light border-secondary"></select>
+                                </div>
+                                <div class="mb-3">
+                                    <label asp-for="Input.Narrative" class="form-label">Executive Summary narrative</label>
+                                    <textarea asp-for="Input.Narrative" rows="8" class="form-control bg-dark text-light border-secondary" autocomplete="off"></textarea>
+                                    <span asp-validation-for="Input.Narrative" class="text-danger"></span>
+                                </div>
+                                <fieldset class="mb-3">
+                                    <legend class="form-label">Questionnaire evidence references</legend>
+                                    @if (Model.EvidenceOptions.Count == 0)
+                                    {
+                                        <p class="small text-secondary">No questionnaire answers are available to reference.</p>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var answer in Model.EvidenceOptions)
+                                        {
+                                            var selected = Model.Input.EvidenceQuestionIds?.Contains(answer.QuestionId, StringComparer.Ordinal) == true;
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="Input.EvidenceQuestionIds" value="@answer.QuestionId" id="evidence-@answer.QuestionId" checked="@selected" />
+                                                <label class="form-check-label small" for="evidence-@answer.QuestionId">@answer.Number — @answer.Question</label>
+                                            </div>
+                                        }
+                                    }
+                                </fieldset>
+                                <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
+                            </form>
+                            <p class="small text-secondary">@(Model.SaveConflict ? "Resolve the conflict by reloading and reviewing the newer Draft before reapplying your text." : "Only Executive Summary state, narrative, and questionnaire evidence references are editable here.")</p>
+                            <section class="border border-info rounded-3 p-3 mb-4" aria-labelledby="industrialSystemsHeading">
+                                <h3 id="industrialSystemsHeading" class="h5 fw-semibold">Industrial Data &amp; Systems</h3>
+                                <p class="small text-secondary">System IDs, provenance, verification status, and evidence are preserved. New systems are consultant-entered and unverified, with no evidence added automatically.</p>
+                                @if (Model.SaveStatus == "Industrial Data & Systems Draft saved.")
+                                {
+                                    <div class="alert alert-success" role="status">@Model.SaveStatus</div>
+                                }
+                                @if (Model.LastSavedUtc.HasValue)
+                                {
+                                    <p class="small text-secondary">Last saved: <time datetime="@Model.LastSavedUtc.Value.ToUniversalTime().ToString("O")">@Model.LastSavedUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</time></p>
+                                }
+                                <form method="post" asp-page-handler="SaveIndustrialData">
+                                    <input type="hidden" asp-for="AssessmentId" />
+                                    <input type="hidden" asp-for="SubmittedResponseId" />
+                                    <input type="hidden" asp-for="RevisionId" />
+                                    <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                    <div asp-validation-summary="All" class="text-danger mb-3" role="alert"></div>
+                                    @if (Model.ValidationIssues.Count > 0)
+                                    {
+                                        <div class="mb-3" role="status">
+                                            @foreach (var issue in Model.ValidationIssues)
+                                            {
+                                                <div class="alert @(issue.Severity == SentinelMfgSuite.Web.Services.Assessments.Reports.ReportContentValidationSeverity.Error ? "alert-danger" : "alert-warning") py-2 mb-2">
+                                                    <strong>@issue.Severity:</strong> @issue.Message
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    <div class="mb-3">
+                                        <label asp-for="IndustrialInput.State" class="form-label">Section assessment state</label>
+                                        <select asp-for="IndustrialInput.State" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState>()" class="form-select bg-dark text-light border-secondary"></select>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h4 class="h6 mb-0">System inventory</h4>
+                                        <button type="button" class="btn btn-outline-info btn-sm" id="addIndustrialSystem">Add System</button>
+                                    </div>
+                                    <div id="industrialSystemsList">
+                                        @for (var index = 0; index < Model.IndustrialInput.Systems.Count; index++)
+                                        {
+                                            <fieldset class="border border-secondary rounded-3 p-3 mb-3 industrial-system-entry">
+                                                <legend class="float-none w-auto px-2 small">Edit system @(index + 1)</legend>
+                                                <input type="hidden" asp-for="IndustrialInput.Systems[index].Id" />
+                                                <div class="mb-2">
+                                                    <label asp-for="IndustrialInput.Systems[index].Name" class="form-label">Name <span class="text-danger">*</span></label>
+                                                    <input asp-for="IndustrialInput.Systems[index].Name" class="form-control bg-dark text-light border-secondary" autocomplete="off" />
+                                                    <span asp-validation-for="IndustrialInput.Systems[index].Name" class="text-danger"></span>
+                                                </div>
+                                                <div class="mb-2"><label asp-for="IndustrialInput.Systems[index].AssessmentState" class="form-label">System assessment state</label><select asp-for="IndustrialInput.Systems[index].AssessmentState" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState>()" class="form-select bg-dark text-light border-secondary"></select></div>
+                                                <div class="row g-2">
+                                                    <div class="col-md-6 mb-2"><label asp-for="IndustrialInput.Systems[index].SystemType" class="form-label">System type</label><input asp-for="IndustrialInput.Systems[index].SystemType" class="form-control bg-dark text-light border-secondary" /></div>
+                                                    <div class="col-md-6 mb-2"><label asp-for="IndustrialInput.Systems[index].Owner" class="form-label">Owner</label><input asp-for="IndustrialInput.Systems[index].Owner" class="form-control bg-dark text-light border-secondary" /></div>
+                                                    <div class="col-md-6 mb-2"><label asp-for="IndustrialInput.Systems[index].OperationalArea" class="form-label">Operational area</label><input asp-for="IndustrialInput.Systems[index].OperationalArea" class="form-control bg-dark text-light border-secondary" /></div>
+                                                    <div class="col-md-6 mb-2"><label asp-for="IndustrialInput.Systems[index].DataExchanged" class="form-label">Data exchanged</label><input asp-for="IndustrialInput.Systems[index].DataExchanged" class="form-control bg-dark text-light border-secondary" /></div>
+                                                    <div class="col-md-6 mb-2"><label asp-for="IndustrialInput.Systems[index].IntegrationPattern" class="form-label">Integration pattern</label><input asp-for="IndustrialInput.Systems[index].IntegrationPattern" class="form-control bg-dark text-light border-secondary" /></div>
+                                                    <div class="col-md-6 mb-2"><label asp-for="IndustrialInput.Systems[index].Criticality" class="form-label">Criticality</label><input asp-for="IndustrialInput.Systems[index].Criticality" class="form-control bg-dark text-light border-secondary" /></div>
+                                                </div>
+                                                <div class="mb-2"><label asp-for="IndustrialInput.Systems[index].ConsultantNotes" class="form-label">Consultant notes</label><textarea asp-for="IndustrialInput.Systems[index].ConsultantNotes" rows="3" class="form-control bg-dark text-light border-secondary"></textarea></div>
+                                            </fieldset>
+                                        }
+                                    </div>
+                                    <template id="industrialSystemTemplate">
+                                        <fieldset class="border border-secondary rounded-3 p-3 mb-3 industrial-system-entry">
+                                            <legend class="float-none w-auto px-2 small">New system</legend>
+                                            <input type="hidden" name="IndustrialInput.Systems[__index__].Id" value="" />
+                                            <div class="mb-2"><label class="form-label">Name <span class="text-danger">*</span></label><input name="IndustrialInput.Systems[__index__].Name" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+                                            <div class="mb-2"><label class="form-label">System assessment state</label><select name="IndustrialInput.Systems[__index__].AssessmentState" class="form-select bg-dark text-light border-secondary">@foreach (var state in Enum.GetValues<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState>()) { <option value="@state" selected="@(state == SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState.NotAssessed)">@state</option> }</select></div>
+                                            <div class="row g-2">
+                                                <div class="col-md-6 mb-2"><label class="form-label">System type</label><input name="IndustrialInput.Systems[__index__].SystemType" class="form-control bg-dark text-light border-secondary" /></div>
+                                                <div class="col-md-6 mb-2"><label class="form-label">Owner</label><input name="IndustrialInput.Systems[__index__].Owner" class="form-control bg-dark text-light border-secondary" /></div>
+                                                <div class="col-md-6 mb-2"><label class="form-label">Operational area</label><input name="IndustrialInput.Systems[__index__].OperationalArea" class="form-control bg-dark text-light border-secondary" /></div>
+                                                <div class="col-md-6 mb-2"><label class="form-label">Data exchanged</label><input name="IndustrialInput.Systems[__index__].DataExchanged" class="form-control bg-dark text-light border-secondary" /></div>
+                                                <div class="col-md-6 mb-2"><label class="form-label">Integration pattern</label><input name="IndustrialInput.Systems[__index__].IntegrationPattern" class="form-control bg-dark text-light border-secondary" /></div>
+                                                <div class="col-md-6 mb-2"><label class="form-label">Criticality</label><input name="IndustrialInput.Systems[__index__].Criticality" class="form-control bg-dark text-light border-secondary" /></div>
+                                            </div>
+                                            <div class="mb-2"><label class="form-label">Consultant notes</label><textarea name="IndustrialInput.Systems[__index__].ConsultantNotes" rows="3" class="form-control bg-dark text-light border-secondary"></textarea></div>
+                                        </fieldset>
+                                    </template>
+                                    <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
+                                </form>
+                            </section>
+                            <nav aria-label="Other consultant report sections">
+                                <ol class="list-group list-group-numbered">
+                                    <li class="list-group-item bg-transparent text-light">AI Opportunities &amp; ROI <span class="text-secondary">— editor not yet available</span></li>
+                                    <li class="list-group-item bg-transparent text-light">Technical Gaps &amp; Architecture <span class="text-secondary">— editor not yet available</span></li>
+                                    <li class="list-group-item bg-transparent text-light">Implementation Roadmap <span class="text-secondary">— editor not yet available</span></li>
+                                    <li class="list-group-item bg-transparent text-light">Executive Presentation <span class="text-secondary">— editor not yet available</span></li>
+                                </ol>
+                            </nav>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        }
+    </section>
+</main>
+
+<script>
+    (() => {
+        const addButton = document.getElementById('addIndustrialSystem');
+        const list = document.getElementById('industrialSystemsList');
+        const template = document.getElementById('industrialSystemTemplate');
+        const labelExistingSystemEditors = () => {
+            list?.querySelectorAll('fieldset legend').forEach((legend, index) => {
+                legend.textContent = `Edit system ${index + 1}`;
+            });
+        };
+        labelExistingSystemEditors();
+        if (!addButton || !list || !template) return;
+        addButton.addEventListener('click', () => {
+            const index = list.querySelectorAll('.industrial-system-entry').length;
+            const fragment = template.content.cloneNode(true);
+            fragment.querySelectorAll('[name]').forEach(element => {
+                element.name = element.name.replaceAll('__index__', index);
+            });
+            list.appendChild(fragment);
+            labelExistingSystemEditors();
+        });
+    })();
+</script>
