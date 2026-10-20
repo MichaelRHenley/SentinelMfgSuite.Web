@@ -10,6 +10,7 @@ using Xunit;
 
 namespace SentinelMfgSuite.Web.Tests;
 
+[Collection(PostgresIntegrationCollection.Name)]
 public class AssessmentProvisioningPostgresIntegrationTests
 {
     [Fact]

@@ -37,6 +37,33 @@ public sealed class AssessmentReportServiceTests
         var snapshot = ReadinessScoringSnapshotSerializer.Deserialize(revision.ScoringSnapshot!);
         Assert.Equal(ReadinessScoringSnapshotSerializer.CurrentSchemaVersion, snapshot.SchemaVersion);
         Assert.Equal(ReadinessOverallStatus.Eligible, snapshot.Snapshot.OverallStatus);
+
+        var history = Assert.Single(await fixture.Db.Set<AssessmentReportTransitionHistory>().AsNoTracking().ToListAsync());
+        Assert.Equal(AssessmentReportTransitionEventType.Created, history.EventType);
+        Assert.Equal(report.Id, history.AssessmentReportId);
+        Assert.Equal(revision.Id, history.AssessmentReportRevisionId);
+        Assert.Equal("owner-1", history.ActorUserId);
+        Assert.Equal(revision.CreatedUtc, history.OccurredUtc);
+        Assert.Null(history.PreviousStatus);
+        Assert.Equal(AssessmentReportRevisionStatus.Draft, history.NewStatus);
+        Assert.Null(history.Reason);
+        Assert.NotEqual(Guid.Empty, history.Id);
+        Assert.False(string.IsNullOrWhiteSpace(history.CorrelationId));
+    }
+
+    [Fact]
+    public async Task CreateAsync_Failure_Persists_No_Report_Revision_Or_History()
+    {
+        await using var fixture = await ReportDatabase.CreateAsync();
+        var (assessmentId, responseId) = await fixture.SeedAsync(callerId: "owner-1");
+        var service = new AssessmentReportService(fixture.Db, new ThrowingScoringService());
+
+        await Assert.ThrowsAnyAsync<Exception>(() => service.CreateAsync(assessmentId, responseId, Admin("owner-1")));
+
+        await using var verify = new ApplicationDbContext(fixture.Options);
+        Assert.Equal(0, await verify.Set<AssessmentReport>().CountAsync());
+        Assert.Equal(0, await verify.Set<AssessmentReportRevision>().CountAsync());
+        Assert.Equal(0, await verify.Set<AssessmentReportTransitionHistory>().CountAsync());
     }
 
     [Fact]
@@ -158,6 +185,7 @@ public sealed class AssessmentReportServiceTests
         Assert.Equal(1, retry.Report.Revisions.Single().RevisionNumber);
         Assert.Equal(AssessmentReportRevisionStatus.Approved, retry.Report.Revisions.Single().Status);
         Assert.Equal("Historically approved content", retry.Report.Revisions.Single().ExecutiveSummary);
+        Assert.Equal(1, await fixture.Db.Set<AssessmentReportTransitionHistory>().CountAsync());
     }
 
     [Fact]
@@ -179,6 +207,7 @@ public sealed class AssessmentReportServiceTests
         Assert.All(results, result => Assert.True(result.Succeeded));
         Assert.Equal(1, await fixture.Db.Set<AssessmentReport>().CountAsync());
         Assert.Equal(1, await fixture.Db.Set<AssessmentReportRevision>().CountAsync());
+        Assert.Equal(1, await fixture.Db.Set<AssessmentReportTransitionHistory>().CountAsync());
         Assert.Contains(results, result => result.State == AssessmentReportServiceState.Created);
         Assert.Contains(results, result => result.State == AssessmentReportServiceState.AlreadyExists);
     }
@@ -265,6 +294,12 @@ public sealed class AssessmentReportServiceTests
 
     private static ClaimsPrincipal User(string userId)
         => new(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, userId) }, "test"));
+
+    private sealed class ThrowingScoringService : IReadinessScoringService
+    {
+        public ReadinessScoringResult Score(string? questionnaireVersion, QuestionnaireResponseV1? response)
+            => throw new InvalidOperationException("scoring failure");
+    }
 
     private sealed class BarrierScoringService(Barrier barrier) : IReadinessScoringService
     {

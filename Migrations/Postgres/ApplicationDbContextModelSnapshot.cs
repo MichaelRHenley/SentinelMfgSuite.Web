@@ -413,13 +413,6 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                     b.Property<Guid>("AssessmentReportId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("ConsultantContentJson")
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("ConsultantContentSchemaVersion")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
                     b.Property<string>("AssumptionsAndLimitations")
                         .IsRequired()
                         .HasColumnType("text");
@@ -427,6 +420,13 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                     b.Property<Guid>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ConsultantContentJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ConsultantContentSchemaVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("CreatedByUserId")
                         .IsRequired()
@@ -509,6 +509,91 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                     b.ToTable("AssessmentReportRevisions", t =>
                         {
                             t.HasCheckConstraint("CK_AssessmentReportRevision_RevisionNumber_Positive", "\"RevisionNumber\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentReportTransitionHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<Guid>("AssessmentReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssessmentReportRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<short>("EventType")
+                        .HasColumnType("smallint");
+
+                    b.Property<short>("NewStatus")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTime>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<short?>("PreviousStatus")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid?>("ReplacedRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReplacementRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentReportRevisionId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssessmentReportTransitionHistory_Revision_Created")
+                        .HasFilter("\"EventType\" = 1");
+
+                    b.HasIndex("AssessmentReportId", "AssessmentReportRevisionId");
+
+                    b.HasIndex("AssessmentReportId", "OccurredUtc");
+
+                    b.HasIndex("AssessmentReportId", "ReplacedRevisionId");
+
+                    b.HasIndex("AssessmentReportId", "ReplacementRevisionId")
+                        .HasDatabaseName("IX_AssessmentReportTransitionHistory_AssessmentReportId_Repla~1");
+
+                    b.HasIndex("AssessmentReportRevisionId", "NewStatus")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssessmentReportTransitionHistory_Revision_NewStatus")
+                        .HasFilter("\"EventType\" = 2");
+
+                    b.HasIndex("AssessmentReportRevisionId", "OccurredUtc", "Id");
+
+                    b.ToTable("AssessmentReportTransitionHistory", t =>
+                        {
+                            t.HasCheckConstraint("CK_AssessmentReportTransitionHistory_EventShape", "(\"EventType\" = 1 AND \"PreviousStatus\" IS NULL AND \"NewStatus\" = 0) OR (\"EventType\" = 2 AND \"PreviousStatus\" IS NOT NULL AND ((\"PreviousStatus\" = 0 AND \"NewStatus\" = 1) OR (\"PreviousStatus\" = 1 AND \"NewStatus\" = 2) OR (\"PreviousStatus\" = 1 AND \"NewStatus\" = 5) OR (\"PreviousStatus\" = 2 AND \"NewStatus\" = 5) OR (\"PreviousStatus\" = 2 AND \"NewStatus\" = 3) OR (\"PreviousStatus\" = 3 AND \"NewStatus\" = 4)))");
+
+                            t.HasCheckConstraint("CK_AssessmentReportTransitionHistory_EventType", "\"EventType\" IN (1, 2)");
+
+                            t.HasCheckConstraint("CK_AssessmentReportTransitionHistory_Identifiers", "length(trim(\"ActorUserId\")) > 0 AND length(trim(\"CorrelationId\")) > 0");
+
+                            t.HasCheckConstraint("CK_AssessmentReportTransitionHistory_Reason", "(\"NewStatus\" = 5 AND \"Reason\" IS NOT NULL AND \"Reason\" = trim(\"Reason\") AND length(\"Reason\") BETWEEN 1 AND 2000) OR (\"NewStatus\" <> 5 AND \"Reason\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_AssessmentReportTransitionHistory_ReplacedRevision", "CASE WHEN \"EventType\" = 2 AND \"PreviousStatus\" = 2 AND \"NewStatus\" = 3 THEN \"ReplacedRevisionId\" IS NULL OR \"ReplacedRevisionId\" <> \"AssessmentReportRevisionId\" ELSE \"ReplacedRevisionId\" IS NULL END");
+
+                            t.HasCheckConstraint("CK_AssessmentReportTransitionHistory_ReplacementRevision", "CASE WHEN \"EventType\" = 2 AND \"PreviousStatus\" = 3 AND \"NewStatus\" = 4 THEN \"ReplacementRevisionId\" IS NOT NULL AND \"ReplacementRevisionId\" <> \"AssessmentReportRevisionId\" ELSE \"ReplacementRevisionId\" IS NULL END");
+
+                            t.HasCheckConstraint("CK_AssessmentReportTransitionHistory_StatusValues", "\"NewStatus\" BETWEEN 0 AND 5 AND (\"PreviousStatus\" IS NULL OR \"PreviousStatus\" BETWEEN 0 AND 5)");
                         });
                 });
 
@@ -788,6 +873,30 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                         .IsRequired();
 
                     b.Navigation("AssessmentReport");
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentReportTransitionHistory", b =>
+                {
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevision", null)
+                        .WithMany()
+                        .HasForeignKey("AssessmentReportId", "AssessmentReportRevisionId")
+                        .HasPrincipalKey("AssessmentReportId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevision", null)
+                        .WithMany()
+                        .HasForeignKey("AssessmentReportId", "ReplacedRevisionId")
+                        .HasPrincipalKey("AssessmentReportId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AssessmentReportTransitionHistory_AssessmentReportRevision~1");
+
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevision", null)
+                        .WithMany()
+                        .HasForeignKey("AssessmentReportId", "ReplacementRevisionId")
+                        .HasPrincipalKey("AssessmentReportId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AssessmentReportTransitionHistory_AssessmentReportRevision~2");
                 });
 
             modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentResponse", b =>

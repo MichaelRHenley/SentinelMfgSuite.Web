@@ -112,6 +112,7 @@ public sealed class AssessmentReportService : IAssessmentReportService
         var scoring = _scoringService.Score(assessment.QuestionnaireVersion, questionnaireResponse);
         var scoringSnapshot = ReadinessScoringSnapshotSerializer.Serialize(scoring);
         var generatedUtc = DateTime.UtcNow;
+        var revisionId = Guid.NewGuid();
         var report = new AssessmentReport
         {
             Id = Guid.NewGuid(),
@@ -127,7 +128,7 @@ public sealed class AssessmentReportService : IAssessmentReportService
             {
                 new AssessmentReportRevision
                 {
-                    Id = Guid.NewGuid(),
+                    Id = revisionId,
                     RevisionNumber = 1,
                     Status = AssessmentReportRevisionStatus.Draft,
                     ExecutiveSummary = string.Empty,
@@ -146,6 +147,18 @@ public sealed class AssessmentReportService : IAssessmentReportService
 
         await using var transaction = await _db.Database.BeginTransactionAsync(ct);
         _db.Set<AssessmentReport>().Add(report);
+        _db.Set<AssessmentReportTransitionHistory>().Add(new AssessmentReportTransitionHistory
+        {
+            Id = Guid.NewGuid(),
+            AssessmentReportId = report.Id,
+            AssessmentReportRevisionId = revisionId,
+            EventType = AssessmentReportTransitionEventType.Created,
+            PreviousStatus = null,
+            NewStatus = AssessmentReportRevisionStatus.Draft,
+            ActorUserId = callerUserId,
+            OccurredUtc = generatedUtc,
+            CorrelationId = Guid.NewGuid().ToString("N")
+        });
         try
         {
             await _db.SaveChangesAsync(ct);

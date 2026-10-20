@@ -21,6 +21,7 @@ namespace SentinelMfgSuite.Web.Data
         public DbSet<TenantUserRole> TenantUserRoles { get; set; } = null!;
         public DbSet<AssessmentReport> AssessmentReports { get; set; } = null!;
         public DbSet<AssessmentReportRevision> AssessmentReportRevisions { get; set; } = null!;
+        public DbSet<AssessmentReportTransitionHistory> AssessmentReportTransitionHistory { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -215,8 +216,76 @@ namespace SentinelMfgSuite.Web.Data
                 b.Property(x => x.PdfLengthBytes);
                 b.Property(x => x.ConcurrencyStamp).IsConcurrencyToken().IsRequired();
 
+                b.HasAlternateKey(x => new { x.AssessmentReportId, x.Id });
                 b.HasIndex(x => new { x.AssessmentReportId, x.RevisionNumber }).IsUnique();
                 b.ToTable(table => table.HasCheckConstraint("CK_AssessmentReportRevision_RevisionNumber_Positive", "\"RevisionNumber\" > 0"));
+            });
+
+            modelBuilder.Entity<AssessmentReportTransitionHistory>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.EventType).HasColumnType("smallint").IsRequired();
+                b.Property(x => x.PreviousStatus).HasColumnType("smallint");
+                b.Property(x => x.NewStatus).HasColumnType("smallint").IsRequired();
+                b.Property(x => x.ActorUserId).IsRequired().HasMaxLength(450);
+                b.Property(x => x.OccurredUtc).HasColumnType("timestamp with time zone").IsRequired();
+                b.Property(x => x.Reason).HasMaxLength(2000);
+                b.Property(x => x.CorrelationId).IsRequired().HasMaxLength(128);
+
+                b.HasOne<AssessmentReportRevision>()
+                    .WithMany()
+                    .HasForeignKey(x => new { x.AssessmentReportId, x.AssessmentReportRevisionId })
+                    .HasPrincipalKey(x => new { x.AssessmentReportId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne<AssessmentReportRevision>()
+                    .WithMany()
+                    .HasForeignKey(x => new { x.AssessmentReportId, x.ReplacedRevisionId })
+                    .HasPrincipalKey(x => new { x.AssessmentReportId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne<AssessmentReportRevision>()
+                    .WithMany()
+                    .HasForeignKey(x => new { x.AssessmentReportId, x.ReplacementRevisionId })
+                    .HasPrincipalKey(x => new { x.AssessmentReportId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasIndex(x => new { x.AssessmentReportRevisionId, x.OccurredUtc, x.Id });
+                b.HasIndex(x => new { x.AssessmentReportId, x.OccurredUtc });
+                b.HasIndex(x => x.AssessmentReportRevisionId)
+                    .IsUnique()
+                    .HasFilter("\"EventType\" = 1")
+                    .HasDatabaseName("UX_AssessmentReportTransitionHistory_Revision_Created");
+                b.HasIndex(x => new { x.AssessmentReportRevisionId, x.NewStatus })
+                    .IsUnique()
+                    .HasFilter("\"EventType\" = 2")
+                    .HasDatabaseName("UX_AssessmentReportTransitionHistory_Revision_NewStatus");
+
+                b.ToTable(table =>
+                {
+                    table.HasCheckConstraint("CK_AssessmentReportTransitionHistory_EventType",
+                        "\"EventType\" IN (1, 2)");
+                    table.HasCheckConstraint("CK_AssessmentReportTransitionHistory_StatusValues",
+                        "\"NewStatus\" BETWEEN 0 AND 5 AND (\"PreviousStatus\" IS NULL OR \"PreviousStatus\" BETWEEN 0 AND 5)");
+                    table.HasCheckConstraint("CK_AssessmentReportTransitionHistory_EventShape",
+                        "(\"EventType\" = 1 AND \"PreviousStatus\" IS NULL AND \"NewStatus\" = 0) OR (\"EventType\" = 2 AND \"PreviousStatus\" IS NOT NULL AND (" +
+                        "(\"PreviousStatus\" = 0 AND \"NewStatus\" = 1) OR (\"PreviousStatus\" = 1 AND \"NewStatus\" = 2) OR " +
+                        "(\"PreviousStatus\" = 1 AND \"NewStatus\" = 5) OR (\"PreviousStatus\" = 2 AND \"NewStatus\" = 5) OR " +
+                        "(\"PreviousStatus\" = 2 AND \"NewStatus\" = 3) OR (\"PreviousStatus\" = 3 AND \"NewStatus\" = 4)))");
+                    table.HasCheckConstraint("CK_AssessmentReportTransitionHistory_Reason",
+                        "(\"NewStatus\" = 5 AND \"Reason\" IS NOT NULL AND \"Reason\" = trim(\"Reason\") AND length(\"Reason\") BETWEEN 1 AND 2000) OR (\"NewStatus\" <> 5 AND \"Reason\" IS NULL)");
+                    table.HasCheckConstraint("CK_AssessmentReportTransitionHistory_ReplacementRevision",
+                        "CASE WHEN \"EventType\" = 2 AND \"PreviousStatus\" = 3 AND \"NewStatus\" = 4 " +
+                        "THEN \"ReplacementRevisionId\" IS NOT NULL AND \"ReplacementRevisionId\" <> \"AssessmentReportRevisionId\" " +
+                        "ELSE \"ReplacementRevisionId\" IS NULL END");
+                    table.HasCheckConstraint("CK_AssessmentReportTransitionHistory_ReplacedRevision",
+                        "CASE WHEN \"EventType\" = 2 AND \"PreviousStatus\" = 2 AND \"NewStatus\" = 3 " +
+                        "THEN \"ReplacedRevisionId\" IS NULL OR \"ReplacedRevisionId\" <> \"AssessmentReportRevisionId\" " +
+                        "ELSE \"ReplacedRevisionId\" IS NULL END");
+                    table.HasCheckConstraint("CK_AssessmentReportTransitionHistory_Identifiers",
+                        "length(trim(\"ActorUserId\")) > 0 AND length(trim(\"CorrelationId\")) > 0");
+                });
             });
 
         }
