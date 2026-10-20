@@ -139,7 +139,28 @@
                             {
                                 <div class="alert alert-success" role="status">@saveStatus</div>
                             }
-                            <section id="executiveSummary">
+                            @{
+                                                            var reportTabs = new (string Id, string Label)[]
+                                                            {
+                                                                ("executiveSummary", "Executive Summary"),
+                                                                ("industrialData", "Industrial Data & Systems"),
+                                                                ("aiOpportunities", "AI Opportunities & ROI"),
+                                                                ("technicalGaps", "Technical Gaps & Architecture"),
+                                                                ("roadmap", "Implementation Roadmap"),
+                                                                ("executivePresentation", "Executive Presentation")
+                                                            };
+                                                        }
+                                                        <div class="report-tabs-scroll mb-3">
+                                                            <div class="nav nav-pills flex-nowrap report-tabs" id="reportTabList" role="tablist" aria-label="Consultant report sections">
+                                                                @for (var tabIndex = 0; tabIndex < reportTabs.Length; tabIndex++)
+                                                                {
+                                                                    var tab = reportTabs[tabIndex];
+                                                                    var isFirstTab = tabIndex == 0;
+                                                                    <button type="button" class="nav-link@(isFirstTab ? " active" : "")" id="tab-@tab.Id" role="tab" data-report-tab="@tab.Id" aria-controls="@tab.Id" aria-selected="@(isFirstTab ? "true" : "false")" tabindex="@(isFirstTab ? "0" : "-1")">@tab.Label<span class="report-tab-dirty" aria-hidden="true" hidden> &bull;</span></button>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                        <section id="executiveSummary" class="report-tab-panel" role="tabpanel" aria-labelledby="tab-executiveSummary" tabindex="0">
                                                         <form method="post" asp-page-handler="SaveExecutiveSummary" asp-fragment="executiveSummary" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="executiveSummaryHeading">
                                                             <input type="hidden" name="Input.EvidenceSubmitted" value="true" />
                                 <input type="hidden" asp-for="AssessmentId" />
@@ -221,7 +242,7 @@
                                 }
                                 <p class="mb-1">Recorded readiness: @(Model.ReportContent?.ExecutiveSummary.Readiness is { } recordedReadiness ? $"{recordedReadiness.OverallStatus}{(recordedReadiness.OverallDisplayScore0To100.HasValue ? $" · {recordedReadiness.OverallDisplayScore0To100}/100" : string.Empty)}" : "None")</p>
                                 <p class="mb-2"><strong>Synchronization:</strong> <span id="readinessSyncStatus">@Model.ReadinessSyncStatus</span></p>
-                                <form method="post" asp-page-handler="RecordReadiness" asp-fragment="executiveSummary" class="d-inline-block me-2">
+                                <form method="post" asp-page-handler="RecordReadiness" asp-fragment="executiveSummary" class="d-inline-block me-2" data-report-action>
                                     <input type="hidden" asp-for="AssessmentId" />
                                     <input type="hidden" asp-for="SubmittedResponseId" />
                                     <input type="hidden" asp-for="RevisionId" />
@@ -232,7 +253,7 @@
                                     }
                                     <button type="submit" class="btn btn-outline-light btn-sm" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Record readiness from frozen snapshot</button>
                                 </form>
-                                <form method="post" asp-page-handler="ClearReadiness" asp-fragment="executiveSummary" class="d-inline-block">
+                                <form method="post" asp-page-handler="ClearReadiness" asp-fragment="executiveSummary" class="d-inline-block" data-report-action>
                                     <input type="hidden" asp-for="AssessmentId" />
                                     <input type="hidden" asp-for="SubmittedResponseId" />
                                     <input type="hidden" asp-for="RevisionId" />
@@ -242,7 +263,7 @@
                             </div>
                             </section>
                             <p class="small text-secondary">@(Model.SaveConflict ? "Resolve the conflict by reloading and reviewing the newer Draft before reapplying your text." : "Executive Summary state, narrative, findings, questionnaire evidence references and readiness recording are editable here.")</p>
-                            <section class="border border-info rounded-3 p-3 mb-4" aria-labelledby="industrialSystemsHeading">
+                            <section id="industrialData" class="report-tab-panel border border-info rounded-3 p-3 mb-4" role="tabpanel" aria-labelledby="tab-industrialData" tabindex="0" hidden>
                                 <h3 id="industrialSystemsHeading" class="h5 fw-semibold">Industrial Data &amp; Systems</h3>
                                 <p class="small text-secondary">System IDs, provenance, verification status, and evidence are preserved. New systems are consultant-entered and unverified, with no evidence added automatically.</p>
                                 @if (Model.SaveStatus == "Industrial Data & Systems Draft saved.")
@@ -253,7 +274,7 @@
                                 {
                                     <p class="small text-secondary">Last saved: <time datetime="@Model.LastSavedUtc.Value.ToUniversalTime().ToString("O")">@Model.LastSavedUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</time></p>
                                 }
-                                <form method="post" asp-page-handler="SaveIndustrialData">
+                                <form method="post" asp-page-handler="SaveIndustrialData" asp-fragment="industrialData">
                                     <input type="hidden" asp-for="AssessmentId" />
                                     <input type="hidden" asp-for="SubmittedResponseId" />
                                     <input type="hidden" asp-for="RevisionId" />
@@ -437,7 +458,7 @@
                                     <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                                 </form>
                             </section>
-                            <section id="aiOpportunities" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="aiOpportunitiesHeading">
+                            <section id="aiOpportunities" class="report-tab-panel border border-info rounded-3 p-3 mb-4" role="tabpanel" aria-labelledby="tab-aiOpportunities" tabindex="0" hidden>
                                 <h3 id="aiOpportunitiesHeading" class="h5 fw-semibold">AI Opportunities &amp; ROI</h3>
                                 <p class="small text-secondary">Implementation effort and cost estimates only; no benefits, ROI or payback are calculated. New opportunities are consultant-entered and unverified. Existing IDs, provenance and non-questionnaire evidence are preserved.</p>
                                 @if (Model.SaveStatus == "AI Opportunities & ROI Draft saved.")
@@ -501,7 +522,7 @@
                                     <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                                 </form>
                             </section>
-                            <section id="technicalGaps" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="technicalGapsHeading">
+                            <section id="technicalGaps" class="report-tab-panel border border-info rounded-3 p-3 mb-4" role="tabpanel" aria-labelledby="tab-technicalGaps" tabindex="0" hidden>
                                 <h3 id="technicalGapsHeading" class="h5 fw-semibold">Technical Gaps &amp; Architecture</h3>
                                 <p class="small text-secondary">New records are consultant-entered, unverified and do not require validation unless you select it. Records are never verified automatically. Existing IDs, provenance and non-questionnaire evidence are preserved; saved records cannot be deleted here.</p>
                                 @if (Model.SaveStatus == "Technical Gaps & Architecture Draft saved.")
@@ -558,7 +579,7 @@
                                     <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                                 </form>
                             </section>
-                            <section id="roadmap" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="roadmapHeading">
+                            <section id="roadmap" class="report-tab-panel border border-info rounded-3 p-3 mb-4" role="tabpanel" aria-labelledby="tab-roadmap" tabindex="0" hidden>
                                 <h3 id="roadmapHeading" class="h5 fw-semibold">Implementation Roadmap</h3>
                                 <p class="small text-secondary">Days are inclusive, between 1 and 90; no scheduling is inferred. Priorities must be unique positive numbers and are never renumbered. New items are consultant-entered and unverified. Saved items cannot be deleted here.</p>
                                 @if (Model.SaveStatus == "Implementation Roadmap Draft saved.")
@@ -607,9 +628,9 @@
                                     <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                                 </form>
                             </section>
-                            <section id="executivePresentation" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="executivePresentationHeading">
+                            <section id="executivePresentation" class="report-tab-panel border border-info rounded-3 p-3 mb-4" role="tabpanel" aria-labelledby="tab-executivePresentation" tabindex="0" hidden>
                                 <h3 id="executivePresentationHeading" class="h5 fw-semibold">Executive Presentation</h3>
-                                <p class="small text-secondary">Refer to the Executive Summary and Implementation Roadmap above for context. Nothing is copied automatically. New entries are consultant-entered and unverified; verification is never set automatically. Saved entries cannot be deleted here. InReview requires evidence on both the section and each entry.</p>
+                                Implementation Roadmap tabs for context.
                                 @if (Model.SaveStatus == "Executive Presentation Draft saved.")
                                 {
                                     <div class="alert alert-success" role="status">@Model.SaveStatus</div>
@@ -869,6 +890,88 @@
             });
             findingList.appendChild(fragment);
             labelFindingEditors();
+        });
+    })();
+</script>
+
+<style>
+    .report-tabs-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .report-tabs .nav-link { white-space: nowrap; }
+    .report-tabs .nav-link:focus-visible, .report-tab-panel:focus-visible { outline: 3px solid #ffc107; outline-offset: 2px; }
+    .report-tab-panel[hidden] { display: none !important; }
+</style>
+<script>
+    (() => {
+        const tabs = Array.from(document.querySelectorAll('[data-report-tab]'));
+        if (tabs.length === 0) return;
+        const ids = tabs.map(t => t.dataset.reportTab);
+        const panel = id => document.getElementById(id);
+        const snapshot = id => {
+            const p = panel(id);
+            if (!p) return '';
+            const parts = [];
+            p.querySelectorAll('form:not([data-report-action])').forEach(f => {
+                new FormData(f).forEach((v, k) => { if (typeof v === 'string' && k !== '__RequestVerificationToken') parts.push(k + '=' + v); });
+            });
+            return parts.join('&');
+        };
+        const baseline = {};
+        ids.forEach(id => { baseline[id] = snapshot(id); });
+        const isDirty = id => snapshot(id) !== baseline[id];
+        const refreshMarkers = () => tabs.forEach(t => {
+            const m = t.querySelector('.report-tab-dirty');
+            if (m) m.hidden = !isDirty(t.dataset.reportTab);
+        });
+        const anyDirty = except => ids.some(id => id !== except && isDirty(id));
+        const select = (id, focus, updateUrl) => {
+            tabs.forEach(t => {
+                const on = t.dataset.reportTab === id;
+                t.classList.toggle('active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+                t.tabIndex = on ? 0 : -1;
+                if (on && focus) t.focus();
+            });
+            ids.forEach(pid => { const p = panel(pid); if (p) p.hidden = pid !== id; });
+            if (updateUrl && location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
+        };
+        const fromHash = () => { const h = location.hash.replace('#', ''); return ids.includes(h) ? h : ids[0]; };
+        select(fromHash(), false, false);
+        window.addEventListener('hashchange', () => select(fromHash(), false, false));
+        tabs.forEach((t, i) => {
+            t.addEventListener('click', () => select(t.dataset.reportTab, false, true));
+            t.addEventListener('keydown', e => {
+                let n = -1;
+                if (e.key === 'ArrowRight') n = (i + 1) % tabs.length;
+                else if (e.key === 'ArrowLeft') n = (i - 1 + tabs.length) % tabs.length;
+                else if (e.key === 'Home') n = 0;
+                else if (e.key === 'End') n = tabs.length - 1;
+                if (n < 0) return;
+                e.preventDefault();
+                select(tabs[n].dataset.reportTab, true, true);
+            });
+        });
+
+        let submitting = false;
+        ids.forEach(id => {
+            const p = panel(id);
+            if (!p) return;
+            p.addEventListener('input', refreshMarkers);
+            p.addEventListener('change', refreshMarkers);
+            p.addEventListener('click', () => setTimeout(refreshMarkers, 0));
+            new MutationObserver(refreshMarkers).observe(p, { childList: true, subtree: true });
+            p.querySelectorAll('form').forEach(f => f.addEventListener('submit', e => {
+                if (e.defaultPrevented) return;
+                if (anyDirty(id) && !confirm('Another report section has unsaved changes that will be lost if you continue. Submit anyway?')) {
+                    e.preventDefault();
+                    return;
+                }
+                submitting = true;
+            }));
+        });
+        window.addEventListener('beforeunload', e => {
+            if (submitting || !anyDirty(null)) return;
+            e.preventDefault();
+            e.returnValue = '';
         });
     })();
 </script>

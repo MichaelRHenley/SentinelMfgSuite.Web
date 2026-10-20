@@ -144,6 +144,28 @@ public sealed class InternalAssessmentReportPageTests
     }
 
     [Fact]
+    public async Task Report_Renders_Accessible_Tab_Workspace_With_All_Panels()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var client = factory.CreateAdminClient();
+        var html = await (await client.GetAsync(factory.PageUrl(ids.AssessmentId, ids.ResponseId))).Content.ReadAsStringAsync();
+
+        Assert.Contains("role=\"tablist\"", html, StringComparison.Ordinal);
+        foreach (var id in new[] { "executiveSummary", "industrialData", "aiOpportunities", "technicalGaps", "roadmap", "executivePresentation" })
+        {
+            Assert.Matches($"role=\"tab\"[^>]*aria-controls=\"{id}\"", html);
+            Assert.Matches($"id=\"{id}\"[^>]*role=\"tabpanel\"[^>]*aria-labelledby=\"tab-{id}\"", html);
+        }
+        Assert.Matches("id=\"tab-executiveSummary\"[^>]*aria-selected=\"true\"", html);
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(html, "role=\"tab\"[^>]*aria-selected=\"true\"").Count);
+        Assert.Contains("SaveIndustrialData", html, StringComparison.Ordinal);
+        Assert.Contains("#industrialData", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecutiveSummary_Save_Reloads_And_Preserves_Other_Sections_And_Source_Snapshot()
     {
         await using var factory = new ReportPageFactory();
