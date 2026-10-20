@@ -705,7 +705,8 @@ public sealed class InternalAssessmentReportPageTests
         Assert.DoesNotContain("Editing, review, approval", html, StringComparison.Ordinal);
         Assert.Contains("Draft editing is available", html, StringComparison.Ordinal);
         Assert.Contains("Approval, issuance, PDF generation, and customer delivery are not yet available", html, StringComparison.Ordinal);
-        Assert.Contains("Edit the Executive Summary, Industrial Data &amp; Systems, and AI Opportunities &amp; ROI Drafts", html, StringComparison.Ordinal);
+        Assert.Contains("Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, and Technical Gaps &amp; Architecture Drafts", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"technicalGaps\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"aiOpportunities\"", html, StringComparison.Ordinal);
         Assert.Contains("#aiOpportunities", html, StringComparison.Ordinal);
 
@@ -716,6 +717,208 @@ public sealed class InternalAssessmentReportPageTests
         var successIndex = saved.IndexOf("AI Opportunities &amp; ROI Draft saved.", StringComparison.Ordinal);
         Assert.True(sectionStart >= 0 && successIndex > sectionStart);
         Assert.Equal(1, saved.Split("AI Opportunities &amp; ROI Draft saved.").Length - 1);
+    }
+
+    private static Dictionary<string, string> TechForm(Guid assessmentId, Guid responseId, AssessmentReportRevision revision, string html) => new()
+    {
+        ["__RequestVerificationToken"] = ExtractToken(html),
+        ["AssessmentId"] = assessmentId.ToString(),
+        ["SubmittedResponseId"] = responseId.ToString(),
+        ["RevisionId"] = revision.Id.ToString(),
+        ["ExpectedConcurrencyStamp"] = revision.ConcurrencyStamp.ToString(),
+        ["TechnicalInput.State"] = nameof(ReportAssessmentState.Assessed)
+    };
+
+    [Fact]
+    public async Task TechnicalGaps_Create_Edit_Reload_Preserve_Ids_Evidence_And_Other_Sections()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var keptGap = new TechnicalGapEntry("11111111111111111111111111111111", "Kept gap", "Desc", "Impact",
+            ReportContentProvenance.ConsultantEntered, ReportVerificationStatus.Unverified,
+            new[] { new ReportEvidenceReference(ReportEvidenceKind.ScoringDimension, "D1") }, true);
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Keep summary"),
+            TechnicalGapsAndArchitecture = new TechnicalGapsAndArchitectureSection(ReportAssessmentState.Assessed, new[] { keptGap })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var snapshot = revision.ScoringSnapshot;
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        Assert.Contains("Remove unsaved gap", html, StringComparison.Ordinal);
+        var form = TechForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["TechnicalInput.Gaps[0].Id"] = keptGap.Id;
+        form["TechnicalInput.Gaps[0].Title"] = "Edited <b>gap</b>";
+        form["TechnicalInput.Gaps[0].EvidenceQuestionIds"] = "q02";
+        form["TechnicalInput.Gaps[1].Id"] = string.Empty;
+        form["TechnicalInput.Gaps[1].Title"] = "New gap";
+        form["TechnicalInput.Gaps[1].Description"] = "New desc";
+        form["TechnicalInput.Gaps[1].Impact"] = "New impact";
+        form["TechnicalInput.Recommendations[0].Id"] = string.Empty;
+        form["TechnicalInput.Recommendations[0].Title"] = "Rec";
+        form["TechnicalInput.Recommendations[0].Recommendation"] = "Do it";
+        form["TechnicalInput.Recommendations[0].Rationale"] = "Because";
+        form["TechnicalInput.Recommendations[0].RequiresValidation"] = "true";
+        form["TechnicalInput.Recommendations[0].EvidenceQuestionIds"] = "q02";
+
+        var response = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(form));
+        var resultHtml = await response.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Edited &lt;b&gt;gap&lt;/b&gt;", resultHtml, StringComparison.Ordinal);
+        Assert.Contains("Technical Gaps &amp; Architecture Draft saved.", resultHtml, StringComparison.Ordinal);
+
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Equal("Keep summary", saved.ExecutiveSummary.Narrative);
+        Assert.Equal(snapshot, (await factory.GetOnlyReportAsync()).Revisions.Single().ScoringSnapshot);
+        var gaps = saved.TechnicalGapsAndArchitecture.Gaps!;
+        Assert.Equal(2, gaps.Count);
+        var edited = gaps.Single(g => g.Id == keptGap.Id);
+        Assert.Equal("Edited <b>gap</b>", edited.Title);
+        Assert.True(edited.RequiresValidation);
+        Assert.Contains(edited.EvidenceReferences, r => r.Kind == ReportEvidenceKind.ScoringDimension);
+        Assert.Contains(edited.EvidenceReferences, r => r.QuestionId == "q02");
+        var created = gaps.Single(g => g.Id != keptGap.Id);
+        Assert.Equal(ReportContentProvenance.ConsultantEntered, created.Provenance);
+        Assert.Equal(ReportVerificationStatus.Unverified, created.VerificationStatus);
+        Assert.False(created.RequiresValidation);
+        var rec = Assert.Single(saved.TechnicalGapsAndArchitecture.Recommendations!);
+        Assert.True(rec.RequiresValidation);
+        Assert.Equal("q02", Assert.Single(rec.EvidenceReferences).QuestionId);
+
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var reloaded = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var omit = TechForm(ids.AssessmentId, ids.ResponseId, revision, reloaded);
+        omit["TechnicalInput.Gaps[0].Id"] = created.Id;
+        var omitted = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(omit));
+        Assert.Equal(HttpStatusCode.OK, omitted.StatusCode);
+        var after = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Equal(2, after.TechnicalGapsAndArchitecture.Gaps!.Count);
+        Assert.Equal("New gap", after.TechnicalGapsAndArchitecture.Gaps!.Single(g => g.Id == created.Id).Title);
+        Assert.Single(after.TechnicalGapsAndArchitecture.Recommendations!);
+    }
+
+    [Fact]
+    public async Task TechnicalGaps_Reject_Invalid_Ids_Evidence_Stale_NonDraft_And_Unauthorized()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = TechForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["TechnicalInput.Gaps[0].Id"] = "not-a-known-id";
+        form["TechnicalInput.Gaps[0].Title"] = "Retained gap";
+        var badId = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(form));
+        var badIdHtml = await badId.Content.ReadAsStringAsync();
+        Assert.Contains("ID is invalid", badIdHtml, StringComparison.Ordinal);
+        Assert.Contains("Retained gap", badIdHtml, StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+
+        var dupe = Guid.NewGuid().ToString("N");
+        form["TechnicalInput.Gaps[0].Id"] = dupe;
+        form["TechnicalInput.Gaps[1].Id"] = dupe;
+        var dupResponse = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(form));
+        Assert.Contains("IDs must be unique", await dupResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        form.Remove("TechnicalInput.Gaps[1].Id");
+        form["TechnicalInput.Gaps[0].Id"] = string.Empty;
+        form["TechnicalInput.Gaps[0].EvidenceQuestionIds"] = "q-unknown";
+        var badEvidence = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(form));
+        Assert.Contains("Retained gap", await badEvidence.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+
+        form.Remove("TechnicalInput.Gaps[0].EvidenceQuestionIds");
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty());
+        var stale = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(form));
+        Assert.Contains("changed after you opened it", await stale.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(new Dictionary<string, string>()))).StatusCode);
+        var regular = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        regular.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "user");
+        Assert.Equal(HttpStatusCode.Forbidden, (await regular.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(new Dictionary<string, string>()))).StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var stored = await db.Set<AssessmentReportRevision>().SingleAsync(item => item.Id == revision.Id);
+            stored.Status = AssessmentReportRevisionStatus.Approved;
+            await db.SaveChangesAsync();
+        }
+        var fresh = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        form["ExpectedConcurrencyStamp"] = fresh.ConcurrencyStamp.ToString();
+        var nonDraft = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(form));
+        Assert.Contains("Only Draft report revisions can be edited", await nonDraft.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TechnicalGaps_NotAssessed_With_Content_Is_Rejected_And_Input_Retained()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = TechForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["TechnicalInput.State"] = nameof(ReportAssessmentState.NotAssessed);
+        form["TechnicalInput.Gaps[0].Id"] = string.Empty;
+        form["TechnicalInput.Gaps[0].Title"] = "Retained conflicting gap";
+        form["TechnicalInput.Recommendations[0].Id"] = string.Empty;
+        form["TechnicalInput.Recommendations[0].Title"] = "Retained conflicting recommendation";
+
+        var response = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(form));
+        var resultHtml = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("must not contain assessed content", resultHtml, StringComparison.Ordinal);
+        Assert.Contains("Retained conflicting gap", resultHtml, StringComparison.Ordinal);
+        Assert.Contains("Retained conflicting recommendation", resultHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Technical Gaps &amp; Architecture Draft saved.", resultHtml, StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task TechnicalGaps_Recommendation_Preserves_NonQuestionnaire_Evidence()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var preserved = new ReportEvidenceReference(ReportEvidenceKind.ScoringDimension, "D1");
+        var existing = new ArchitectureRecommendation("22222222222222222222222222222222", "Rec", "Do it", "Because",
+            ReportContentProvenance.ConsultantEntered, ReportVerificationStatus.Unverified, new[] { preserved });
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            TechnicalGapsAndArchitecture = new TechnicalGapsAndArchitectureSection(ReportAssessmentState.Assessed, null, new[] { existing })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        Assert.Contains("Other preserved evidence references (read-only): ScoringDimension: D1", html, StringComparison.Ordinal);
+        var form = TechForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["TechnicalInput.Recommendations[0].Id"] = existing.Id;
+        form["TechnicalInput.Recommendations[0].EvidenceQuestionIds"] = "q02";
+
+        var response = await client.PostAsync(url + "?handler=SaveTechnicalGaps", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        var rec = Assert.Single(saved.TechnicalGapsAndArchitecture.Recommendations!);
+        Assert.Equal(existing.Id, rec.Id);
+        Assert.Equal("Do it", rec.Recommendation);
+        Assert.Contains(rec.EvidenceReferences, r => r.Kind == ReportEvidenceKind.ScoringDimension && r.ReferenceId == "D1");
+        Assert.Contains(rec.EvidenceReferences, r => r.QuestionId == "q02");
     }
 
     private static Dictionary<string, string> FindingForm(Guid assessmentId, Guid responseId, AssessmentReportRevision revision, string html) => new()

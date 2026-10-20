@@ -1,0 +1,39 @@
+@using SentinelMfgSuite.Web.Models.Assessments.Reports
+@using SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments
+@model ReportModel.ArchitectureRecommendationEditorModel
+@{
+    var input = Model.Input;
+    var prefix = $"TechnicalInput.Recommendations[{Model.Index}]";
+    var idPrefix = $"tech-rec-{Model.Index}";
+    var otherEvidence = Model.Stored?.EvidenceReferences
+        .Where(reference => reference.Kind != ReportEvidenceKind.QuestionnaireAnswer).ToArray();
+    var evidenceModel = new ReportModel.EvidenceCheckboxModel(Model.Options, prefix + ".EvidenceQuestionIds", idPrefix + "-evidence", input.EvidenceQuestionIds);
+}
+<fieldset class="border border-secondary rounded-3 p-3 mb-3 architecture-recommendation-entry">
+    <legend class="float-none w-auto px-2 small">Architecture recommendation</legend>
+    <input type="hidden" name="@(prefix + ".Id")" value="@input.Id" />
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-title">Title</label><input id="@(idPrefix)-title" name="@(prefix + ".Title")" value="@input.Title" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-recommendation">Recommendation</label><textarea id="@(idPrefix)-recommendation" name="@(prefix + ".Recommendation")" rows="3" class="form-control bg-dark text-light border-secondary">@input.Recommendation</textarea></div>
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-rationale">Rationale</label><textarea id="@(idPrefix)-rationale" name="@(prefix + ".Rationale")" rows="3" class="form-control bg-dark text-light border-secondary">@input.Rationale</textarea></div>
+    <div class="row g-2">
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-prov">Provenance</label><select id="@(idPrefix)-prov" name="@(prefix + ".Provenance")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportContentProvenance>()) { <option value="@value" selected="@(value == (input.Provenance ?? ReportContentProvenance.ConsultantEntered))">@value</option> }</select></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-ver">Verification status</label><select id="@(idPrefix)-ver" name="@(prefix + ".VerificationStatus")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportVerificationStatus>()) { <option value="@value" selected="@(value == (input.VerificationStatus ?? ReportVerificationStatus.Unverified))">@value</option> }</select></div>
+    </div>
+    <div class="form-check mb-2">
+        <input type="checkbox" class="form-check-input" id="@(idPrefix)-requires" name="@(prefix + ".RequiresValidation")" value="true" checked="@(input.RequiresValidation ?? false)" />
+        <input type="hidden" name="@(prefix + ".RequiresValidation")" value="false" />
+        <label class="form-check-label" for="@(idPrefix)-requires">Requires validation</label>
+    </div>
+    <details class="mb-2">
+        <summary class="small">Questionnaire evidence references</summary>
+        <partial name="_EvidenceCheckboxes" model="evidenceModel" />
+        @if (otherEvidence is { Length: > 0 })
+        {
+            <p class="small text-secondary mt-2 mb-0">Other preserved evidence references (read-only): @string.Join(", ", otherEvidence.Select(reference => $"{reference.Kind}: {reference.ReferenceId}"))</p>
+        }
+    </details>
+    @if (Model.Stored is null)
+    {
+        <button type="button" class="btn btn-outline-danger btn-sm remove-new-row" aria-label="Remove this unsaved architecture recommendation">Remove unsaved recommendation</button>
+    }
+</fieldset>

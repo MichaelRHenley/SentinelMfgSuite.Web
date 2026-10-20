@@ -201,6 +201,67 @@ public sealed class ConsultantReportContentTests
         Assert.Contains(result.Issues, issue => issue.Code == "section-state-content-conflict");
     }
 
+    private static ConsultantReportContent TechnicalContent(TechnicalGapEntry? gap, ArchitectureRecommendation? recommendation) =>
+        ConsultantReportContent.CreateEmpty() with
+        {
+            TechnicalGapsAndArchitecture = new TechnicalGapsAndArchitectureSection(ReportAssessmentState.Assessed,
+                gap is null ? null : new[] { gap }, recommendation is null ? null : new[] { recommendation })
+        };
+
+    private static TechnicalGapEntry Gap(string title = "Gap", string description = "Description", string impact = "Impact",
+        ReportVerificationStatus verification = ReportVerificationStatus.ConsultantVerified, bool requiresValidation = false, bool withEvidence = true) =>
+        new("gap-1", title, description, impact, ReportContentProvenance.ConsultantEntered, verification,
+            withEvidence ? new[] { new ReportEvidenceReference(ReportEvidenceKind.ConsultantObservation, "obs-1") } : Array.Empty<ReportEvidenceReference>(),
+            requiresValidation);
+
+    private static ArchitectureRecommendation Recommendation(string title = "Rec", string text = "Do it", string rationale = "Because",
+        ReportVerificationStatus verification = ReportVerificationStatus.ConsultantVerified, bool requiresValidation = false, bool withEvidence = true) =>
+        new("rec-1", title, text, rationale, ReportContentProvenance.ConsultantEntered, verification,
+            withEvidence ? new[] { new ReportEvidenceReference(ReportEvidenceKind.ConsultantObservation, "obs-1") } : Array.Empty<ReportEvidenceReference>(),
+            requiresValidation);
+
+    private static AssessmentReportContentValidationResult ValidateTechnical(ConsultantReportContent content, AssessmentReportContentStage stage) =>
+        new AssessmentReportContentValidator().Validate(content,
+            new(stage, ConsultantObservationIds: new HashSet<string> { "obs-1" }));
+
+    [Fact]
+    public void Validator_Technical_InReview_Requires_Evidence_But_Not_Verification_Or_Text()
+    {
+        var missingEvidence = ValidateTechnical(TechnicalContent(Gap(withEvidence: false), Recommendation(withEvidence: false)), AssessmentReportContentStage.InReview);
+        Assert.Contains(missingEvidence.Issues, i => i.Code == "evidence-required" && i.Path.StartsWith("technicalGapsAndArchitecture.gaps[0]", StringComparison.Ordinal));
+        Assert.Contains(missingEvidence.Issues, i => i.Code == "evidence-required" && i.Path.StartsWith("technicalGapsAndArchitecture.recommendations[0]", StringComparison.Ordinal));
+
+        var lenient = ValidateTechnical(TechnicalContent(
+            Gap(title: "", description: "", impact: "", verification: ReportVerificationStatus.Unverified, requiresValidation: true),
+            Recommendation(title: "", text: "", rationale: "", verification: ReportVerificationStatus.Unverified, requiresValidation: true)), AssessmentReportContentStage.InReview);
+        Assert.DoesNotContain(lenient.Issues, i => i.Path.StartsWith("technicalGapsAndArchitecture.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validator_Technical_Approved_Requires_Fields_Evidence_And_Verified_NoValidation()
+    {
+        var result = ValidateTechnical(TechnicalContent(
+            Gap(title: "", description: "", impact: "", verification: ReportVerificationStatus.Unverified, requiresValidation: true, withEvidence: false),
+            Recommendation(title: "", text: "", rationale: "", verification: ReportVerificationStatus.Unverified, requiresValidation: true, withEvidence: false)),
+            AssessmentReportContentStage.Approved);
+
+        foreach (var code in new[] { "technical-gap-title-required", "technical-gap-description-required", "technical-gap-impact-required",
+                     "recommendation-title-required", "recommendation-text-required", "recommendation-rationale-required" })
+        {
+            Assert.Contains(result.Issues, i => i.Code == code);
+        }
+        Assert.Equal(2, result.Issues.Count(i => i.Code == "evidence-required" && i.Path.StartsWith("technicalGapsAndArchitecture.", StringComparison.Ordinal)));
+        Assert.Equal(2, result.Issues.Count(i => i.Code == "validation-required"));
+
+        var unverifiedOnly = ValidateTechnical(TechnicalContent(Gap(verification: ReportVerificationStatus.Unverified), Recommendation()), AssessmentReportContentStage.Approved);
+        Assert.Contains(unverifiedOnly.Issues, i => i.Code == "validation-required" && i.Path == "technicalGapsAndArchitecture.gaps[0]");
+        var requiresOnly = ValidateTechnical(TechnicalContent(Gap(), Recommendation(requiresValidation: true)), AssessmentReportContentStage.Approved);
+        Assert.Contains(requiresOnly.Issues, i => i.Code == "validation-required" && i.Path == "technicalGapsAndArchitecture.recommendations[0]");
+
+        var clean = ValidateTechnical(TechnicalContent(Gap(), Recommendation()), AssessmentReportContentStage.Approved);
+        Assert.DoesNotContain(clean.Issues, i => i.Path.StartsWith("technicalGapsAndArchitecture.", StringComparison.Ordinal));
+    }
+
     private static AiImplementationOpportunity Opportunity() => new(
         "opportunity-1", "Reduce unplanned downtime", "Maintenance", "Predictive maintenance alerting", "Reduce downtime hours",
         Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), new[] { "Baseline not yet measured" },

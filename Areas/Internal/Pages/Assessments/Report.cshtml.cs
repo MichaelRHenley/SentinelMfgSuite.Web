@@ -49,7 +49,11 @@ public sealed class ReportModel : PageModel
     [BindProperty]
     public AiOpportunitiesInput AiInput { get; set; } = new();
 
+    [BindProperty]
+    public TechnicalGapsInput TechnicalInput { get; set; } = new();
+
     private bool _aiInputHandled;
+    private bool _technicalInputHandled;
     private const int MaxListItems = 50;
     private const int MaxListItemLength = 500;
     private const decimal MaxEstimateAmount = 1_000_000_000_000m;
@@ -339,7 +343,161 @@ public sealed class ReportModel : PageModel
         {
             AiInput = AiOpportunitiesInput.From(ReportContent.AiOpportunitiesAndRoi);
         }
+        if (!_technicalInputHandled && ReportContent is not null)
+        {
+            TechnicalInput = TechnicalGapsInput.From(ReportContent.TechnicalGapsAndArchitecture);
+        }
         base.OnPageHandlerExecuted(context);
+    }
+
+    public async Task<IActionResult> OnPostSaveTechnicalGapsAsync(CancellationToken ct = default)
+    {
+        _technicalInputHandled = true;
+        SetPrivateHeaders();
+        var source = await FindSubmittedResponseAsync(AssessmentId, SubmittedResponseId, ct);
+        if (source is null || !IsOwnerAllowed(source.Assessment))
+        {
+            return NotFound();
+        }
+        PopulateIdentity(source.Assessment, source.Response.SubmittedUtc!.Value);
+        PopulateQuestionnaire(source.Assessment.QuestionnaireVersion, source.Response.Data);
+        var postedConcurrencyStamp = ExpectedConcurrencyStamp;
+
+        var reportResult = await _reportService.GetBySubmittedResponseIdAsync(SubmittedResponseId, User, ct);
+        if (reportResult.State != AssessmentReportServiceState.Retrieved || reportResult.Report is not { } report)
+        {
+            return NotFound();
+        }
+        var revision = report.Revisions.SingleOrDefault(item => item.Id == RevisionId);
+        if (revision is null)
+        {
+            return NotFound();
+        }
+        RevisionId = revision.Id;
+        RevisionNumber = revision.RevisionNumber;
+        RevisionStatus = revision.Status;
+        Scoring = CreateScoringView(revision.ScoringSnapshot, revision.ScoringSnapshotSchemaVersion);
+
+        var retrieved = await _contentService.GetAsync(revision.Id, User, ct);
+        if (!retrieved.Succeeded || retrieved.Content is null)
+        {
+            return retrieved.State == AssessmentReportRevisionContentState.Forbidden ? NotFound() : StatusCode(500);
+        }
+        LastSavedUtc = retrieved.UpdatedUtc;
+        ReportContent = retrieved.Content;
+        if (revision.Status != AssessmentReportRevisionStatus.Draft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+            return Page();
+        }
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+        if (retrieved.ConcurrencyStamp != postedConcurrencyStamp)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft changed after you opened it. Your technical gaps and recommendations have been kept; reload the report before saving again.");
+            return Page();
+        }
+
+        var offeredQuestionIds = EvidenceOptions.Select(option => option.QuestionId).ToHashSet(StringComparer.Ordinal);
+        var existingSection = retrieved.Content.TechnicalGapsAndArchitecture;
+        var storedGaps = existingSection.Gaps ?? Array.Empty<TechnicalGapEntry>();
+        var storedRecommendations = existingSection.Recommendations ?? Array.Empty<ArchitectureRecommendation>();
+        var storedGapIds = storedGaps.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var storedRecommendationIds = storedRecommendations.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var submittedGapIds = new HashSet<string>(StringComparer.Ordinal);
+        var submittedRecommendationIds = new HashSet<string>(StringComparer.Ordinal);
+        var mergedGaps = new List<TechnicalGapEntry>();
+        var mergedRecommendations = new List<ArchitectureRecommendation>();
+
+        for (var index = 0; index < TechnicalInput.Gaps.Count; index++)
+        {
+            var input = TechnicalInput.Gaps[index];
+            var id = ResolveItemId(input.Id, storedGapIds, submittedGapIds, $"TechnicalInput.Gaps[{index}].Id", $"Gap {index + 1}");
+            if (id is null)
+            {
+                continue;
+            }
+            input.Id = id;
+            var existing = storedGaps.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            var evidence = MergeQuestionnaireEvidence(existing?.EvidenceReferences, input.EvidenceQuestionIds, offeredQuestionIds);
+            mergedGaps.Add(new TechnicalGapEntry(
+                id,
+                input.Title?.Trim() ?? existing?.Title ?? string.Empty,
+                input.Description?.Trim() ?? existing?.Description ?? string.Empty,
+                input.Impact?.Trim() ?? existing?.Impact ?? string.Empty,
+                input.Provenance ?? existing?.Provenance ?? ReportContentProvenance.ConsultantEntered,
+                input.VerificationStatus ?? existing?.VerificationStatus ?? ReportVerificationStatus.Unverified,
+                evidence,
+                input.RequiresValidation ?? existing?.RequiresValidation ?? false));
+        }
+
+        for (var index = 0; index < TechnicalInput.Recommendations.Count; index++)
+        {
+            var input = TechnicalInput.Recommendations[index];
+            var id = ResolveItemId(input.Id, storedRecommendationIds, submittedRecommendationIds, $"TechnicalInput.Recommendations[{index}].Id", $"Recommendation {index + 1}");
+            if (id is null)
+            {
+                continue;
+            }
+            input.Id = id;
+            var existing = storedRecommendations.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            var evidence = MergeQuestionnaireEvidence(existing?.EvidenceReferences, input.EvidenceQuestionIds, offeredQuestionIds);
+            mergedRecommendations.Add(new ArchitectureRecommendation(
+                id,
+                input.Title?.Trim() ?? existing?.Title ?? string.Empty,
+                input.Recommendation?.Trim() ?? existing?.Recommendation ?? string.Empty,
+                input.Rationale?.Trim() ?? existing?.Rationale ?? string.Empty,
+                input.Provenance ?? existing?.Provenance ?? ReportContentProvenance.ConsultantEntered,
+                input.VerificationStatus ?? existing?.VerificationStatus ?? ReportVerificationStatus.Unverified,
+                evidence,
+                input.RequiresValidation ?? existing?.RequiresValidation ?? false));
+        }
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+
+        mergedGaps.AddRange(storedGaps.Where(item => !submittedGapIds.Contains(item.Id)));
+        mergedRecommendations.AddRange(storedRecommendations.Where(item => !submittedRecommendationIds.Contains(item.Id)));
+        var updatedSection = existingSection with
+        {
+            State = TechnicalInput.State,
+            Gaps = mergedGaps.Count == 0 && existingSection.Gaps is null ? null : mergedGaps,
+            Recommendations = mergedRecommendations.Count == 0 && existingSection.Recommendations is null ? null : mergedRecommendations
+        };
+        var updatedContent = retrieved.Content with { TechnicalGapsAndArchitecture = updatedSection };
+        var saved = await _contentService.SaveDraftAsync(revision.Id, postedConcurrencyStamp, updatedContent, User, ct);
+        ValidationIssues = saved.ValidationIssues ?? Array.Empty<ReportContentValidationIssue>();
+        if (saved.State == AssessmentReportRevisionContentState.Saved)
+        {
+            ReportContent = saved.Content;
+            ExpectedConcurrencyStamp = saved.ConcurrencyStamp ?? ExpectedConcurrencyStamp;
+            LastSavedUtc = saved.UpdatedUtc;
+            TechnicalInput = TechnicalGapsInput.From(saved.Content!.TechnicalGapsAndArchitecture);
+            SaveStatus = "Technical Gaps & Architecture Draft saved.";
+            return Page();
+        }
+        if (saved.State == AssessmentReportRevisionContentState.ConcurrencyConflict)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft was changed by another editor. Your technical gaps and recommendations have been kept and were not saved; reload to review the newer version.");
+        }
+        else if (saved.State == AssessmentReportRevisionContentState.NotDraft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+        }
+        else if (saved.State == AssessmentReportRevisionContentState.ValidationFailed)
+        {
+            ModelState.AddModelError(string.Empty, "Review the validation issues below. Your entered technical gaps and recommendations have been kept.");
+        }
+        else
+        {
+            ModelState.AddModelError(string.Empty, "Draft could not be saved. Your entered technical gaps and recommendations have been kept.");
+        }
+        return Page();
     }
 
     public async Task<IActionResult> OnPostSaveAiOpportunitiesAsync(CancellationToken ct = default)
@@ -1091,6 +1249,70 @@ public sealed class ReportModel : PageModel
         };
     }
 
+    public sealed class TechnicalGapsInput
+    {
+        public ReportAssessmentState State { get; set; } = ReportAssessmentState.NotAssessed;
+        public List<TechnicalGapInput> Gaps { get; set; } = new();
+        public List<ArchitectureRecommendationInput> Recommendations { get; set; } = new();
+
+        public static TechnicalGapsInput From(TechnicalGapsAndArchitectureSection section) => new()
+        {
+            State = section.State,
+            Gaps = section.Gaps?.Select(TechnicalGapInput.From).ToList() ?? new List<TechnicalGapInput>(),
+            Recommendations = section.Recommendations?.Select(ArchitectureRecommendationInput.From).ToList() ?? new List<ArchitectureRecommendationInput>()
+        };
+    }
+
+    public sealed class TechnicalGapInput
+    {
+        public string? Id { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Title { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Description { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Impact { get; set; }
+        public ReportContentProvenance? Provenance { get; set; }
+        public ReportVerificationStatus? VerificationStatus { get; set; }
+        public bool? RequiresValidation { get; set; }
+        public List<string>? EvidenceQuestionIds { get; set; } = new();
+
+        public static TechnicalGapInput From(TechnicalGapEntry item) => new()
+        {
+            Id = item.Id,
+            Title = item.Title,
+            Description = item.Description,
+            Impact = item.Impact,
+            Provenance = item.Provenance,
+            VerificationStatus = item.VerificationStatus,
+            RequiresValidation = item.RequiresValidation,
+            EvidenceQuestionIds = QuestionIdsOf(item.EvidenceReferences)
+        };
+    }
+
+    public sealed class ArchitectureRecommendationInput
+    {
+        public string? Id { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Title { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Recommendation { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Rationale { get; set; }
+        public ReportContentProvenance? Provenance { get; set; }
+        public ReportVerificationStatus? VerificationStatus { get; set; }
+        public bool? RequiresValidation { get; set; }
+        public List<string>? EvidenceQuestionIds { get; set; } = new();
+
+        public static ArchitectureRecommendationInput From(ArchitectureRecommendation item) => new()
+        {
+            Id = item.Id,
+            Title = item.Title,
+            Recommendation = item.Recommendation,
+            Rationale = item.Rationale,
+            Provenance = item.Provenance,
+            VerificationStatus = item.VerificationStatus,
+            RequiresValidation = item.RequiresValidation,
+            EvidenceQuestionIds = QuestionIdsOf(item.EvidenceReferences)
+        };
+    }
+
+    public sealed record TechnicalGapEditorModel(TechnicalGapInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, TechnicalGapEntry? Stored);
+    public sealed record ArchitectureRecommendationEditorModel(ArchitectureRecommendationInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, ArchitectureRecommendation? Stored);
     public sealed record EvidenceCheckboxModel(IReadOnlyList<QuestionnaireAnswerView> Options, string FieldName, string IdPrefix, IReadOnlyCollection<string>? Selected);
     public sealed record AiOpportunityEditorModel(OpportunityInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, AiImplementationOpportunity? Stored);
     public sealed record AiFindingEditorModel(FindingInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, ReportFinding? Stored);

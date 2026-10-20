@@ -30,7 +30,7 @@
 
     <section class="container pb-5">
         <div class="alert alert-warning" role="status">
-            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, and AI Opportunities &amp; ROI sections. Approval, issuance, PDF generation, and customer delivery are not yet available.
+            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, and Technical Gaps &amp; Architecture sections. Approval, issuance, PDF generation, and customer delivery are not yet available.
         </div>
 
         @if (!Model.RevisionId.HasValue)
@@ -134,8 +134,8 @@
                     <section class="card sentinel-card border-0 rounded-4 h-100" aria-labelledby="workspaceHeading">
                         <div class="card-body p-3 p-md-4">
                             <h2 id="workspaceHeading" class="h4 fw-semibold">Consultant report workspace</h2>
-                            Edit the Executive Summary, Industrial Data &amp; Systems, and AI Opportunities &amp; ROI Drafts. Evidence and frozen scoring remain read-only in the adjacent panel.
-                            @if (Model.SaveStatus is string saveStatus && saveStatus != "AI Opportunities & ROI Draft saved.")
+                            Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, and Technical Gaps &amp; Architecture Drafts. Evidence and frozen scoring remain read-only in the adjacent panel.
+                            @if (Model.SaveStatus is string saveStatus && saveStatus != "AI Opportunities & ROI Draft saved." && saveStatus != "Technical Gaps & Architecture Draft saved.")
                             {
                                 <div class="alert alert-success" role="status">@saveStatus</div>
                             }
@@ -451,9 +451,65 @@
                                     <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                                 </form>
                             </section>
+                            <section id="technicalGaps" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="technicalGapsHeading">
+                                <h3 id="technicalGapsHeading" class="h5 fw-semibold">Technical Gaps &amp; Architecture</h3>
+                                <p class="small text-secondary">New records are consultant-entered, unverified and do not require validation unless you select it. Records are never verified automatically. Existing IDs, provenance and non-questionnaire evidence are preserved; saved records cannot be deleted here.</p>
+                                @if (Model.SaveStatus == "Technical Gaps & Architecture Draft saved.")
+                                {
+                                    <div class="alert alert-success" role="status">@Model.SaveStatus</div>
+                                }
+                                <form method="post" asp-page-handler="SaveTechnicalGaps" asp-fragment="technicalGaps">
+                                    <input type="hidden" asp-for="AssessmentId" />
+                                    <input type="hidden" asp-for="SubmittedResponseId" />
+                                    <input type="hidden" asp-for="RevisionId" />
+                                    <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                    @if (Model.ValidationIssues.Count > 0)
+                                    {
+                                        <div class="mb-3" role="status">
+                                            @foreach (var issue in Model.ValidationIssues)
+                                            {
+                                                <div class="alert @(issue.Severity == SentinelMfgSuite.Web.Services.Assessments.Reports.ReportContentValidationSeverity.Error ? "alert-danger" : "alert-warning") py-2 mb-2"><strong>@issue.Severity:</strong> @issue.Message</div>
+                                            }
+                                        </div>
+                                    }
+                                    <div class="mb-3">
+                                        <label asp-for="TechnicalInput.State" class="form-label">Section assessment state</label>
+                                        <select asp-for="TechnicalInput.State" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState>()" class="form-select bg-dark text-light border-secondary"></select>
+                                    </div>
+                                    <h4 class="h6">Gaps</h4>
+                                    <div id="technicalGapsList">
+                                        @for (var i = 0; i < Model.TechnicalInput.Gaps.Count; i++)
+                                        {
+                                            var storedGap = Model.ReportContent?.TechnicalGapsAndArchitecture.Gaps?.FirstOrDefault(g => g.Id == Model.TechnicalInput.Gaps[i].Id);
+                                            <partial name="_TechnicalGapEditor" model="new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.TechnicalGapEditorModel(Model.TechnicalInput.Gaps[i], i.ToString(), Model.EvidenceOptions, storedGap)" />
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-outline-light btn-sm mb-3" id="addTechnicalGap">Add gap</button>
+                                    <h4 class="h6">Recommendations</h4>
+                                    <div id="technicalRecommendationsList">
+                                        @for (var i = 0; i < Model.TechnicalInput.Recommendations.Count; i++)
+                                        {
+                                            var storedRec = Model.ReportContent?.TechnicalGapsAndArchitecture.Recommendations?.FirstOrDefault(r => r.Id == Model.TechnicalInput.Recommendations[i].Id);
+                                            <partial name="_ArchitectureRecommendationEditor" model="new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.ArchitectureRecommendationEditorModel(Model.TechnicalInput.Recommendations[i], i.ToString(), Model.EvidenceOptions, storedRec)" />
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-outline-light btn-sm mb-3" id="addTechnicalRecommendation">Add recommendation</button>
+                                    @{
+                                        var newGapModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.TechnicalGapEditorModel(new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.TechnicalGapInput(), "__index__", Model.EvidenceOptions, null);
+                                        var newRecModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.ArchitectureRecommendationEditorModel(new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.ArchitectureRecommendationInput(), "__index__", Model.EvidenceOptions, null);
+                                    }
+                                    <template id="technicalGapTemplate">
+                                        <partial name="_TechnicalGapEditor" model="newGapModel" />
+                                    </template>
+                                    <template id="technicalRecommendationTemplate">
+                                        <partial name="_ArchitectureRecommendationEditor" model="newRecModel" />
+                                    </template>
+                                    <div asp-validation-summary="All" class="text-danger mb-3" role="alert"></div>
+                                    <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
+                                </form>
+                            </section>
                             <nav aria-label="Other consultant report sections">
                                 <ol class="list-group list-group-numbered">
-                                    <li class="list-group-item bg-transparent text-light">Technical Gaps &amp; Architecture <span class="text-secondary">— editor not yet available</span></li>
                                     <li class="list-group-item bg-transparent text-light">Implementation Roadmap <span class="text-secondary">— editor not yet available</span></li>
                                     <li class="list-group-item bg-transparent text-light">Executive Presentation <span class="text-secondary">— editor not yet available</span></li>
                                 </ol>
@@ -504,6 +560,37 @@
         };
         wireAiAdd('addAiOpportunity', 'aiOpportunitiesList', 'aiOpportunityTemplate', '.ai-opportunity-entry');
         wireAiAdd('addAiFinding', 'aiFindingsList', 'aiFindingTemplate', '.ai-finding-entry');
+
+        const wireTechnical = (buttonId, listId, templateId, selector, root) => {
+            const button = document.getElementById(buttonId);
+            const techList = document.getElementById(listId);
+            const techTemplate = document.getElementById(templateId);
+            if (!button || !techList || !techTemplate) return;
+            const reindex = () => {
+                techList.querySelectorAll(selector).forEach((entry, index) => {
+                    entry.querySelectorAll('[name]').forEach(e => { e.name = e.name.replace(/\[\d+\]/, `[${index}]`); });
+                    entry.querySelectorAll('[id]').forEach(e => { e.id = e.id.replace(new RegExp(`^${root}-\\d+-`), `${root}-${index}-`); });
+                    entry.querySelectorAll('[for]').forEach(e => { e.htmlFor = e.htmlFor.replace(new RegExp(`^${root}-\\d+-`), `${root}-${index}-`); });
+                });
+            };
+            button.addEventListener('click', () => {
+                const index = techList.querySelectorAll(selector).length;
+                const fragment = techTemplate.content.cloneNode(true);
+                fragment.querySelectorAll('[name]').forEach(e => { e.name = e.name.replaceAll('__index__', index); });
+                fragment.querySelectorAll('[id]').forEach(e => { e.id = e.id.replaceAll('__index__', index); });
+                fragment.querySelectorAll('[for]').forEach(e => { e.htmlFor = e.htmlFor.replaceAll('__index__', index); });
+                techList.appendChild(fragment);
+            });
+            techList.addEventListener('click', event => {
+                const target = event.target.closest('.remove-new-row');
+                if (!target) return;
+                target.closest(selector)?.remove();
+                reindex();
+                button.focus();
+            });
+        };
+        wireTechnical('addTechnicalGap', 'technicalGapsList', 'technicalGapTemplate', '.technical-gap-entry', 'tech-gap');
+        wireTechnical('addTechnicalRecommendation', 'technicalRecommendationsList', 'technicalRecommendationTemplate', '.architecture-recommendation-entry', 'tech-rec');
 
         const addFindingButton = document.getElementById('addIndustrialFinding');
         const findingList = document.getElementById('industrialFindingsList');
