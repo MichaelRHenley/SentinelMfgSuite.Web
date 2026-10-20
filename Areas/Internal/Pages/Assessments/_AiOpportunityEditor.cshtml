@@ -1,0 +1,83 @@
+@using SentinelMfgSuite.Web.Models.Assessments.Reports
+@using SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments
+@model ReportModel.AiOpportunityEditorModel
+@{
+    var input = Model.Input;
+    var stored = Model.Stored;
+    var prefix = $"AiInput.Opportunities[{Model.Index}]";
+    var idPrefix = $"ai-opp-{Model.Index}";
+    var isExistingEstimated = stored?.Estimate.Status == ReportEstimateStatus.Estimated;
+    var otherEvidence = stored?.EvidenceReferences.Where(reference => reference.Kind != ReportEvidenceKind.QuestionnaireAnswer).ToArray();
+    var otherEstimateEvidence = stored?.Estimate.EvidenceReferences?.Where(reference => reference.Kind != ReportEvidenceKind.QuestionnaireAnswer).ToArray();
+    var oppEvidence = new ReportModel.EvidenceCheckboxModel(Model.Options, prefix + ".EvidenceQuestionIds", idPrefix + "-evidence", input.EvidenceQuestionIds);
+    var estEvidence = new ReportModel.EvidenceCheckboxModel(Model.Options, prefix + ".EstimateEvidenceQuestionIds", idPrefix + "-est-evidence", input.EstimateEvidenceQuestionIds);
+}
+<fieldset class="border border-secondary rounded-3 p-3 mb-3 ai-opportunity-entry">
+    <legend class="float-none w-auto px-2 small">Opportunity</legend>
+    <input type="hidden" name="@(prefix + ".Id")" value="@input.Id" />
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-problem">Business problem</label><textarea id="@(idPrefix)-problem" name="@(prefix + ".BusinessProblem")" rows="2" class="form-control bg-dark text-light border-secondary">@input.BusinessProblem</textarea></div>
+    <div class="row g-2">
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-area">Operational process or area</label><input id="@(idPrefix)-area" name="@(prefix + ".OperationalProcessOrArea")" value="@input.OperationalProcessOrArea" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-usecase">Proposed use case</label><input id="@(idPrefix)-usecase" name="@(prefix + ".ProposedUseCase")" value="@input.ProposedUseCase" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+    </div>
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-outcome">Expected measurable outcome</label><textarea id="@(idPrefix)-outcome" name="@(prefix + ".ExpectedMeasurableOutcome")" rows="2" class="form-control bg-dark text-light border-secondary">@input.ExpectedMeasurableOutcome</textarea></div>
+    <p class="small text-secondary mb-1">Lists: one item per line. A blank list is saved as an explicit empty list.</p>
+    <div class="row g-2">
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-sources">Required data sources</label><textarea id="@(idPrefix)-sources" name="@(prefix + ".RequiredDataSourcesText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.RequiredDataSourcesText</textarea></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-prereq">Technical prerequisites</label><textarea id="@(idPrefix)-prereq" name="@(prefix + ".TechnicalPrerequisitesText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.TechnicalPrerequisitesText</textarea></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-deps">Implementation dependencies</label><textarea id="@(idPrefix)-deps" name="@(prefix + ".ImplementationDependenciesText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.ImplementationDependenciesText</textarea></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-risks">Risks and assumptions</label><textarea id="@(idPrefix)-risks" name="@(prefix + ".RisksAndAssumptionsText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.RisksAndAssumptionsText</textarea></div>
+    </div>
+
+    <fieldset class="border border-secondary rounded-3 p-2 mb-3">
+        <legend class="float-none w-auto px-2 small">Implementation scope</legend>
+        <div class="row g-2">
+            <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-scope-state">Scope state</label><select id="@(idPrefix)-scope-state" name="@(prefix + ".ScopeState")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportAssessmentState>()) { <option value="@value" selected="@(value == input.ScopeState)">@value</option> }</select></div>
+            <div class="col-md-8 mb-2"><label class="form-label" for="@(idPrefix)-scope-desc">Description</label><textarea id="@(idPrefix)-scope-desc" name="@(prefix + ".ScopeDescription")" rows="2" class="form-control bg-dark text-light border-secondary">@input.ScopeDescription</textarea></div>
+            <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-scope-in">In-scope items</label><textarea id="@(idPrefix)-scope-in" name="@(prefix + ".ScopeInText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.ScopeInText</textarea></div>
+            <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-scope-out">Out-of-scope items</label><textarea id="@(idPrefix)-scope-out" name="@(prefix + ".ScopeOutText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.ScopeOutText</textarea></div>
+        </div>
+    </fieldset>
+
+    <fieldset class="border border-secondary rounded-3 p-2 mb-3">
+        <legend class="float-none w-auto px-2 small">Implementation effort and cost estimate</legend>
+        <p class="small text-secondary">Implementation effort and cost only. No benefits, ROI or payback are calculated, and nothing is estimated unless you enter it.</p>
+        <div class="row g-2">
+            <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-est-status">Estimate status</label><select id="@(idPrefix)-est-status" name="@(prefix + ".EstimateStatus")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportEstimateStatus>()) { <option value="@value" selected="@(value == input.EstimateStatus)">@value</option> }</select></div>
+            <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-effort">Effort value</label><input id="@(idPrefix)-effort" name="@(prefix + ".EffortValue")" value="@input.EffortValue" inputmode="decimal" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+            <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-unit">Effort unit</label><input id="@(idPrefix)-unit" name="@(prefix + ".EffortUnit")" value="@input.EffortUnit" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+            <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-cost">Cost amount</label><input id="@(idPrefix)-cost" name="@(prefix + ".CostAmount")" value="@input.CostAmount" inputmode="decimal" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+            <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-currency">Currency</label><input id="@(idPrefix)-currency" name="@(prefix + ".Currency")" value="@input.Currency" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+        </div>
+        <div class="mb-2"><label class="form-label" for="@(idPrefix)-basis">Basis</label><textarea id="@(idPrefix)-basis" name="@(prefix + ".EstimateBasis")" rows="2" class="form-control bg-dark text-light border-secondary">@input.EstimateBasis</textarea></div>
+        <div class="mb-2"><label class="form-label" for="@(idPrefix)-assumptions">Estimate assumptions (one per line)</label><textarea id="@(idPrefix)-assumptions" name="@(prefix + ".EstimateAssumptionsText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.EstimateAssumptionsText</textarea></div>
+        @if (isExistingEstimated)
+        {
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="@(prefix + ".ConfirmEstimateReset")" value="true" id="@(idPrefix)-confirm-reset" />
+                <label class="form-check-label small" for="@(idPrefix)-confirm-reset">Confirm estimate reset (required to change an existing estimate to NotEstimated; clears effort, cost, basis, assumptions and evidence)</label>
+            </div>
+        }
+        <details class="mb-1">
+            <summary class="small">Estimate questionnaire evidence references</summary>
+            <partial name="_EvidenceCheckboxes" model="estEvidence" />
+            @if (otherEstimateEvidence is { Length: > 0 })
+            {
+                <p class="small text-secondary mt-2 mb-0">Other preserved evidence references (read-only): @string.Join(", ", otherEstimateEvidence.Select(reference => $"{reference.Kind}: {reference.ReferenceId}"))</p>
+            }
+        </details>
+    </fieldset>
+
+    <div class="row g-2">
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-prov">Provenance</label><select id="@(idPrefix)-prov" name="@(prefix + ".Provenance")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportContentProvenance>()) { <option value="@value" selected="@(value == input.Provenance)">@value</option> }</select></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-ver">Verification status</label><select id="@(idPrefix)-ver" name="@(prefix + ".VerificationStatus")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportVerificationStatus>()) { <option value="@value" selected="@(value == input.VerificationStatus)">@value</option> }</select></div>
+    </div>
+    <details class="mb-1">
+        <summary class="small">Opportunity questionnaire evidence references</summary>
+        <partial name="_EvidenceCheckboxes" model="oppEvidence" />
+        @if (otherEvidence is { Length: > 0 })
+        {
+            <p class="small text-secondary mt-2 mb-0">Other preserved evidence references (read-only): @string.Join(", ", otherEvidence.Select(reference => $"{reference.Kind}: {reference.ReferenceId}"))</p>
+        }
+    </details>
+</fieldset>

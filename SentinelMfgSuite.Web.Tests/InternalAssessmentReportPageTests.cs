@@ -509,6 +509,372 @@ public sealed class InternalAssessmentReportPageTests
         Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
     }
 
+    private static Dictionary<string, string> AiForm(Guid assessmentId, Guid responseId, AssessmentReportRevision revision, string html) => new()
+    {
+        ["__RequestVerificationToken"] = ExtractToken(html),
+        ["AssessmentId"] = assessmentId.ToString(),
+        ["SubmittedResponseId"] = responseId.ToString(),
+        ["RevisionId"] = revision.Id.ToString(),
+        ["ExpectedConcurrencyStamp"] = revision.ConcurrencyStamp.ToString(),
+        ["AiInput.State"] = nameof(ReportAssessmentState.Assessed)
+    };
+
+    private static void AddOpportunity(Dictionary<string, string> form, string id, string problem)
+    {
+        form["AiInput.Opportunities[0].Id"] = id;
+        form["AiInput.Opportunities[0].BusinessProblem"] = problem;
+        form["AiInput.Opportunities[0].OperationalProcessOrArea"] = "Fictional Line 1";
+        form["AiInput.Opportunities[0].ProposedUseCase"] = "Fictional vision inspection";
+        form["AiInput.Opportunities[0].ExpectedMeasurableOutcome"] = "Fewer escapes";
+        form["AiInput.Opportunities[0].RequiredDataSourcesText"] = "Camera feed\n\n  Defect log  \n";
+        form["AiInput.Opportunities[0].Provenance"] = nameof(ReportContentProvenance.ConsultantEntered);
+        form["AiInput.Opportunities[0].VerificationStatus"] = nameof(ReportVerificationStatus.Unverified);
+        form["AiInput.Opportunities[0].ScopeState"] = nameof(ReportAssessmentState.Assessed);
+        form["AiInput.Opportunities[0].ScopeDescription"] = "Pilot cell";
+        form["AiInput.Opportunities[0].ScopeInText"] = "Cell A";
+        form["AiInput.Opportunities[0].EstimateStatus"] = nameof(ReportEstimateStatus.Estimated);
+        form["AiInput.Opportunities[0].EffortValue"] = "12.5";
+        form["AiInput.Opportunities[0].EffortUnit"] = "person-days";
+        form["AiInput.Opportunities[0].CostAmount"] = "9000";
+        form["AiInput.Opportunities[0].Currency"] = "USD";
+        form["AiInput.Opportunities[0].EstimateBasis"] = "Fictional basis";
+    }
+
+    [Fact]
+    public async Task AiOpportunities_Create_Edit_Reload_Preserve_Id_Estimate_And_Other_Sections()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Keep summary")
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var snapshot = revision.ScoringSnapshot;
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = AiForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        AddOpportunity(form, string.Empty, "Problem <b>one</b>");
+        form["AiInput.Opportunities[0].EvidenceQuestionIds"] = "q02";
+
+        var first = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(form));
+        var firstHtml = await first.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Contains("Problem &lt;b&gt;one&lt;/b&gt;", firstHtml, StringComparison.Ordinal);
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        var opportunity = Assert.Single(saved.AiOpportunitiesAndRoi.Opportunities!);
+        Assert.True(Guid.TryParseExact(opportunity.Id, "N", out _));
+        Assert.Equal(new[] { "Camera feed", "Defect log" }, opportunity.RequiredDataSources);
+        Assert.Empty(opportunity.TechnicalPrerequisites);
+        Assert.Equal(ReportContentProvenance.ConsultantEntered, opportunity.Provenance);
+        Assert.Equal(ReportVerificationStatus.Unverified, opportunity.VerificationStatus);
+        Assert.Equal(ReportEstimateStatus.Estimated, opportunity.Estimate.Status);
+        Assert.Equal(12.5m, opportunity.Estimate.EffortValue);
+        Assert.Equal("Pilot cell", opportunity.Scope.Description);
+        Assert.Equal("q02", Assert.Single(opportunity.EvidenceReferences).QuestionId);
+        Assert.Equal("Keep summary", saved.ExecutiveSummary.Narrative);
+        Assert.Equal(snapshot, (await factory.GetOnlyReportAsync()).Revisions.Single().ScoringSnapshot);
+
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var reloaded = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        Assert.Contains(opportunity.Id, reloaded, StringComparison.Ordinal);
+        var edit = AiForm(ids.AssessmentId, ids.ResponseId, revision, reloaded);
+        edit["AiInput.Opportunities[0].Id"] = opportunity.Id;
+        edit["AiInput.Opportunities[0].BusinessProblem"] = "Edited problem";
+        edit["AiInput.Opportunities[0].EvidenceQuestionIds"] = "q02";
+        var second = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(edit));
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var savedAgain = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        var edited = Assert.Single(savedAgain.AiOpportunitiesAndRoi.Opportunities!);
+        Assert.Equal(opportunity.Id, edited.Id);
+        Assert.Equal("Edited problem", edited.BusinessProblem);
+        Assert.Equal(12.5m, edited.Estimate.EffortValue);
+        Assert.Equal("Pilot cell", edited.Scope.Description);
+        Assert.Equal(new[] { "Camera feed", "Defect log" }, edited.RequiredDataSources);
+        Assert.Equal("q02", Assert.Single(edited.EvidenceReferences).QuestionId);
+    }
+
+    [Fact]
+    public async Task AiOpportunities_Estimate_Reset_Requires_Confirmation_And_Invalid_Input_Is_Rejected()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var existing = new AiImplementationOpportunity("opp-1", "Problem", "Area", "Use case", "Outcome",
+            Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
+            new EffortCostEstimate(ReportEstimateStatus.Estimated, 5m, "days", 100m, "USD", "Basis"),
+            new ImplementationScope(ReportAssessmentState.NotAssessed),
+            ReportContentProvenance.ConsultantEntered, ReportVerificationStatus.Unverified, Array.Empty<ReportEvidenceReference>());
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            AiOpportunitiesAndRoi = new AiOpportunitiesAndRoiSection(ReportAssessmentState.Assessed, new[] { existing })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = AiForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["AiInput.Opportunities[0].Id"] = "opp-1";
+        form["AiInput.Opportunities[0].BusinessProblem"] = "Problem";
+        form["AiInput.Opportunities[0].EstimateStatus"] = nameof(ReportEstimateStatus.NotEstimated);
+
+        var blocked = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, blocked.StatusCode);
+        var unchanged = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Equal(5m, unchanged.AiOpportunitiesAndRoi.Opportunities!.Single().Estimate.EffortValue);
+
+        form["AiInput.Opportunities[0].EffortValue"] = "abc";
+        var invalid = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+        Assert.Equal(5m, ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!)
+            .AiOpportunitiesAndRoi.Opportunities!.Single().Estimate.EffortValue);
+
+        form.Remove("AiInput.Opportunities[0].EffortValue");
+        form["AiInput.Opportunities[0].ConfirmEstimateReset"] = "true";
+        var confirmed = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode);
+        var reset = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!)
+            .AiOpportunitiesAndRoi.Opportunities!.Single();
+        Assert.Equal(ReportEstimateStatus.NotEstimated, reset.Estimate.Status);
+        Assert.Null(reset.Estimate.EffortValue);
+        Assert.Null(reset.Estimate.CostAmount);
+    }
+
+    [Fact]
+    public async Task AiOpportunities_Reject_Invalid_Evidence_Stale_Stamp_And_NonDraft_And_Unauthorized()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = AiForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        AddOpportunity(form, string.Empty, "Retained problem");
+        form["AiInput.Opportunities[0].EvidenceQuestionIds"] = "q-unknown";
+
+        var invalid = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(form));
+        Assert.Contains("Retained problem", await invalid.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+
+        form.Remove("AiInput.Opportunities[0].EvidenceQuestionIds");
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty());
+        var stale = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(form));
+        Assert.Contains("changed after you opened it", await stale.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var noToken = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(new Dictionary<string, string>()));
+        Assert.Equal(HttpStatusCode.BadRequest, noToken.StatusCode);
+
+        var regular = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        regular.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "user");
+        Assert.Equal(HttpStatusCode.Forbidden, (await regular.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(new Dictionary<string, string>()))).StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var stored = await db.Set<AssessmentReportRevision>().SingleAsync(item => item.Id == revision.Id);
+            stored.Status = AssessmentReportRevisionStatus.Approved;
+            await db.SaveChangesAsync();
+        }
+        var fresh = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        form["ExpectedConcurrencyStamp"] = fresh.ConcurrencyStamp.ToString();
+        var nonDraft = await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(form));
+        Assert.Contains("Only Draft report revisions can be edited", await nonDraft.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReportPage_Shows_Current_Banner_Description_And_AI_Form_Anchor()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+
+        Assert.DoesNotContain("Editing, review, approval", html, StringComparison.Ordinal);
+        Assert.Contains("Draft editing is available", html, StringComparison.Ordinal);
+        Assert.Contains("Approval, issuance, PDF generation, and customer delivery are not yet available", html, StringComparison.Ordinal);
+        Assert.Contains("Edit the Executive Summary, Industrial Data &amp; Systems, and AI Opportunities &amp; ROI Drafts", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"aiOpportunities\"", html, StringComparison.Ordinal);
+        Assert.Contains("#aiOpportunities", html, StringComparison.Ordinal);
+
+        var form = AiForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        AddOpportunity(form, string.Empty, "Anchor problem");
+        var saved = await (await client.PostAsync(url + "?handler=SaveAiOpportunities", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        var sectionStart = saved.IndexOf("id=\"aiOpportunities\"", StringComparison.Ordinal);
+        var successIndex = saved.IndexOf("AI Opportunities &amp; ROI Draft saved.", StringComparison.Ordinal);
+        Assert.True(sectionStart >= 0 && successIndex > sectionStart);
+        Assert.Equal(1, saved.Split("AI Opportunities &amp; ROI Draft saved.").Length - 1);
+    }
+
+    private static Dictionary<string, string> FindingForm(Guid assessmentId, Guid responseId, AssessmentReportRevision revision, string html) => new()
+    {
+        ["__RequestVerificationToken"] = ExtractToken(html),
+        ["AssessmentId"] = assessmentId.ToString(),
+        ["SubmittedResponseId"] = responseId.ToString(),
+        ["RevisionId"] = revision.Id.ToString(),
+        ["ExpectedConcurrencyStamp"] = revision.ConcurrencyStamp.ToString(),
+        ["IndustrialInput.State"] = nameof(ReportAssessmentState.Assessed)
+    };
+
+    [Fact]
+    public async Task IndustrialFindings_Create_Edit_Reload_Preserve_Id_And_Other_Content()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var system = new SystemAssessmentEntry("sys-keep", "Keep", ReportAssessmentState.Assessed, null, null, null, null, null, null,
+            ReportContentProvenance.QuestionnaireDerived, ReportVerificationStatus.SelfReported, Array.Empty<ReportEvidenceReference>());
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Keep summary"),
+            IndustrialDataAndSystems = new IndustrialDataAndSystemsSection(ReportAssessmentState.Assessed, new[] { system })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var snapshot = revision.ScoringSnapshot;
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = FindingForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["IndustrialInput.Systems[0].Id"] = "sys-keep";
+        form["IndustrialInput.Systems[0].Name"] = "Keep";
+        form["IndustrialInput.Systems[0].AssessmentState"] = nameof(ReportAssessmentState.Assessed);
+        form["IndustrialInput.Findings[0].Id"] = string.Empty;
+        form["IndustrialInput.Findings[0].Title"] = "Gap <b>one</b>";
+        form["IndustrialInput.Findings[0].Narrative"] = "Narrative";
+        form["IndustrialInput.Findings[0].Classification"] = nameof(ReportFindingClassification.PreliminaryFinding);
+        form["IndustrialInput.Findings[0].Provenance"] = nameof(ReportContentProvenance.ConsultantEntered);
+        form["IndustrialInput.Findings[0].VerificationStatus"] = nameof(ReportVerificationStatus.Unverified);
+        form["IndustrialInput.Findings[0].ConsultantNotes"] = "Notes";
+
+        var first = await client.PostAsync(url + "?handler=SaveIndustrialData", new FormUrlEncodedContent(form));
+        var firstHtml = await first.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Contains("Gap &lt;b&gt;one&lt;/b&gt;", firstHtml, StringComparison.Ordinal);
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        var finding = Assert.Single(saved.IndustrialDataAndSystems.Findings!);
+        Assert.True(Guid.TryParseExact(finding.Id, "N", out _));
+        Assert.Empty(finding.EvidenceReferences);
+        Assert.Equal("Keep summary", saved.ExecutiveSummary.Narrative);
+        Assert.Equal("sys-keep", saved.IndustrialDataAndSystems.Systems!.Single().Id);
+        Assert.Equal(ReportVerificationStatus.SelfReported, saved.IndustrialDataAndSystems.Systems!.Single().VerificationStatus);
+        Assert.Equal(snapshot, (await factory.GetOnlyReportAsync()).Revisions.Single().ScoringSnapshot);
+
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var reloaded = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        Assert.Contains(finding.Id, reloaded, StringComparison.Ordinal);
+        var edit = FindingForm(ids.AssessmentId, ids.ResponseId, revision, reloaded);
+        foreach (var pair in form.Where(p => p.Key.StartsWith("IndustrialInput.")))
+        {
+            edit[pair.Key] = pair.Value;
+        }
+        edit["IndustrialInput.Findings[0].Id"] = finding.Id;
+        edit["IndustrialInput.Findings[0].Title"] = "Edited";
+        edit["IndustrialInput.Findings[0].EvidenceQuestionIds"] = "q02";
+        edit["IndustrialInput.EvidenceQuestionIds"] = "q11";
+        var second = await client.PostAsync(url + "?handler=SaveIndustrialData", new FormUrlEncodedContent(edit));
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var savedAgain = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        var edited = Assert.Single(savedAgain.IndustrialDataAndSystems.Findings!);
+        Assert.Equal(finding.Id, edited.Id);
+        Assert.Equal("Edited", edited.Title);
+        Assert.Equal("q02", Assert.Single(edited.EvidenceReferences).QuestionId);
+        Assert.Equal("q11", Assert.Single(savedAgain.IndustrialDataAndSystems.EvidenceReferences!).QuestionId);
+    }
+
+    [Fact]
+    public async Task IndustrialFindings_Reject_Invalid_Evidence_And_Stale_Stamp_And_Retain_Input()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = FindingForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["IndustrialInput.Findings[0].Id"] = string.Empty;
+        form["IndustrialInput.Findings[0].Title"] = "Retained title";
+        form["IndustrialInput.Findings[0].Narrative"] = "Retained narrative";
+        form["IndustrialInput.Findings[0].Classification"] = nameof(ReportFindingClassification.Finding);
+        form["IndustrialInput.Findings[0].Provenance"] = nameof(ReportContentProvenance.ConsultantEntered);
+        form["IndustrialInput.Findings[0].VerificationStatus"] = nameof(ReportVerificationStatus.Unverified);
+        form["IndustrialInput.EvidenceQuestionIds"] = "q-unknown";
+
+        var invalid = await client.PostAsync(url + "?handler=SaveIndustrialData", new FormUrlEncodedContent(form));
+        var invalidHtml = await invalid.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+        Assert.Contains("Retained title", invalidHtml, StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+
+        form.Remove("IndustrialInput.EvidenceQuestionIds");
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty());
+        var stale = await client.PostAsync(url + "?handler=SaveIndustrialData", new FormUrlEncodedContent(form));
+        var staleHtml = await stale.Content.ReadAsStringAsync();
+        Assert.Contains("changed after you opened it", staleHtml, StringComparison.Ordinal);
+        Assert.Contains("Retained title", staleHtml, StringComparison.Ordinal);
+        var persisted = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Null(persisted.IndustrialDataAndSystems.Findings);
+    }
+
+    [Fact]
+    public async Task IndustrialFindings_Draft_Warns_On_Unverified_Finding_And_Saves()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = FindingForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["IndustrialInput.Findings[0].Id"] = string.Empty;
+        form["IndustrialInput.Findings[0].Title"] = "Draft finding";
+        form["IndustrialInput.Findings[0].Narrative"] = "Text";
+        form["IndustrialInput.Findings[0].Classification"] = nameof(ReportFindingClassification.Finding);
+        form["IndustrialInput.Findings[0].Provenance"] = nameof(ReportContentProvenance.ConsultantEntered);
+        form["IndustrialInput.Findings[0].VerificationStatus"] = nameof(ReportVerificationStatus.Unverified);
+        var response = await client.PostAsync(url + "?handler=SaveIndustrialData", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Industrial Data &amp; Systems Draft saved.", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Contains("no-store", response.Headers.GetValues("Cache-Control").Single(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task IndustrialFindings_Save_Requires_Antiforgery_And_Authorization()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId) + "?handler=SaveIndustrialData";
+        var admin = factory.CreateAdminClient();
+        var noToken = await admin.PostAsync(url, new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["IndustrialInput.Findings[0].Title"] = "x"
+        }));
+        Assert.Equal(HttpStatusCode.BadRequest, noToken.StatusCode);
+        var regular = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        regular.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "user");
+        Assert.Equal(HttpStatusCode.Forbidden, (await regular.PostAsync(url, new FormUrlEncodedContent(new Dictionary<string, string>()))).StatusCode);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
     [Fact]
     public async Task ExecutiveSummary_Save_Rejects_NonDraft_Revision_And_Retains_Input()
     {

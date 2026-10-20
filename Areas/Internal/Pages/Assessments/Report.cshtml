@@ -30,7 +30,7 @@
 
     <section class="container pb-5">
         <div class="alert alert-warning" role="status">
-            Internal report workspace. This is not an approved customer report. Editing, review, approval, issuance, PDF generation, and customer delivery are not available here.
+            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, and AI Opportunities &amp; ROI sections. Approval, issuance, PDF generation, and customer delivery are not yet available.
         </div>
 
         @if (!Model.RevisionId.HasValue)
@@ -134,8 +134,8 @@
                     <section class="card sentinel-card border-0 rounded-4 h-100" aria-labelledby="workspaceHeading">
                         <div class="card-body p-3 p-md-4">
                             <h2 id="workspaceHeading" class="h4 fw-semibold">Consultant report workspace</h2>
-                            <p class="text-secondary">Edit the Executive Summary Draft. Evidence and frozen scoring remain read-only in the adjacent panel.</p>
-                            @if (Model.SaveStatus is string saveStatus)
+                            Edit the Executive Summary, Industrial Data &amp; Systems, and AI Opportunities &amp; ROI Drafts. Evidence and frozen scoring remain read-only in the adjacent panel.
+                            @if (Model.SaveStatus is string saveStatus && saveStatus != "AI Opportunities & ROI Draft saved.")
                             {
                                 <div class="alert alert-success" role="status">@saveStatus</div>
                             }
@@ -269,12 +269,190 @@
                                             <div class="mb-2"><label class="form-label">Consultant notes</label><textarea name="IndustrialInput.Systems[__index__].ConsultantNotes" rows="3" class="form-control bg-dark text-light border-secondary"></textarea></div>
                                         </fieldset>
                                     </template>
+                                    <fieldset class="mb-3 mt-4" id="industrialSectionEvidence">
+                                        <legend class="form-label">Section questionnaire evidence references</legend>
+                                        <p class="small text-secondary">Select submitted answers that support this section as a whole. Selections are validated against the submitted questionnaire when saved.</p>
+                                        @if (Model.EvidenceOptions.Count == 0)
+                                        {
+                                            <p class="small text-secondary">No questionnaire answers are available to reference.</p>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var answer in Model.EvidenceOptions)
+                                            {
+                                                var selected = Model.IndustrialInput.EvidenceQuestionIds?.Contains(answer.QuestionId, StringComparer.Ordinal) == true;
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="IndustrialInput.EvidenceQuestionIds" value="@answer.QuestionId" id="industrial-evidence-@answer.QuestionId" checked="@selected" />
+                                                    <label class="form-check-label small" for="industrial-evidence-@answer.QuestionId">@answer.Number — @answer.Question</label>
+                                                </div>
+                                            }
+                                        }
+                                        @{
+                                            var otherSectionEvidence = Model.ReportContent?.IndustrialDataAndSystems.EvidenceReferences?
+                                                .Where(reference => reference.Kind != SentinelMfgSuite.Web.Models.Assessments.Reports.ReportEvidenceKind.QuestionnaireAnswer).ToArray();
+                                        }
+                                        @if (otherSectionEvidence is { Length: > 0 })
+                                        {
+                                            <p class="small text-secondary mt-2 mb-0">Other preserved evidence references (read-only): @string.Join(", ", otherSectionEvidence.Select(reference => $"{reference.Kind}: {reference.ReferenceId}"))</p>
+                                        }
+                                    </fieldset>
+                                    <div class="d-flex justify-content-between align-items-center mb-2 mt-4">
+                                        <h4 class="h6 mb-0">Findings</h4>
+                                        <button type="button" class="btn btn-outline-info btn-sm" id="addIndustrialFinding">Add Finding</button>
+                                    </div>
+                                    <p class="small text-secondary">New findings default to a consultant-entered, unverified, preliminary finding with no evidence unless you select it. Nothing is verified automatically.</p>
+                                    <div id="industrialFindingsList">
+                                        @for (var findingIndex = 0; findingIndex < Model.IndustrialInput.Findings.Count; findingIndex++)
+                                        {
+                                            var storedFinding = Model.ReportContent?.IndustrialDataAndSystems.Findings?
+                                                .FirstOrDefault(item => string.Equals(item.Id, Model.IndustrialInput.Findings[findingIndex].Id, StringComparison.Ordinal));
+                                            var otherFindingEvidence = storedFinding?.EvidenceReferences
+                                                .Where(reference => reference.Kind != SentinelMfgSuite.Web.Models.Assessments.Reports.ReportEvidenceKind.QuestionnaireAnswer).ToArray();
+                                            <fieldset class="border border-secondary rounded-3 p-3 mb-3 industrial-finding-entry">
+                                                <legend class="float-none w-auto px-2 small">Edit finding @(findingIndex + 1)</legend>
+                                                <input type="hidden" asp-for="IndustrialInput.Findings[findingIndex].Id" />
+                                                <span asp-validation-for="IndustrialInput.Findings[findingIndex].Id" class="text-danger"></span>
+                                                <div class="mb-2">
+                                                    <label asp-for="IndustrialInput.Findings[findingIndex].Title" class="form-label">Title <span class="text-danger">*</span></label>
+                                                    <input asp-for="IndustrialInput.Findings[findingIndex].Title" class="form-control bg-dark text-light border-secondary" autocomplete="off" />
+                                                    <span asp-validation-for="IndustrialInput.Findings[findingIndex].Title" class="text-danger"></span>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label asp-for="IndustrialInput.Findings[findingIndex].Narrative" class="form-label">Narrative <span class="text-danger">*</span></label>
+                                                    <textarea asp-for="IndustrialInput.Findings[findingIndex].Narrative" rows="4" class="form-control bg-dark text-light border-secondary"></textarea>
+                                                    <span asp-validation-for="IndustrialInput.Findings[findingIndex].Narrative" class="text-danger"></span>
+                                                </div>
+                                                <div class="row g-2">
+                                                    <div class="col-md-4 mb-2"><label asp-for="IndustrialInput.Findings[findingIndex].Classification" class="form-label">Classification</label><select asp-for="IndustrialInput.Findings[findingIndex].Classification" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportFindingClassification>()" class="form-select bg-dark text-light border-secondary"></select></div>
+                                                    <div class="col-md-4 mb-2"><label asp-for="IndustrialInput.Findings[findingIndex].Provenance" class="form-label">Provenance</label><select asp-for="IndustrialInput.Findings[findingIndex].Provenance" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportContentProvenance>()" class="form-select bg-dark text-light border-secondary"></select></div>
+                                                    <div class="col-md-4 mb-2"><label asp-for="IndustrialInput.Findings[findingIndex].VerificationStatus" class="form-label">Verification status</label><select asp-for="IndustrialInput.Findings[findingIndex].VerificationStatus" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportVerificationStatus>()" class="form-select bg-dark text-light border-secondary"></select></div>
+                                                </div>
+                                                <div class="mb-2"><label asp-for="IndustrialInput.Findings[findingIndex].ConsultantNotes" class="form-label">Consultant notes</label><textarea asp-for="IndustrialInput.Findings[findingIndex].ConsultantNotes" rows="3" class="form-control bg-dark text-light border-secondary"></textarea></div>
+                                                <details class="mb-1">
+                                                    <summary class="small">Questionnaire evidence references</summary>
+                                                    @if (Model.EvidenceOptions.Count == 0)
+                                                    {
+                                                        <p class="small text-secondary mt-2">No questionnaire answers are available to reference.</p>
+                                                    }
+                                                    else
+                                                    {
+                                                        @foreach (var answer in Model.EvidenceOptions)
+                                                        {
+                                                            var findingSelected = Model.IndustrialInput.Findings[findingIndex].EvidenceQuestionIds?.Contains(answer.QuestionId, StringComparer.Ordinal) == true;
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" name="IndustrialInput.Findings[@findingIndex].EvidenceQuestionIds" value="@answer.QuestionId" id="finding-@findingIndex-evidence-@answer.QuestionId" checked="@findingSelected" />
+                                                                <label class="form-check-label small" for="finding-@findingIndex-evidence-@answer.QuestionId">@answer.Number — @answer.Question</label>
+                                                            </div>
+                                                        }
+                                                    }
+                                                    @if (otherFindingEvidence is { Length: > 0 })
+                                                    {
+                                                        <p class="small text-secondary mt-2 mb-0">Other preserved evidence references (read-only): @string.Join(", ", otherFindingEvidence.Select(reference => $"{reference.Kind}: {reference.ReferenceId}"))</p>
+                                                    }
+                                                </details>
+                                            </fieldset>
+                                        }
+                                    </div>
+                                    <template id="industrialFindingTemplate">
+                                        <fieldset class="border border-secondary rounded-3 p-3 mb-3 industrial-finding-entry">
+                                            <legend class="float-none w-auto px-2 small">New finding</legend>
+                                            <input type="hidden" name="IndustrialInput.Findings[__index__].Id" value="" />
+                                            <div class="mb-2"><label class="form-label">Title <span class="text-danger">*</span></label><input name="IndustrialInput.Findings[__index__].Title" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+                                            <div class="mb-2"><label class="form-label">Narrative <span class="text-danger">*</span></label><textarea name="IndustrialInput.Findings[__index__].Narrative" rows="4" class="form-control bg-dark text-light border-secondary"></textarea></div>
+                                            <div class="row g-2">
+                                                <div class="col-md-4 mb-2"><label class="form-label">Classification</label><select name="IndustrialInput.Findings[__index__].Classification" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportFindingClassification>()) { <option value="@value" selected="@(value == SentinelMfgSuite.Web.Models.Assessments.Reports.ReportFindingClassification.PreliminaryFinding)">@value</option> }</select></div>
+                                                <div class="col-md-4 mb-2"><label class="form-label">Provenance</label><select name="IndustrialInput.Findings[__index__].Provenance" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportContentProvenance>()) { <option value="@value" selected="@(value == SentinelMfgSuite.Web.Models.Assessments.Reports.ReportContentProvenance.ConsultantEntered)">@value</option> }</select></div>
+                                                <div class="col-md-4 mb-2"><label class="form-label">Verification status</label><select name="IndustrialInput.Findings[__index__].VerificationStatus" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportVerificationStatus>()) { <option value="@value" selected="@(value == SentinelMfgSuite.Web.Models.Assessments.Reports.ReportVerificationStatus.Unverified)">@value</option> }</select></div>
+                                            </div>
+                                            <div class="mb-2"><label class="form-label">Consultant notes</label><textarea name="IndustrialInput.Findings[__index__].ConsultantNotes" rows="3" class="form-control bg-dark text-light border-secondary"></textarea></div>
+                                            <details class="mb-1">
+                                                <summary class="small">Questionnaire evidence references</summary>
+                                                @if (Model.EvidenceOptions.Count == 0)
+                                                {
+                                                    <p class="small text-secondary mt-2">No questionnaire answers are available to reference.</p>
+                                                }
+                                                else
+                                                {
+                                                    @foreach (var answer in Model.EvidenceOptions)
+                                                    {
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="IndustrialInput.Findings[__index__].EvidenceQuestionIds" value="@answer.QuestionId" id="finding-__index__-evidence-@answer.QuestionId" />
+                                                            <label class="form-check-label small" for="finding-__index__-evidence-@answer.QuestionId">@answer.Number — @answer.Question</label>
+                                                        </div>
+                                                    }
+                                                }
+                                            </details>
+                                        </fieldset>
+                                    </template>
+                                    <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
+                                </form>
+                            </section>
+                            <section id="aiOpportunities" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="aiOpportunitiesHeading">
+                                <h3 id="aiOpportunitiesHeading" class="h5 fw-semibold">AI Opportunities &amp; ROI</h3>
+                                <p class="small text-secondary">Implementation effort and cost estimates only; no benefits, ROI or payback are calculated. New opportunities are consultant-entered and unverified. Existing IDs, provenance and non-questionnaire evidence are preserved.</p>
+                                @if (Model.SaveStatus == "AI Opportunities & ROI Draft saved.")
+                                {
+                                    <div class="alert alert-success" role="status">@Model.SaveStatus</div>
+                                }
+                                <form method="post" asp-page-handler="SaveAiOpportunities" asp-fragment="aiOpportunities">
+                                    <input type="hidden" asp-for="AssessmentId" />
+                                    <input type="hidden" asp-for="SubmittedResponseId" />
+                                    <input type="hidden" asp-for="RevisionId" />
+                                    <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                    @if (Model.ValidationIssues.Count > 0)
+                                    {
+                                        <div class="mb-3" role="status">
+                                            @foreach (var issue in Model.ValidationIssues)
+                                            {
+                                                <div class="alert @(issue.Severity == SentinelMfgSuite.Web.Services.Assessments.Reports.ReportContentValidationSeverity.Error ? "alert-danger" : "alert-warning") py-2 mb-2"><strong>@issue.Severity:</strong> @issue.Message</div>
+                                            }
+                                        </div>
+                                    }
+                                    <div class="mb-3">
+                                        <label asp-for="AiInput.State" class="form-label">Section assessment state</label>
+                                        <select asp-for="AiInput.State" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState>()" class="form-select bg-dark text-light border-secondary"></select>
+                                    </div>
+                                    <h4 class="h6">Opportunities</h4>
+                                    <div id="aiOpportunitiesList">
+                                        @for (var i = 0; i < Model.AiInput.Opportunities.Count; i++)
+                                        {
+                                            var stored = Model.ReportContent?.AiOpportunitiesAndRoi.Opportunities?.FirstOrDefault(o => o.Id == Model.AiInput.Opportunities[i].Id);
+                                            <partial name="_AiOpportunityEditor" model="new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.AiOpportunityEditorModel(Model.AiInput.Opportunities[i], i.ToString(), Model.EvidenceOptions, stored)" />
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-outline-light btn-sm mb-3" id="addAiOpportunity">Add opportunity</button>
+                                    <h4 class="h6">Findings</h4>
+                                    <div id="aiFindingsList">
+                                        @for (var i = 0; i < Model.AiInput.Findings.Count; i++)
+                                        {
+                                            var storedFinding = Model.ReportContent?.AiOpportunitiesAndRoi.Findings?.FirstOrDefault(f => f.Id == Model.AiInput.Findings[i].Id);
+                                            <partial name="_AiFindingEditor" model="new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.AiFindingEditorModel(Model.AiInput.Findings[i], i.ToString(), Model.EvidenceOptions, storedFinding)" />
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-outline-light btn-sm mb-3" id="addAiFinding">Add finding</button>
+                                    @{
+                                        var newOppInput = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.OpportunityInput
+                                        {
+                                            Provenance = SentinelMfgSuite.Web.Models.Assessments.Reports.ReportContentProvenance.ConsultantEntered,
+                                            VerificationStatus = SentinelMfgSuite.Web.Models.Assessments.Reports.ReportVerificationStatus.Unverified,
+                                            ScopeState = SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState.NotAssessed,
+                                            EstimateStatus = SentinelMfgSuite.Web.Models.Assessments.Reports.ReportEstimateStatus.NotEstimated
+                                        };
+                                        var newOppModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.AiOpportunityEditorModel(newOppInput, "__index__", Model.EvidenceOptions, null);
+                                        var newFindingModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.AiFindingEditorModel(new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.FindingInput(), "__index__", Model.EvidenceOptions, null);
+                                    }
+                                    <template id="aiOpportunityTemplate">
+                                        <partial name="_AiOpportunityEditor" model="newOppModel" />
+                                    </template>
+                                    <template id="aiFindingTemplate">
+                                        <partial name="_AiFindingEditor" model="newFindingModel" />
+                                    </template>
+                                    <div asp-validation-summary="All" class="text-danger mb-3" role="alert"></div>
                                     <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                                 </form>
                             </section>
                             <nav aria-label="Other consultant report sections">
                                 <ol class="list-group list-group-numbered">
-                                    <li class="list-group-item bg-transparent text-light">AI Opportunities &amp; ROI <span class="text-secondary">— editor not yet available</span></li>
                                     <li class="list-group-item bg-transparent text-light">Technical Gaps &amp; Architecture <span class="text-secondary">— editor not yet available</span></li>
                                     <li class="list-group-item bg-transparent text-light">Implementation Roadmap <span class="text-secondary">— editor not yet available</span></li>
                                     <li class="list-group-item bg-transparent text-light">Executive Presentation <span class="text-secondary">— editor not yet available</span></li>
@@ -308,6 +486,49 @@
             });
             list.appendChild(fragment);
             labelExistingSystemEditors();
+        });
+
+        const wireAiAdd = (buttonId, listId, templateId, selector) => {
+            const button = document.getElementById(buttonId);
+            const aiList = document.getElementById(listId);
+            const aiTemplate = document.getElementById(templateId);
+            if (!button || !aiList || !aiTemplate) return;
+            button.addEventListener('click', () => {
+                const index = aiList.querySelectorAll(selector).length;
+                const fragment = aiTemplate.content.cloneNode(true);
+                fragment.querySelectorAll('[name]').forEach(e => { e.name = e.name.replaceAll('__index__', index); });
+                fragment.querySelectorAll('[id]').forEach(e => { e.id = e.id.replaceAll('__index__', index); });
+                fragment.querySelectorAll('[for]').forEach(e => { e.htmlFor = e.htmlFor.replaceAll('__index__', index); });
+                aiList.appendChild(fragment);
+            });
+        };
+        wireAiAdd('addAiOpportunity', 'aiOpportunitiesList', 'aiOpportunityTemplate', '.ai-opportunity-entry');
+        wireAiAdd('addAiFinding', 'aiFindingsList', 'aiFindingTemplate', '.ai-finding-entry');
+
+        const addFindingButton = document.getElementById('addIndustrialFinding');
+        const findingList = document.getElementById('industrialFindingsList');
+        const findingTemplate = document.getElementById('industrialFindingTemplate');
+        const labelFindingEditors = () => {
+            findingList?.querySelectorAll('.industrial-finding-entry > legend').forEach((legend, index) => {
+                legend.textContent = `Edit finding ${index + 1}`;
+            });
+        };
+        labelFindingEditors();
+        if (!addFindingButton || !findingList || !findingTemplate) return;
+        addFindingButton.addEventListener('click', () => {
+            const index = findingList.querySelectorAll('.industrial-finding-entry').length;
+            const fragment = findingTemplate.content.cloneNode(true);
+            fragment.querySelectorAll('[name]').forEach(element => {
+                element.name = element.name.replaceAll('__index__', index);
+            });
+            fragment.querySelectorAll('[id]').forEach(element => {
+                element.id = element.id.replaceAll('__index__', index);
+            });
+            fragment.querySelectorAll('[for]').forEach(element => {
+                element.htmlFor = element.htmlFor.replaceAll('__index__', index);
+            });
+            findingList.appendChild(fragment);
+            labelFindingEditors();
         });
     })();
 </script>

@@ -1,0 +1,16 @@
+@model SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.EvidenceCheckboxModel
+@if (Model.Options.Count == 0)
+{
+    <p class="small text-secondary mt-2">No questionnaire answers are available to reference.</p>
+}
+else
+{
+    @foreach (var answer in Model.Options)
+    {
+        var selected = Model.Selected?.Contains(answer.QuestionId, StringComparer.Ordinal) == true;
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="@Model.FieldName" value="@answer.QuestionId" id="@(Model.IdPrefix)-@answer.QuestionId" checked="@selected" />
+            <label class="form-check-label small" for="@(Model.IdPrefix)-@answer.QuestionId">@answer.Number — @answer.Question</label>
+        </div>
+    }
+}

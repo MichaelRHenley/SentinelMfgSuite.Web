@@ -82,6 +82,7 @@ public sealed class AssessmentReportContentValidator : IAssessmentReportContentV
                 "executivePresentation");
 
             ValidateReferences(content.ExecutiveSummary.EvidenceReferences, "executiveSummary.evidenceReferences", context.Stage != AssessmentReportContentStage.Draft);
+            ValidateReferences(content.IndustrialDataAndSystems.EvidenceReferences, "industrialDataAndSystems.evidenceReferences", requireEvidence: false);
 
             void Check(ReportAssessmentState state, bool hasContent, string path)
             {

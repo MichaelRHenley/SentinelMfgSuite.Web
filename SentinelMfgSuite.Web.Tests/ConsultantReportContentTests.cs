@@ -50,6 +50,36 @@ public sealed class ConsultantReportContentTests
     }
 
     [Fact]
+    public void Validator_Validates_Industrial_Section_Level_Evidence_References_In_Draft()
+    {
+        var content = ConsultantReportContent.CreateEmpty() with
+        {
+            IndustrialDataAndSystems = new IndustrialDataAndSystemsSection(ReportAssessmentState.Assessed,
+                EvidenceReferences: new[] { new ReportEvidenceReference(ReportEvidenceKind.QuestionnaireAnswer, "q-unknown", QuestionId: "q-unknown") })
+        };
+
+        var result = new AssessmentReportContentValidator().Validate(content, new(AssessmentReportContentStage.Draft));
+
+        Assert.Contains(result.Issues, issue => issue.Code == "evidence-reference-invalid" && issue.Path.StartsWith("industrialDataAndSystems.evidenceReferences", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validator_Validates_Industrial_Finding_Level_Evidence_References_In_Draft()
+    {
+        var finding = new ReportFinding("f1", "Title", "Narrative", ReportFindingClassification.PreliminaryFinding,
+            ReportContentProvenance.ConsultantEntered, ReportVerificationStatus.Unverified,
+            new[] { new ReportEvidenceReference(ReportEvidenceKind.QuestionnaireAnswer, "q-unknown", QuestionId: "q-unknown") });
+        var content = ConsultantReportContent.CreateEmpty() with
+        {
+            IndustrialDataAndSystems = new IndustrialDataAndSystemsSection(ReportAssessmentState.Assessed, Findings: new[] { finding })
+        };
+
+        var result = new AssessmentReportContentValidator().Validate(content, new(AssessmentReportContentStage.Draft));
+
+        Assert.Contains(result.Issues, issue => issue.Code == "evidence-reference-invalid");
+    }
+
+    [Fact]
     public void Validator_InReview_Requires_Sections_And_Valid_Evidence()
     {
         var content = ConsultantReportContent.CreateEmpty() with

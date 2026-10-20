@@ -2,7 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc.Filters;
 using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models.Assessments;
 using SentinelMfgSuite.Web.Models.Assessments.Questionnaire;
@@ -42,6 +45,14 @@ public sealed class ReportModel : PageModel
 
     [BindProperty]
     public IndustrialDataInput IndustrialInput { get; set; } = new();
+
+    [BindProperty]
+    public AiOpportunitiesInput AiInput { get; set; } = new();
+
+    private bool _aiInputHandled;
+    private const int MaxListItems = 50;
+    private const int MaxListItemLength = 500;
+    private const decimal MaxEstimateAmount = 1_000_000_000_000m;
 
     [BindProperty]
     public Guid ExpectedConcurrencyStamp { get; set; }
@@ -219,15 +230,65 @@ public sealed class ReportModel : PageModel
                     input.ConsultantNotes));
             }
         }
+        var offeredQuestionIds = EvidenceOptions.Select(option => option.QuestionId).ToHashSet(StringComparer.Ordinal);
+        var existingFindings = existingSection.Findings ?? Array.Empty<ReportFinding>();
+        var submittedFindingIds = new HashSet<string>(StringComparer.Ordinal);
+        var mergedFindings = new List<ReportFinding>();
+        for (var index = 0; index < IndustrialInput.Findings.Count; index++)
+        {
+            var input = IndustrialInput.Findings[index];
+            var generatedForNewFinding = string.IsNullOrWhiteSpace(input.Id);
+            if (generatedForNewFinding)
+            {
+                input.Id = Guid.NewGuid().ToString("N");
+                ModelState.Remove($"IndustrialInput.Findings[{index}].Id");
+            }
+            var existingFinding = existingFindings.FirstOrDefault(finding => string.Equals(finding.Id, input.Id, StringComparison.Ordinal));
+            if (existingFinding is null && !generatedForNewFinding && !Guid.TryParse(input.Id, out _))
+            {
+                ModelState.AddModelError($"IndustrialInput.Findings[{index}].Id", "Finding ID is invalid. Reload the Draft and retry the edit.");
+                continue;
+            }
+            if (!submittedFindingIds.Add(input.Id!))
+            {
+                ModelState.AddModelError($"IndustrialInput.Findings[{index}].Id", "Finding IDs must be unique.");
+                continue;
+            }
+            var findingEvidence = MergeQuestionnaireEvidence(existingFinding?.EvidenceReferences, input.EvidenceQuestionIds, offeredQuestionIds);
+            mergedFindings.Add(existingFinding is not null
+                ? existingFinding with
+                {
+                    Title = input.Title,
+                    Narrative = input.Narrative,
+                    Classification = input.Classification,
+                    Provenance = input.Provenance,
+                    VerificationStatus = input.VerificationStatus,
+                    ConsultantNotes = input.ConsultantNotes,
+                    EvidenceReferences = findingEvidence
+                }
+                : new ReportFinding(
+                    input.Id!,
+                    input.Title,
+                    input.Narrative,
+                    input.Classification,
+                    input.Provenance,
+                    input.VerificationStatus,
+                    findingEvidence,
+                    input.ConsultantNotes));
+        }
         if (!ModelState.IsValid)
         {
             return Page();
         }
         mergedSystems.AddRange(existingSystems.Where(system => !submittedIds.Contains(system.Id)));
+        mergedFindings.AddRange(existingFindings.Where(finding => !submittedFindingIds.Contains(finding.Id)));
+        var sectionEvidence = MergeQuestionnaireEvidence(existingSection.EvidenceReferences, IndustrialInput.EvidenceQuestionIds, offeredQuestionIds);
         var updatedSection = existingSection with
         {
             State = IndustrialInput.State,
-            Systems = mergedSystems
+            Systems = mergedSystems,
+            Findings = mergedFindings.Count == 0 && existingSection.Findings is null ? null : mergedFindings,
+            EvidenceReferences = sectionEvidence.Count == 0 && existingSection.EvidenceReferences is null ? null : sectionEvidence
         };
         var updatedContent = retrieved.Content with { IndustrialDataAndSystems = updatedSection };
         var saved = await _contentService.SaveDraftAsync(revision.Id, postedConcurrencyStamp, updatedContent, User, ct);
@@ -268,6 +329,158 @@ public sealed class ReportModel : PageModel
         else
         {
             ModelState.AddModelError(string.Empty, "Draft could not be saved. Your entered system inventory has been kept.");
+        }
+        return Page();
+    }
+
+    public override void OnPageHandlerExecuted(PageHandlerExecutedContext context)
+    {
+        if (!_aiInputHandled && ReportContent is not null)
+        {
+            AiInput = AiOpportunitiesInput.From(ReportContent.AiOpportunitiesAndRoi);
+        }
+        base.OnPageHandlerExecuted(context);
+    }
+
+    public async Task<IActionResult> OnPostSaveAiOpportunitiesAsync(CancellationToken ct = default)
+    {
+        _aiInputHandled = true;
+        SetPrivateHeaders();
+        var source = await FindSubmittedResponseAsync(AssessmentId, SubmittedResponseId, ct);
+        if (source is null || !IsOwnerAllowed(source.Assessment))
+        {
+            return NotFound();
+        }
+        PopulateIdentity(source.Assessment, source.Response.SubmittedUtc!.Value);
+        PopulateQuestionnaire(source.Assessment.QuestionnaireVersion, source.Response.Data);
+        var postedConcurrencyStamp = ExpectedConcurrencyStamp;
+
+        var reportResult = await _reportService.GetBySubmittedResponseIdAsync(SubmittedResponseId, User, ct);
+        if (reportResult.State != AssessmentReportServiceState.Retrieved || reportResult.Report is not { } report)
+        {
+            return NotFound();
+        }
+        var revision = report.Revisions.SingleOrDefault(item => item.Id == RevisionId);
+        if (revision is null)
+        {
+            return NotFound();
+        }
+        RevisionId = revision.Id;
+        RevisionNumber = revision.RevisionNumber;
+        RevisionStatus = revision.Status;
+        Scoring = CreateScoringView(revision.ScoringSnapshot, revision.ScoringSnapshotSchemaVersion);
+
+        var retrieved = await _contentService.GetAsync(revision.Id, User, ct);
+        if (!retrieved.Succeeded || retrieved.Content is null)
+        {
+            return retrieved.State == AssessmentReportRevisionContentState.Forbidden ? NotFound() : StatusCode(500);
+        }
+        LastSavedUtc = retrieved.UpdatedUtc;
+        ReportContent = retrieved.Content;
+        if (revision.Status != AssessmentReportRevisionStatus.Draft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+            return Page();
+        }
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+        if (retrieved.ConcurrencyStamp != postedConcurrencyStamp)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft changed after you opened it. Your opportunities have been kept; reload the report before saving again.");
+            return Page();
+        }
+
+        var offeredQuestionIds = EvidenceOptions.Select(option => option.QuestionId).ToHashSet(StringComparer.Ordinal);
+        var existingSection = retrieved.Content.AiOpportunitiesAndRoi;
+        var existingOpportunities = existingSection.Opportunities ?? Array.Empty<AiImplementationOpportunity>();
+        var storedOpportunityIds = existingOpportunities.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var submittedOpportunityIds = new HashSet<string>(StringComparer.Ordinal);
+        var mergedOpportunities = new List<AiImplementationOpportunity>();
+        for (var index = 0; index < AiInput.Opportunities.Count; index++)
+        {
+            var input = AiInput.Opportunities[index];
+            var key = $"AiInput.Opportunities[{index}]";
+            var label = $"Opportunity {index + 1}";
+            var id = ResolveItemId(input.Id, storedOpportunityIds, submittedOpportunityIds, key + ".Id", label);
+            if (id is null)
+            {
+                continue;
+            }
+            input.Id = id;
+            var existing = existingOpportunities.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            var dataSources = ParseLines(input.RequiredDataSourcesText, key + ".RequiredDataSourcesText", label + " required data sources") ?? existing?.RequiredDataSources ?? Array.Empty<string>();
+            var prerequisites = ParseLines(input.TechnicalPrerequisitesText, key + ".TechnicalPrerequisitesText", label + " technical prerequisites") ?? existing?.TechnicalPrerequisites ?? Array.Empty<string>();
+            var dependencies = ParseLines(input.ImplementationDependenciesText, key + ".ImplementationDependenciesText", label + " implementation dependencies") ?? existing?.ImplementationDependencies ?? Array.Empty<string>();
+            var risks = ParseLines(input.RisksAndAssumptionsText, key + ".RisksAndAssumptionsText", label + " risks and assumptions") ?? existing?.RisksAndAssumptions ?? Array.Empty<string>();
+            var scope = BuildScope(input, existing?.Scope, key, label);
+            var estimate = BuildEstimate(input, existing?.Estimate, key, label, offeredQuestionIds);
+            var evidence = MergeQuestionnaireEvidence(existing?.EvidenceReferences, input.EvidenceQuestionIds, offeredQuestionIds);
+            var provenance = input.Provenance ?? existing?.Provenance ?? ReportContentProvenance.ConsultantEntered;
+            var verification = input.VerificationStatus ?? existing?.VerificationStatus ?? ReportVerificationStatus.Unverified;
+            mergedOpportunities.Add(new AiImplementationOpportunity(
+                id,
+                input.BusinessProblem?.Trim() ?? string.Empty,
+                input.OperationalProcessOrArea?.Trim() ?? string.Empty,
+                input.ProposedUseCase?.Trim() ?? string.Empty,
+                Trimmed(input.ExpectedMeasurableOutcome),
+                dataSources,
+                prerequisites,
+                dependencies,
+                risks,
+                estimate,
+                scope,
+                provenance,
+                verification,
+                evidence));
+        }
+
+        var storedFindings = existingSection.Findings ?? Array.Empty<ReportFinding>();
+        var submittedFindingIds = new HashSet<string>(StringComparer.Ordinal);
+        var mergedFindings = MergeFindingInputs(storedFindings, AiInput.Findings, offeredQuestionIds, "AiInput.Findings", submittedFindingIds);
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+
+        mergedOpportunities.AddRange(existingOpportunities.Where(item => !submittedOpportunityIds.Contains(item.Id)));
+        mergedFindings.AddRange(storedFindings.Where(item => !submittedFindingIds.Contains(item.Id)));
+        var updatedSection = existingSection with
+        {
+            State = AiInput.State,
+            Opportunities = mergedOpportunities.Count == 0 && existingSection.Opportunities is null ? null : mergedOpportunities,
+            Findings = mergedFindings.Count == 0 && existingSection.Findings is null ? null : mergedFindings
+        };
+        var updatedContent = retrieved.Content with { AiOpportunitiesAndRoi = updatedSection };
+        var saved = await _contentService.SaveDraftAsync(revision.Id, postedConcurrencyStamp, updatedContent, User, ct);
+        ValidationIssues = saved.ValidationIssues ?? Array.Empty<ReportContentValidationIssue>();
+        if (saved.State == AssessmentReportRevisionContentState.Saved)
+        {
+            ReportContent = saved.Content;
+            ExpectedConcurrencyStamp = saved.ConcurrencyStamp ?? ExpectedConcurrencyStamp;
+            LastSavedUtc = saved.UpdatedUtc;
+            AiInput = AiOpportunitiesInput.From(saved.Content!.AiOpportunitiesAndRoi);
+            SaveStatus = "AI Opportunities & ROI Draft saved.";
+            return Page();
+        }
+        if (saved.State == AssessmentReportRevisionContentState.ConcurrencyConflict)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft was changed by another editor. Your opportunities have been kept and were not saved; reload to review the newer version.");
+        }
+        else if (saved.State == AssessmentReportRevisionContentState.NotDraft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+        }
+        else if (saved.State == AssessmentReportRevisionContentState.ValidationFailed)
+        {
+            ModelState.AddModelError(string.Empty, "Review the validation issues below. Your entered opportunities have been kept.");
+        }
+        else
+        {
+            ModelState.AddModelError(string.Empty, "Draft could not be saved. Your entered opportunities have been kept.");
         }
         return Page();
     }
@@ -399,6 +612,189 @@ public sealed class ReportModel : PageModel
         CanCreateReport = true;
         PopulateQuestionnaire(source.Assessment.QuestionnaireVersion, source.Response.Data);
         return Page();
+    }
+
+    private static IReadOnlyList<ReportEvidenceReference> MergeQuestionnaireEvidence(
+        IReadOnlyList<ReportEvidenceReference>? existing,
+        IEnumerable<string>? selectedQuestionIds,
+        ISet<string> offeredQuestionIds)
+    {
+        var selected = (selectedQuestionIds ?? Array.Empty<string>())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var remaining = selected.ToHashSet(StringComparer.Ordinal);
+        var merged = new List<ReportEvidenceReference>();
+        foreach (var reference in existing ?? Array.Empty<ReportEvidenceReference>())
+        {
+            if (reference.Kind == ReportEvidenceKind.QuestionnaireAnswer
+                && reference.QuestionId is not null
+                && offeredQuestionIds.Contains(reference.QuestionId))
+            {
+                if (remaining.Remove(reference.QuestionId))
+                {
+                    merged.Add(reference);
+                }
+                continue;
+            }
+            merged.Add(reference);
+        }
+        foreach (var questionId in selected.Where(remaining.Contains))
+        {
+            merged.Add(new ReportEvidenceReference(ReportEvidenceKind.QuestionnaireAnswer, questionId, QuestionId: questionId));
+        }
+        return merged;
+    }
+
+    private string? ResolveItemId(string? postedId, IReadOnlyCollection<string> storedIds, ISet<string> seen, string key, string label)
+    {
+        var generated = string.IsNullOrWhiteSpace(postedId);
+        var id = generated ? Guid.NewGuid().ToString("N") : postedId!;
+        if (!generated && !storedIds.Contains(id) && !Guid.TryParse(id, out _))
+        {
+            ModelState.AddModelError(key, $"{label}: ID is invalid. Reload the Draft and retry the edit.");
+            return null;
+        }
+        if (!seen.Add(id))
+        {
+            ModelState.AddModelError(key, $"{label}: IDs must be unique.");
+            return null;
+        }
+        return id;
+    }
+
+    private List<ReportFinding> MergeFindingInputs(
+        IReadOnlyList<ReportFinding> stored,
+        List<FindingInput> inputs,
+        ISet<string> offeredQuestionIds,
+        string keyPrefix,
+        ISet<string> submittedIds)
+    {
+        var storedIds = stored.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var merged = new List<ReportFinding>();
+        for (var index = 0; index < inputs.Count; index++)
+        {
+            var input = inputs[index];
+            var id = ResolveItemId(input.Id, storedIds, submittedIds, $"{keyPrefix}[{index}].Id", $"Finding {index + 1}");
+            if (id is null)
+            {
+                continue;
+            }
+            input.Id = id;
+            var existing = stored.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            var evidence = MergeQuestionnaireEvidence(existing?.EvidenceReferences, input.EvidenceQuestionIds, offeredQuestionIds);
+            merged.Add(existing is not null
+                ? existing with
+                {
+                    Title = input.Title,
+                    Narrative = input.Narrative,
+                    Classification = input.Classification,
+                    Provenance = input.Provenance,
+                    VerificationStatus = input.VerificationStatus,
+                    ConsultantNotes = input.ConsultantNotes,
+                    EvidenceReferences = evidence
+                }
+                : new ReportFinding(id, input.Title, input.Narrative, input.Classification, input.Provenance, input.VerificationStatus, evidence, input.ConsultantNotes));
+        }
+        return merged;
+    }
+
+    private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? Amount(decimal? value) => value?.ToString(CultureInfo.InvariantCulture);
+
+    private IReadOnlyList<string>? ParseLines(string? text, string key, string label)
+    {
+        if (text is null)
+        {
+            return null;
+        }
+        var items = new List<string>();
+        foreach (var raw in text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+            if (line.Length > MaxListItemLength)
+            {
+                ModelState.AddModelError(key, $"{label}: each line must be {MaxListItemLength} characters or fewer (line {items.Count + 1} has {line.Length}).");
+                continue;
+            }
+            items.Add(line);
+        }
+        if (items.Count > MaxListItems)
+        {
+            ModelState.AddModelError(key, $"{label}: no more than {MaxListItems} lines are allowed.");
+        }
+        return items;
+    }
+
+    private decimal? ParseAmount(string? text, string key, string label)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+        if (!decimal.TryParse(text.Trim(), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var value))
+        {
+            ModelState.AddModelError(key, $"{label} must be a plain number such as 1250 or 1250.50.");
+            return null;
+        }
+        if (value < 0 || value > MaxEstimateAmount)
+        {
+            ModelState.AddModelError(key, $"{label} must be between 0 and {MaxEstimateAmount:N0}.");
+            return null;
+        }
+        return value;
+    }
+
+    private ImplementationScope BuildScope(OpportunityInput input, ImplementationScope? existing, string key, string label)
+    {
+        if (input.ScopeState is not { } state)
+        {
+            return existing ?? new ImplementationScope(ReportAssessmentState.NotAssessed);
+        }
+        var description = input.ScopeDescription is null ? existing?.Description : Trimmed(input.ScopeDescription);
+        var inScope = ParseLines(input.ScopeInText, key + ".ScopeInText", label + " in-scope items") ?? existing?.InScopeItems;
+        var outOfScope = ParseLines(input.ScopeOutText, key + ".ScopeOutText", label + " out-of-scope items") ?? existing?.OutOfScopeItems;
+        return new ImplementationScope(state, description, inScope, outOfScope);
+    }
+
+    private EffortCostEstimate BuildEstimate(OpportunityInput input, EffortCostEstimate? existing, string key, string label, ISet<string> offeredQuestionIds)
+    {
+        if (input.EstimateStatus is not { } status)
+        {
+            return existing ?? new EffortCostEstimate(ReportEstimateStatus.NotEstimated);
+        }
+        if (status == ReportEstimateStatus.NotEstimated && existing?.Status == ReportEstimateStatus.Estimated)
+        {
+            if (!input.ConfirmEstimateReset)
+            {
+                ModelState.AddModelError(key + ".ConfirmEstimateReset",
+                    $"{label}: changing an existing estimate to Not estimated clears its effort, cost, basis, assumptions and evidence. Tick \"Confirm estimate reset\" to proceed, or keep the status as Estimated.");
+                return existing;
+            }
+            return new EffortCostEstimate(ReportEstimateStatus.NotEstimated);
+        }
+        var estimateLabel = label + " estimate";
+        var effort = input.EffortValue is null ? existing?.EffortValue : ParseAmount(input.EffortValue, key + ".EffortValue", estimateLabel + " effort value");
+        var cost = input.CostAmount is null ? existing?.CostAmount : ParseAmount(input.CostAmount, key + ".CostAmount", estimateLabel + " cost amount");
+        var unit = input.EffortUnit is null ? existing?.EffortUnit : Trimmed(input.EffortUnit);
+        var currency = input.Currency is null ? existing?.Currency : Trimmed(input.Currency);
+        var basis = input.EstimateBasis is null ? existing?.Basis : Trimmed(input.EstimateBasis);
+        var assumptions = ParseLines(input.EstimateAssumptionsText, key + ".EstimateAssumptionsText", estimateLabel + " assumptions") ?? existing?.Assumptions;
+        var evidence = MergeQuestionnaireEvidence(existing?.EvidenceReferences, input.EstimateEvidenceQuestionIds, offeredQuestionIds);
+        return new EffortCostEstimate(
+            status,
+            effort,
+            unit,
+            cost,
+            currency,
+            basis,
+            assumptions,
+            evidence.Count == 0 && existing?.EvidenceReferences is null ? null : evidence);
     }
 
     private async Task<SubmittedSource?> FindSubmittedResponseAsync(Guid assessmentId, Guid submittedResponseId, CancellationToken ct)
@@ -580,13 +976,124 @@ public sealed class ReportModel : PageModel
     {
         public ReportAssessmentState State { get; set; } = ReportAssessmentState.NotAssessed;
         public List<SystemInventoryInput> Systems { get; set; } = new();
+        public List<FindingInput> Findings { get; set; } = new();
+        public List<string>? EvidenceQuestionIds { get; set; } = new();
 
         public static IndustrialDataInput From(IndustrialDataAndSystemsSection section) => new()
         {
             State = section.State,
-            Systems = section.Systems?.Select(SystemInventoryInput.From).ToList() ?? new List<SystemInventoryInput>()
+            Systems = section.Systems?.Select(SystemInventoryInput.From).ToList() ?? new List<SystemInventoryInput>(),
+            Findings = section.Findings?.Select(FindingInput.From).ToList() ?? new List<FindingInput>(),
+            EvidenceQuestionIds = QuestionIdsOf(section.EvidenceReferences)
         };
     }
+
+    private static List<string> QuestionIdsOf(IReadOnlyList<ReportEvidenceReference>? references) =>
+        references?
+            .Where(reference => reference.Kind == ReportEvidenceKind.QuestionnaireAnswer && reference.QuestionId is not null)
+            .Select(reference => reference.QuestionId!)
+            .ToList() ?? new List<string>();
+
+    public sealed class FindingInput
+    {
+        public string? Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Narrative { get; set; } = string.Empty;
+        public ReportFindingClassification Classification { get; set; } = ReportFindingClassification.PreliminaryFinding;
+        public ReportContentProvenance Provenance { get; set; } = ReportContentProvenance.ConsultantEntered;
+        public ReportVerificationStatus VerificationStatus { get; set; } = ReportVerificationStatus.Unverified;
+        public string? ConsultantNotes { get; set; }
+        public List<string>? EvidenceQuestionIds { get; set; } = new();
+
+        public static FindingInput From(ReportFinding finding) => new()
+        {
+            Id = finding.Id,
+            Title = finding.Title,
+            Narrative = finding.Narrative,
+            Classification = finding.Classification,
+            Provenance = finding.Provenance,
+            VerificationStatus = finding.VerificationStatus,
+            ConsultantNotes = finding.ConsultantNotes,
+            EvidenceQuestionIds = QuestionIdsOf(finding.EvidenceReferences)
+        };
+    }
+
+    public sealed class AiOpportunitiesInput
+    {
+        public ReportAssessmentState State { get; set; } = ReportAssessmentState.NotAssessed;
+        public List<OpportunityInput> Opportunities { get; set; } = new();
+        public List<FindingInput> Findings { get; set; } = new();
+
+        public static AiOpportunitiesInput From(AiOpportunitiesAndRoiSection section) => new()
+        {
+            State = section.State,
+            Opportunities = section.Opportunities?.Select(OpportunityInput.From).ToList() ?? new List<OpportunityInput>(),
+            Findings = section.Findings?.Select(FindingInput.From).ToList() ?? new List<FindingInput>()
+        };
+    }
+
+    public sealed class OpportunityInput
+    {
+        public string? Id { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? BusinessProblem { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? OperationalProcessOrArea { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? ProposedUseCase { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? ExpectedMeasurableOutcome { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? RequiredDataSourcesText { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? TechnicalPrerequisitesText { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? ImplementationDependenciesText { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? RisksAndAssumptionsText { get; set; }
+        public ReportContentProvenance? Provenance { get; set; }
+        public ReportVerificationStatus? VerificationStatus { get; set; }
+        public List<string>? EvidenceQuestionIds { get; set; } = new();
+        public ReportAssessmentState? ScopeState { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? ScopeDescription { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? ScopeInText { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? ScopeOutText { get; set; }
+        public ReportEstimateStatus? EstimateStatus { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? EffortValue { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? EffortUnit { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? CostAmount { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Currency { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? EstimateBasis { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? EstimateAssumptionsText { get; set; }
+        public List<string>? EstimateEvidenceQuestionIds { get; set; } = new();
+        public bool ConfirmEstimateReset { get; set; }
+
+        private static string Lines(IReadOnlyList<string>? items) => items is null ? string.Empty : string.Join("\n", items);
+
+        public static OpportunityInput From(AiImplementationOpportunity item) => new()
+        {
+            Id = item.Id,
+            BusinessProblem = item.BusinessProblem,
+            OperationalProcessOrArea = item.OperationalProcessOrArea,
+            ProposedUseCase = item.ProposedUseCase,
+            ExpectedMeasurableOutcome = item.ExpectedMeasurableOutcome ?? string.Empty,
+            RequiredDataSourcesText = Lines(item.RequiredDataSources),
+            TechnicalPrerequisitesText = Lines(item.TechnicalPrerequisites),
+            ImplementationDependenciesText = Lines(item.ImplementationDependencies),
+            RisksAndAssumptionsText = Lines(item.RisksAndAssumptions),
+            Provenance = item.Provenance,
+            VerificationStatus = item.VerificationStatus,
+            EvidenceQuestionIds = QuestionIdsOf(item.EvidenceReferences),
+            ScopeState = item.Scope.State,
+            ScopeDescription = item.Scope.Description ?? string.Empty,
+            ScopeInText = Lines(item.Scope.InScopeItems),
+            ScopeOutText = Lines(item.Scope.OutOfScopeItems),
+            EstimateStatus = item.Estimate.Status,
+            EffortValue = Amount(item.Estimate.EffortValue) ?? string.Empty,
+            EffortUnit = item.Estimate.EffortUnit ?? string.Empty,
+            CostAmount = Amount(item.Estimate.CostAmount) ?? string.Empty,
+            Currency = item.Estimate.Currency ?? string.Empty,
+            EstimateBasis = item.Estimate.Basis ?? string.Empty,
+            EstimateAssumptionsText = Lines(item.Estimate.Assumptions),
+            EstimateEvidenceQuestionIds = QuestionIdsOf(item.Estimate.EvidenceReferences)
+        };
+    }
+
+    public sealed record EvidenceCheckboxModel(IReadOnlyList<QuestionnaireAnswerView> Options, string FieldName, string IdPrefix, IReadOnlyCollection<string>? Selected);
+    public sealed record AiOpportunityEditorModel(OpportunityInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, AiImplementationOpportunity? Stored);
+    public sealed record AiFindingEditorModel(FindingInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, ReportFinding? Stored);
 
     public sealed class SystemInventoryInput
     {
