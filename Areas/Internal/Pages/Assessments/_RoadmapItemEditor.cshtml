@@ -1,0 +1,69 @@
+@using SentinelMfgSuite.Web.Models.Assessments.Reports
+@using SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments
+@model ReportModel.RoadmapItemEditorModel
+@{
+    var input = Model.Input;
+    var prefix = $"RoadmapInput.Items[{Model.Index}]";
+    var idPrefix = $"roadmap-{Model.Index}";
+    var otherEvidence = Model.Stored?.EvidenceReferences
+        .Where(reference => reference.Kind != ReportEvidenceKind.QuestionnaireAnswer).ToArray();
+    var evidenceModel = new ReportModel.EvidenceCheckboxModel(Model.Options, prefix + ".EvidenceQuestionIds", idPrefix + "-evidence", input.EvidenceQuestionIds);
+    var candidates = Model.DependencyCandidates.Where(item => item.Id != input.Id).OrderBy(item => item.Priority).ToArray();
+    var selected = input.DependencyIds ?? new List<string>();
+}
+<fieldset class="border border-secondary rounded-3 p-3 mb-3 roadmap-item-entry">
+    <legend class="float-none w-auto px-2 small">Roadmap item</legend>
+    <input type="hidden" name="@(prefix + ".Id")" value="@input.Id" />
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-title">Title</label><input id="@(idPrefix)-title" name="@(prefix + ".Title")" value="@input.Title" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-activities">Activities</label><textarea id="@(idPrefix)-activities" name="@(prefix + ".Activities")" rows="3" class="form-control bg-dark text-light border-secondary">@input.Activities</textarea></div>
+    <div class="row g-2">
+        <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-start">Start day (1-90)</label><input type="number" min="1" max="90" id="@(idPrefix)-start" name="@(prefix + ".StartDay")" value="@(input.StartDay ?? 1)" class="form-control bg-dark text-light border-secondary" /></div>
+        <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-end">End day (1-90)</label><input type="number" min="1" max="90" id="@(idPrefix)-end" name="@(prefix + ".EndDay")" value="@(input.EndDay ?? 1)" class="form-control bg-dark text-light border-secondary" /></div>
+        <div class="col-md-4 mb-2"><label class="form-label" for="@(idPrefix)-priority">Priority (unique)</label><input type="number" min="1" id="@(idPrefix)-priority" name="@(prefix + ".Priority")" value="@input.Priority" class="form-control bg-dark text-light border-secondary" /></div>
+    </div>
+    <div class="row g-2">
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-owner">Owner role</label><input id="@(idPrefix)-owner" name="@(prefix + ".OwnerRole")" value="@input.OwnerRole" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-measure">Success measure</label><input id="@(idPrefix)-measure" name="@(prefix + ".SuccessMeasure")" value="@input.SuccessMeasure" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>
+    </div>
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-criteria">Acceptance criteria (one per line)</label><textarea id="@(idPrefix)-criteria" name="@(prefix + ".AcceptanceCriteriaText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.AcceptanceCriteriaText</textarea></div>
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-assumptions">Assumptions (one per line)</label><textarea id="@(idPrefix)-assumptions" name="@(prefix + ".AssumptionsText")" rows="3" class="form-control bg-dark text-light border-secondary">@input.AssumptionsText</textarea></div>
+    <div class="mb-2">
+        <span class="form-label d-block">Dependencies</span>
+        <p class="small text-secondary mb-1">A dependency must finish (its end day) no later than this item's start day. Only saved roadmap items can be selected.</p>
+        @if (Model.Stored is not null)
+        {
+            <input type="hidden" name="@(prefix + ".DependenciesSubmitted")" value="true" />
+            @if (candidates.Length == 0)
+            {
+                <p class="small text-secondary mb-0">No other saved roadmap items.</p>
+            }
+            @for (var c = 0; c < candidates.Length; c++)
+            {
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="@(idPrefix)-dep-@c" name="@(prefix + ".DependencyIds")" value="@candidates[c].Id" checked="@selected.Contains(candidates[c].Id)" />
+                    <label class="form-check-label" for="@(idPrefix)-dep-@c">Priority @candidates[c].Priority: @candidates[c].Title (days @candidates[c].StartDay-@candidates[c].EndDay)</label>
+                </div>
+            }
+        }
+        else
+        {
+            <p class="small text-secondary mb-0">Save this item first, then select its dependencies.</p>
+        }
+    </div>
+    <div class="row g-2">
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-prov">Provenance</label><select id="@(idPrefix)-prov" name="@(prefix + ".Provenance")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportContentProvenance>()) { <option value="@value" selected="@(value == (input.Provenance ?? ReportContentProvenance.ConsultantEntered))">@value</option> }</select></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-ver">Verification status</label><select id="@(idPrefix)-ver" name="@(prefix + ".VerificationStatus")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportVerificationStatus>()) { <option value="@value" selected="@(value == (input.VerificationStatus ?? ReportVerificationStatus.Unverified))">@value</option> }</select></div>
+    </div>
+    <details class="mb-2">
+        <summary class="small">Questionnaire evidence references</summary>
+        <partial name="_EvidenceCheckboxes" model="evidenceModel" />
+        @if (otherEvidence is { Length: > 0 })
+        {
+            <p class="small text-secondary mt-2 mb-0">Other preserved evidence references (read-only): @string.Join(", ", otherEvidence.Select(reference => $"{reference.Kind}: {reference.ReferenceId}"))</p>
+        }
+    </details>
+    @if (Model.Stored is null)
+    {
+        <button type="button" class="btn btn-outline-danger btn-sm remove-new-row" aria-label="Remove this unsaved roadmap item">Remove unsaved item</button>
+    }
+</fieldset>

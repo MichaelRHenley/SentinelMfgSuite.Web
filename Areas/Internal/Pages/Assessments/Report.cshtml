@@ -30,7 +30,7 @@
 
     <section class="container pb-5">
         <div class="alert alert-warning" role="status">
-            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, and Technical Gaps &amp; Architecture sections. Approval, issuance, PDF generation, and customer delivery are not yet available.
+            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, and Implementation Roadmap sections. Approval, issuance, PDF generation, and customer delivery are not yet available.
         </div>
 
         @if (!Model.RevisionId.HasValue)
@@ -134,8 +134,8 @@
                     <section class="card sentinel-card border-0 rounded-4 h-100" aria-labelledby="workspaceHeading">
                         <div class="card-body p-3 p-md-4">
                             <h2 id="workspaceHeading" class="h4 fw-semibold">Consultant report workspace</h2>
-                            Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, and Technical Gaps &amp; Architecture Drafts. Evidence and frozen scoring remain read-only in the adjacent panel.
-                            @if (Model.SaveStatus is string saveStatus && saveStatus != "AI Opportunities & ROI Draft saved." && saveStatus != "Technical Gaps & Architecture Draft saved.")
+                            <p class="small text-secondary">Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, and Implementation Roadmap Drafts. Evidence and frozen scoring remain read-only in the adjacent panel.</p>
+                            @if (Model.SaveStatus is string saveStatus && saveStatus != "AI Opportunities & ROI Draft saved." && saveStatus != "Technical Gaps & Architecture Draft saved." && saveStatus != "Implementation Roadmap Draft saved.")
                             {
                                 <div class="alert alert-success" role="status">@saveStatus</div>
                             }
@@ -508,9 +508,57 @@
                                     <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                                 </form>
                             </section>
+                            <section id="roadmap" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="roadmapHeading">
+                                <h3 id="roadmapHeading" class="h5 fw-semibold">Implementation Roadmap</h3>
+                                <p class="small text-secondary">Days are inclusive, between 1 and 90; no scheduling is inferred. Priorities must be unique positive numbers and are never renumbered. New items are consultant-entered and unverified. Saved items cannot be deleted here.</p>
+                                @if (Model.SaveStatus == "Implementation Roadmap Draft saved.")
+                                {
+                                    <div class="alert alert-success" role="status">@Model.SaveStatus</div>
+                                }
+                                <form method="post" asp-page-handler="SaveRoadmap" asp-fragment="roadmap">
+                                    <input type="hidden" asp-for="AssessmentId" />
+                                    <input type="hidden" asp-for="SubmittedResponseId" />
+                                    <input type="hidden" asp-for="RevisionId" />
+                                    <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                    @if (Model.ValidationIssues.Count > 0)
+                                    {
+                                        <div class="mb-3" role="status">
+                                            @foreach (var issue in Model.ValidationIssues)
+                                            {
+                                                <div class="alert @(issue.Severity == SentinelMfgSuite.Web.Services.Assessments.Reports.ReportContentValidationSeverity.Error ? "alert-danger" : "alert-warning") py-2 mb-2"><strong>@issue.Severity:</strong> @issue.Message</div>
+                                            }
+                                        </div>
+                                    }
+                                    <div class="mb-3">
+                                        <label asp-for="RoadmapInput.State" class="form-label">Section assessment state</label>
+                                        <select asp-for="RoadmapInput.State" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState>()" class="form-select bg-dark text-light border-secondary"></select>
+                                    </div>
+                                    @{
+                                        var storedRoadmap = Model.ReportContent?.ImplementationRoadmap.Items ?? Array.Empty<SentinelMfgSuite.Web.Models.Assessments.Reports.RoadmapItem>();
+                                        var nextPriority = 1;
+                                        var usedPriorities = Model.RoadmapInput.Items.Select(r => r.Priority ?? 0).Concat(storedRoadmap.Select(r => r.Priority)).ToHashSet();
+                                        while (usedPriorities.Contains(nextPriority)) { nextPriority++; }
+                                    }
+                                    <div id="roadmapList" data-next-priority="@nextPriority">
+                                        @for (var i = 0; i < Model.RoadmapInput.Items.Count; i++)
+                                        {
+                                            var storedItem = storedRoadmap.FirstOrDefault(r => r.Id == Model.RoadmapInput.Items[i].Id);
+                                            <partial name="_RoadmapItemEditor" model="new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.RoadmapItemEditorModel(Model.RoadmapInput.Items[i], i.ToString(), Model.EvidenceOptions, storedItem, storedRoadmap)" />
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-outline-light btn-sm mb-3" id="addRoadmapItem">Add roadmap item</button>
+                                    @{
+                                        var newRoadmapModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.RoadmapItemEditorModel(new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.RoadmapItemInput { StartDay = 1, EndDay = 1, Priority = null }, "__index__", Model.EvidenceOptions, null, storedRoadmap);
+                                    }
+                                    <template id="roadmapItemTemplate">
+                                        <partial name="_RoadmapItemEditor" model="newRoadmapModel" />
+                                    </template>
+                                    <div asp-validation-summary="All" class="text-danger mb-3" role="alert"></div>
+                                    <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
+                                </form>
+                            </section>
                             <nav aria-label="Other consultant report sections">
                                 <ol class="list-group list-group-numbered">
-                                    <li class="list-group-item bg-transparent text-light">Implementation Roadmap <span class="text-secondary">— editor not yet available</span></li>
                                     <li class="list-group-item bg-transparent text-light">Executive Presentation <span class="text-secondary">— editor not yet available</span></li>
                                 </ol>
                             </nav>
@@ -591,6 +639,39 @@
         };
         wireTechnical('addTechnicalGap', 'technicalGapsList', 'technicalGapTemplate', '.technical-gap-entry', 'tech-gap');
         wireTechnical('addTechnicalRecommendation', 'technicalRecommendationsList', 'technicalRecommendationTemplate', '.architecture-recommendation-entry', 'tech-rec');
+
+        (() => {
+            const button = document.getElementById('addRoadmapItem');
+            const list = document.getElementById('roadmapList');
+            const tpl = document.getElementById('roadmapItemTemplate');
+            if (!button || !list || !tpl) return;
+            const selector = '.roadmap-item-entry';
+            let nextPriority = parseInt(list.dataset.nextPriority || '1', 10);
+            const reindex = () => {
+                list.querySelectorAll(selector).forEach((entry, index) => {
+                    entry.querySelectorAll('[name]').forEach(e => { e.name = e.name.replace(/\[\d+\]/, `[${index}]`); });
+                    entry.querySelectorAll('[id]').forEach(e => { e.id = e.id.replace(/^roadmap-\d+-/, `roadmap-${index}-`); });
+                    entry.querySelectorAll('[for]').forEach(e => { e.htmlFor = e.htmlFor.replace(/^roadmap-\d+-/, `roadmap-${index}-`); });
+                });
+            };
+            button.addEventListener('click', () => {
+                const index = list.querySelectorAll(selector).length;
+                const fragment = tpl.content.cloneNode(true);
+                fragment.querySelectorAll('[name]').forEach(e => { e.name = e.name.replaceAll('__index__', index); });
+                fragment.querySelectorAll('[id]').forEach(e => { e.id = e.id.replaceAll('__index__', index); });
+                fragment.querySelectorAll('[for]').forEach(e => { e.htmlFor = e.htmlFor.replaceAll('__index__', index); });
+                const priority = fragment.querySelector('input[name$=".Priority"]');
+                if (priority) { priority.value = nextPriority++; }
+                list.appendChild(fragment);
+            });
+            list.addEventListener('click', event => {
+                const target = event.target.closest('.remove-new-row');
+                if (!target) return;
+                target.closest(selector)?.remove();
+                reindex();
+                button.focus();
+            });
+        })();
 
         const addFindingButton = document.getElementById('addIndustrialFinding');
         const findingList = document.getElementById('industrialFindingsList');

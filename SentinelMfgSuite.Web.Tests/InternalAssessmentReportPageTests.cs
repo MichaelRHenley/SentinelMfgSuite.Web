@@ -705,7 +705,8 @@ public sealed class InternalAssessmentReportPageTests
         Assert.DoesNotContain("Editing, review, approval", html, StringComparison.Ordinal);
         Assert.Contains("Draft editing is available", html, StringComparison.Ordinal);
         Assert.Contains("Approval, issuance, PDF generation, and customer delivery are not yet available", html, StringComparison.Ordinal);
-        Assert.Contains("Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, and Technical Gaps &amp; Architecture Drafts", html, StringComparison.Ordinal);
+        Assert.Contains("Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, and Implementation Roadmap Drafts", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"roadmap\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"technicalGaps\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"aiOpportunities\"", html, StringComparison.Ordinal);
         Assert.Contains("#aiOpportunities", html, StringComparison.Ordinal);
@@ -717,6 +718,390 @@ public sealed class InternalAssessmentReportPageTests
         var successIndex = saved.IndexOf("AI Opportunities &amp; ROI Draft saved.", StringComparison.Ordinal);
         Assert.True(sectionStart >= 0 && successIndex > sectionStart);
         Assert.Equal(1, saved.Split("AI Opportunities &amp; ROI Draft saved.").Length - 1);
+    }
+
+    private static Dictionary<string, string> RoadmapForm(Guid assessmentId, Guid responseId, AssessmentReportRevision revision, string html) => new()
+    {
+        ["__RequestVerificationToken"] = ExtractToken(html),
+        ["AssessmentId"] = assessmentId.ToString(),
+        ["SubmittedResponseId"] = responseId.ToString(),
+        ["RevisionId"] = revision.Id.ToString(),
+        ["ExpectedConcurrencyStamp"] = revision.ConcurrencyStamp.ToString(),
+        ["RoadmapInput.State"] = nameof(ReportAssessmentState.Assessed)
+    };
+
+    private static RoadmapItem Road(string id, int priority, int start, int end, params string[] deps) =>
+        new(id, "Item " + id, "Do work", start, end, priority, "Owner", deps, new[] { "Done" }, new[] { "Assume" }, "Measure",
+            ReportContentProvenance.ConsultantEntered, ReportVerificationStatus.Unverified,
+            new[] { new ReportEvidenceReference(ReportEvidenceKind.ScoringDimension, "D1") });
+
+    [Fact]
+    public async Task Roadmap_Create_Edit_Dependencies_Preserve_Other_Data()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var a = Road("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 2, 1, 5);
+        var b = Road("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 1, 6, 9);
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Keep summary"),
+            ImplementationRoadmap = new ImplementationRoadmapSection(ReportAssessmentState.Assessed, new[] { a, b })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var snapshot = revision.ScoringSnapshot;
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        Assert.Contains("Remove this unsaved roadmap item", html + "<template>Remove this unsaved roadmap item", StringComparison.Ordinal);
+        Assert.True(html.IndexOf("Item bbbb", StringComparison.Ordinal) < html.IndexOf("Item aaaa", StringComparison.Ordinal) || html.Contains("value=\"Item bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\""));
+
+        // Items sorted by priority: [0]=b (priority 1), [1]=a (priority 2). Omit dependency fields to preserve; add new item.
+        var form = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["RoadmapInput.Items[0].Id"] = b.Id;
+        form["RoadmapInput.Items[0].Title"] = "Edited <b>b</b>";
+        form["RoadmapInput.Items[0].DependenciesSubmitted"] = "true";
+        form["RoadmapInput.Items[0].DependencyIds"] = a.Id;
+        form["RoadmapInput.Items[0].AcceptanceCriteriaText"] = "One\r\n\r\nTwo";
+        form["RoadmapInput.Items[0].EvidenceQuestionIds"] = "q02";
+        form["RoadmapInput.Items[1].Id"] = a.Id;
+        form["RoadmapInput.Items[2].Id"] = string.Empty;
+        form["RoadmapInput.Items[2].Title"] = "New item";
+        form["RoadmapInput.Items[2].Activities"] = "New work";
+        form["RoadmapInput.Items[2].StartDay"] = "1";
+        form["RoadmapInput.Items[2].EndDay"] = "90";
+        var response = await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(form));
+        var resultHtml = await response.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Implementation Roadmap Draft saved.", resultHtml, StringComparison.Ordinal);
+        Assert.Contains("Edited &lt;b&gt;b&lt;/b&gt;", resultHtml, StringComparison.Ordinal);
+
+        var after = await factory.GetOnlyReportAsync();
+        var saved = ConsultantReportContentSerializer.Deserialize(after.Revisions.Single().ConsultantContentJson!);
+        Assert.Equal("Keep summary", saved.ExecutiveSummary.Narrative);
+        Assert.Equal(snapshot, after.Revisions.Single().ScoringSnapshot);
+        var items = saved.ImplementationRoadmap.Items!;
+        Assert.Equal(3, items.Count);
+        var editedB = items.Single(i => i.Id == b.Id);
+        Assert.Equal(new[] { a.Id }, editedB.Dependencies);
+        Assert.Equal(new[] { "One", "Two" }, editedB.AcceptanceCriteria);
+        Assert.Equal(1, editedB.Priority);
+        Assert.Contains(editedB.EvidenceReferences, r => r.Kind == ReportEvidenceKind.ScoringDimension);
+        Assert.Contains(editedB.EvidenceReferences, r => r.QuestionId == "q02");
+        var created = items.Single(i => i.Id != a.Id && i.Id != b.Id);
+        Assert.Matches("^[0-9a-f]{32}$", created.Id);
+        Assert.Equal(3, created.Priority);
+        Assert.Equal(ReportContentProvenance.ConsultantEntered, created.Provenance);
+        Assert.Equal(ReportVerificationStatus.Unverified, created.VerificationStatus);
+        Assert.Equal(90, created.EndDay);
+        Assert.Equal(a.Title, items.Single(i => i.Id == a.Id).Title);
+    }
+
+    [Fact]
+    public async Task Roadmap_Invalid_Dependency_And_Duplicate_Priority_Are_Rejected_And_Input_Retained()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var a = Road("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 1, 1, 5);
+        var b = Road("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 2, 6, 9);
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ImplementationRoadmap = new ImplementationRoadmapSection(ReportAssessmentState.Assessed, new[] { a, b })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+
+        async Task<string> Post(Action<Dictionary<string, string>> edit)
+        {
+            var form = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+            form["RoadmapInput.Items[0].Id"] = a.Id;
+            form["RoadmapInput.Items[1].Id"] = b.Id;
+            edit(form);
+            var r = await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(form));
+            return await r.Content.ReadAsStringAsync();
+        }
+
+        var self = await Post(f => { f["RoadmapInput.Items[0].DependenciesSubmitted"] = "true"; f["RoadmapInput.Items[0].DependencyIds"] = a.Id; f["RoadmapInput.Items[0].Title"] = "Retained <x>"; });
+        Assert.Contains("cannot depend on itself", self, StringComparison.Ordinal);
+        Assert.Contains("Retained &lt;x&gt;", self, StringComparison.Ordinal);
+        var unknown = await Post(f => { f["RoadmapInput.Items[0].DependenciesSubmitted"] = "true"; f["RoadmapInput.Items[0].DependencyIds"] = "cccccccccccccccccccccccccccccccc"; });
+        Assert.Contains("saved roadmap items", unknown, StringComparison.Ordinal);
+        var ordering = await Post(f => { f["RoadmapInput.Items[0].DependenciesSubmitted"] = "true"; f["RoadmapInput.Items[0].DependencyIds"] = b.Id; });
+        Assert.DoesNotContain("Implementation Roadmap Draft saved.", ordering, StringComparison.Ordinal);
+        var duplicate = await Post(f => { f["RoadmapInput.Items[1].Priority"] = "1"; });
+        Assert.DoesNotContain("Implementation Roadmap Draft saved.", duplicate, StringComparison.Ordinal);
+        var badDay = await Post(f => { f["RoadmapInput.Items[0].EndDay"] = "91"; });
+        Assert.DoesNotContain("Implementation Roadmap Draft saved.", badDay, StringComparison.Ordinal);
+
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Equal(2, saved.ImplementationRoadmap.Items!.Count);
+        Assert.All(saved.ImplementationRoadmap.Items!, i => Assert.Empty(i.Dependencies));
+    }
+
+    [Fact]
+    public async Task Roadmap_Empty_Dependency_Submission_Clears_And_Omission_Preserves()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var a = Road("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 1, 1, 5);
+        var b = Road("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 2, 6, 9, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ImplementationRoadmap = new ImplementationRoadmapSection(ReportAssessmentState.Assessed, new[] { a, b })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+
+        var omit = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        omit["RoadmapInput.Items[0].Id"] = b.Id;
+        omit["RoadmapInput.Items[0].Title"] = "Still b";
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(omit))).StatusCode);
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Equal(new[] { a.Id }, saved.ImplementationRoadmap.Items!.Single(i => i.Id == b.Id).Dependencies);
+
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var clear = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        clear["RoadmapInput.Items[0].Id"] = b.Id;
+        clear["RoadmapInput.Items[0].DependenciesSubmitted"] = "true";
+        await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(clear));
+        saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Empty(saved.ImplementationRoadmap.Items!.Single(i => i.Id == b.Id).Dependencies);
+    }
+
+    [Fact]
+    public async Task Roadmap_Stale_Stamp_Is_Rejected_Without_Saving()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["ExpectedConcurrencyStamp"] = Guid.NewGuid().ToString();
+        form["RoadmapInput.Items[0].Title"] = "Stale";
+        form["RoadmapInput.Items[0].Activities"] = "Work";
+        var result = await (await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("Implementation Roadmap Draft saved.", result, StringComparison.Ordinal);
+        Assert.Contains("Stale", result, StringComparison.Ordinal);
+        var json = (await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson;
+        Assert.True(string.IsNullOrWhiteSpace(json) || ConsultantReportContentSerializer.Deserialize(json).ImplementationRoadmap.Items is not { Count: > 0 });
+    }
+
+    [Fact]
+    public async Task Roadmap_Post_Without_Antiforgery_Token_Is_Rejected()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var response = await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(new Dictionary<string, string> { ["RoadmapInput.State"] = "Assessed" }));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Roadmap_Save_Rejects_Unauthorized_And_NonDraft_Requests()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var regular = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        regular.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "user");
+        Assert.Equal(HttpStatusCode.Forbidden, (await regular.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(new Dictionary<string, string>()))).StatusCode);
+
+        var client = factory.CreateAdminClient();
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var stored = await db.Set<AssessmentReportRevision>().SingleAsync(item => item.Id == revision.Id);
+            stored.Status = AssessmentReportRevisionStatus.Approved;
+            await db.SaveChangesAsync();
+        }
+        var form = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["RoadmapInput.Items[0].Title"] = "Keep non-draft roadmap input";
+        var response = await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(form));
+        var resultHtml = await response.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Only Draft report revisions can be edited", resultHtml, StringComparison.Ordinal);
+        Assert.Contains("Keep non-draft roadmap input", resultHtml, StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task Roadmap_New_Items_Default_Priority_When_Omitted_Including_Existing_Gaps()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var a = Road("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 1, 1, 5);
+        var b = Road("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 3, 6, 9);
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ImplementationRoadmap = new ImplementationRoadmapSection(ReportAssessmentState.Assessed, new[] { a, b })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+
+        var form = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["RoadmapInput.Items[0].Id"] = a.Id;
+        form["RoadmapInput.Items[1].Id"] = b.Id;
+        form["RoadmapInput.Items[2].Id"] = string.Empty;
+        form["RoadmapInput.Items[2].Title"] = "First new";
+        form["RoadmapInput.Items[2].Activities"] = "Work";
+        form["RoadmapInput.Items[2].StartDay"] = "10";
+        form["RoadmapInput.Items[2].EndDay"] = "12";
+        form["RoadmapInput.Items[3].Id"] = string.Empty;
+        form["RoadmapInput.Items[3].Title"] = "Second new";
+        form["RoadmapInput.Items[3].Activities"] = "Work";
+        form["RoadmapInput.Items[3].StartDay"] = "13";
+        form["RoadmapInput.Items[3].EndDay"] = "15";
+        var resultHtml = await (await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        Assert.Contains("Implementation Roadmap Draft saved.", resultHtml, StringComparison.Ordinal);
+
+        var items = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!).ImplementationRoadmap.Items!;
+        Assert.Equal(4, items.Count);
+        Assert.Equal(1, items.Single(i => i.Id == a.Id).Priority);
+        Assert.Equal(3, items.Single(i => i.Id == b.Id).Priority);
+        Assert.Equal(2, items.Single(i => i.Title == "First new").Priority);
+        Assert.Equal(4, items.Single(i => i.Title == "Second new").Priority);
+        Assert.Equal(4, items.Select(i => i.Priority).Distinct().Count());
+    }
+
+    [Theory]
+    [InlineData(1, 90, true)]
+    [InlineData(1, 1, true)]
+    [InlineData(90, 90, true)]
+    [InlineData(0, 10, false)]
+    [InlineData(1, 91, false)]
+    [InlineData(50, 49, false)]
+    public async Task Roadmap_Day_Boundaries_Are_Inclusive_For_1_And_90(int startDay, int endDay, bool accepted)
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["RoadmapInput.Items[0].Id"] = string.Empty;
+        form["RoadmapInput.Items[0].Title"] = "Boundary item";
+        form["RoadmapInput.Items[0].Activities"] = "Work";
+        form["RoadmapInput.Items[0].StartDay"] = startDay.ToString();
+        form["RoadmapInput.Items[0].EndDay"] = endDay.ToString();
+        var resultHtml = await (await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+
+        var json = (await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson;
+        if (accepted)
+        {
+            Assert.Contains("Implementation Roadmap Draft saved.", resultHtml, StringComparison.Ordinal);
+            var item = ConsultantReportContentSerializer.Deserialize(json!).ImplementationRoadmap.Items!.Single();
+            Assert.Equal(startDay, item.StartDay);
+            Assert.Equal(endDay, item.EndDay);
+        }
+        else
+        {
+            Assert.DoesNotContain("Implementation Roadmap Draft saved.", resultHtml, StringComparison.Ordinal);
+            Assert.Contains("Boundary item", resultHtml, StringComparison.Ordinal);
+            Assert.True(string.IsNullOrWhiteSpace(json) || ConsultantReportContentSerializer.Deserialize(json).ImplementationRoadmap.Items is not { Count: > 0 });
+        }
+    }
+
+    [Fact]
+    public async Task Roadmap_NotAssessed_With_Items_Is_Rejected_And_Input_Retained()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var a = Road("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 1, 1, 5);
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ImplementationRoadmap = new ImplementationRoadmapSection(ReportAssessmentState.Assessed, new[] { a })
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var form = RoadmapForm(ids.AssessmentId, ids.ResponseId, revision, html);
+        form["RoadmapInput.State"] = nameof(ReportAssessmentState.NotAssessed);
+        form["RoadmapInput.Items[0].Id"] = a.Id;
+        form["RoadmapInput.Items[0].Title"] = "Retained posted title";
+        var resultHtml = await (await client.PostAsync(url + "?handler=SaveRoadmap", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+
+        Assert.DoesNotContain("Implementation Roadmap Draft saved.", resultHtml, StringComparison.Ordinal);
+        Assert.Contains("Retained posted title", resultHtml, StringComparison.Ordinal);
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Equal(ReportAssessmentState.Assessed, saved.ImplementationRoadmap.State);
+        Assert.Equal(a.Title, saved.ImplementationRoadmap.Items!.Single().Title);
+    }
+
+    [Fact]
+    public async Task Roadmap_Editor_Renders_Remove_Only_For_Unsaved_Rows_And_Indexed_Field_Names()
+    {
+        await using var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ImplementationRoadmap = new ImplementationRoadmapSection(ReportAssessmentState.Assessed,
+                new[] { Road("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 1, 1, 5), Road("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 2, 6, 9) })
+        });
+        var client = factory.CreateAdminClient();
+        var html = await (await client.GetAsync(factory.PageUrl(ids.AssessmentId, ids.ResponseId))).Content.ReadAsStringAsync();
+
+        var templateStart = html.IndexOf("<template id=\"roadmapItemTemplate\"", StringComparison.Ordinal);
+        Assert.True(templateStart > 0);
+        var templateEnd = html.IndexOf("</template>", templateStart, StringComparison.Ordinal);
+        var rendered = html[..templateStart];
+        var template = html[templateStart..templateEnd];
+        var roadmapStart = rendered.IndexOf("id=\"roadmapList\"", StringComparison.Ordinal);
+        Assert.True(roadmapStart > 0);
+        var saved = rendered[roadmapStart..];
+
+        Assert.DoesNotContain("remove-new-row", saved, StringComparison.Ordinal);
+        Assert.DoesNotContain("Remove this unsaved roadmap item", saved, StringComparison.Ordinal);
+        foreach (var field in new[] { "Id", "Title", "Activities", "StartDay", "EndDay", "Priority" })
+        {
+            Assert.Contains($"name=\"RoadmapInput.Items[0].{field}\"", saved, StringComparison.Ordinal);
+            Assert.Contains($"name=\"RoadmapInput.Items[1].{field}\"", saved, StringComparison.Ordinal);
+        }
+        Assert.DoesNotContain("RoadmapInput.Items[2]", saved, StringComparison.Ordinal);
+
+        Assert.Contains("remove-new-row", template, StringComparison.Ordinal);
+        Assert.Contains("Remove this unsaved roadmap item", template, StringComparison.Ordinal);
+        Assert.Contains("name=\"RoadmapInput.Items[__index__].Title\"", template, StringComparison.Ordinal);
+        Assert.Contains("name=\"RoadmapInput.Items[__index__].Priority\"", template, StringComparison.Ordinal);
+        Assert.DoesNotContain("DependenciesSubmitted", template, StringComparison.Ordinal);
     }
 
     private static Dictionary<string, string> TechForm(Guid assessmentId, Guid responseId, AssessmentReportRevision revision, string html) => new()

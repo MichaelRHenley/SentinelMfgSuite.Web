@@ -262,6 +262,42 @@ public sealed class ConsultantReportContentTests
         Assert.DoesNotContain(clean.Issues, i => i.Path.StartsWith("technicalGapsAndArchitecture.", StringComparison.Ordinal));
     }
 
+    private static AssessmentReportContentValidationResult ValidateRoadmap(RoadmapItem item, AssessmentReportContentStage stage) =>
+        new AssessmentReportContentValidator().Validate(
+            ConsultantReportContent.CreateEmpty() with
+            {
+                ImplementationRoadmap = new ImplementationRoadmapSection(ReportAssessmentState.Assessed, new[] { item })
+            },
+            new(stage, ConsultantObservationIds: new HashSet<string> { "obs-1" }));
+
+    private static RoadmapItem RoadmapEntry(string title = "Pilot", string activities = "Pilot activities", string[]? criteria = null, bool withEvidence = true) =>
+        new("step-1", title, activities, 1, 30, 1, null, Array.Empty<string>(), criteria ?? new[] { "Done" }, Array.Empty<string>(), null,
+            ReportContentProvenance.ConsultantEntered, ReportVerificationStatus.Unverified,
+            withEvidence ? new[] { new ReportEvidenceReference(ReportEvidenceKind.ConsultantObservation, "obs-1") } : Array.Empty<ReportEvidenceReference>());
+
+    [Fact]
+    public void Validator_Roadmap_InReview_Requires_Evidence_But_Not_Text_Or_Criteria()
+    {
+        var missingEvidence = ValidateRoadmap(RoadmapEntry(withEvidence: false), AssessmentReportContentStage.InReview);
+        Assert.Contains(missingEvidence.Issues, i => i.Code == "evidence-required" && i.Path.StartsWith("implementationRoadmap.items[0]", StringComparison.Ordinal));
+
+        var lenient = ValidateRoadmap(RoadmapEntry(title: "", activities: "", criteria: Array.Empty<string>()), AssessmentReportContentStage.InReview);
+        Assert.DoesNotContain(lenient.Issues, i => i.Path.StartsWith("implementationRoadmap.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validator_Roadmap_Approved_Requires_Fields_And_Acceptance_Criteria()
+    {
+        var result = ValidateRoadmap(RoadmapEntry(title: "", activities: "", criteria: Array.Empty<string>(), withEvidence: false), AssessmentReportContentStage.Approved);
+        foreach (var code in new[] { "roadmap-title-required", "roadmap-activities-required", "roadmap-acceptance-required", "evidence-required" })
+        {
+            Assert.Contains(result.Issues, i => i.Code == code && i.Path.StartsWith("implementationRoadmap.items[0]", StringComparison.Ordinal));
+        }
+
+        var clean = ValidateRoadmap(RoadmapEntry(), AssessmentReportContentStage.Approved);
+        Assert.DoesNotContain(clean.Issues, i => i.Path.StartsWith("implementationRoadmap.", StringComparison.Ordinal));
+    }
+
     private static AiImplementationOpportunity Opportunity() => new(
         "opportunity-1", "Reduce unplanned downtime", "Maintenance", "Predictive maintenance alerting", "Reduce downtime hours",
         Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), new[] { "Baseline not yet measured" },

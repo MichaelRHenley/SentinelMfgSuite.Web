@@ -52,8 +52,12 @@ public sealed class ReportModel : PageModel
     [BindProperty]
     public TechnicalGapsInput TechnicalInput { get; set; } = new();
 
+    [BindProperty]
+    public RoadmapInputModel RoadmapInput { get; set; } = new();
+
     private bool _aiInputHandled;
     private bool _technicalInputHandled;
+    private bool _roadmapInputHandled;
     private const int MaxListItems = 50;
     private const int MaxListItemLength = 500;
     private const decimal MaxEstimateAmount = 1_000_000_000_000m;
@@ -347,7 +351,180 @@ public sealed class ReportModel : PageModel
         {
             TechnicalInput = TechnicalGapsInput.From(ReportContent.TechnicalGapsAndArchitecture);
         }
+        if (!_roadmapInputHandled && ReportContent is not null)
+        {
+            RoadmapInput = RoadmapInputModel.From(ReportContent.ImplementationRoadmap);
+        }
         base.OnPageHandlerExecuted(context);
+    }
+
+    public async Task<IActionResult> OnPostSaveRoadmapAsync(CancellationToken ct = default)
+    {
+        _roadmapInputHandled = true;
+        SetPrivateHeaders();
+        var source = await FindSubmittedResponseAsync(AssessmentId, SubmittedResponseId, ct);
+        if (source is null || !IsOwnerAllowed(source.Assessment))
+        {
+            return NotFound();
+        }
+        PopulateIdentity(source.Assessment, source.Response.SubmittedUtc!.Value);
+        PopulateQuestionnaire(source.Assessment.QuestionnaireVersion, source.Response.Data);
+        var postedConcurrencyStamp = ExpectedConcurrencyStamp;
+
+        var reportResult = await _reportService.GetBySubmittedResponseIdAsync(SubmittedResponseId, User, ct);
+        if (reportResult.State != AssessmentReportServiceState.Retrieved || reportResult.Report is not { } report)
+        {
+            return NotFound();
+        }
+        var revision = report.Revisions.SingleOrDefault(item => item.Id == RevisionId);
+        if (revision is null)
+        {
+            return NotFound();
+        }
+        RevisionId = revision.Id;
+        RevisionNumber = revision.RevisionNumber;
+        RevisionStatus = revision.Status;
+        Scoring = CreateScoringView(revision.ScoringSnapshot, revision.ScoringSnapshotSchemaVersion);
+
+        var retrieved = await _contentService.GetAsync(revision.Id, User, ct);
+        if (!retrieved.Succeeded || retrieved.Content is null)
+        {
+            return retrieved.State == AssessmentReportRevisionContentState.Forbidden ? NotFound() : StatusCode(500);
+        }
+        LastSavedUtc = retrieved.UpdatedUtc;
+        ReportContent = retrieved.Content;
+        if (revision.Status != AssessmentReportRevisionStatus.Draft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+            return Page();
+        }
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+        if (retrieved.ConcurrencyStamp != postedConcurrencyStamp)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft changed after you opened it. Your roadmap has been kept; reload the report before saving again.");
+            return Page();
+        }
+
+        var offeredQuestionIds = EvidenceOptions.Select(option => option.QuestionId).ToHashSet(StringComparer.Ordinal);
+        var existingSection = retrieved.Content.ImplementationRoadmap;
+        var stored = existingSection.Items ?? Array.Empty<RoadmapItem>();
+        var storedIds = stored.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var submittedIds = new HashSet<string>(StringComparer.Ordinal);
+        var merged = new List<RoadmapItem>();
+        var usedPriorities = new HashSet<int>(stored.Select(item => item.Priority));
+        foreach (var input in RoadmapInput.Items.Where(item => item.Priority is > 0 && item.Id is not null && storedIds.Contains(item.Id)))
+        {
+            usedPriorities.Add(input.Priority!.Value);
+        }
+
+        for (var index = 0; index < RoadmapInput.Items.Count; index++)
+        {
+            var input = RoadmapInput.Items[index];
+            var key = $"RoadmapInput.Items[{index}]";
+            var label = $"Roadmap item {index + 1}";
+            var id = ResolveItemId(input.Id, storedIds, submittedIds, key + ".Id", label);
+            if (id is null)
+            {
+                continue;
+            }
+            var isNew = !storedIds.Contains(id);
+            input.Id = id;
+            var existing = stored.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            var priority = input.Priority ?? existing?.Priority ?? 0;
+            if (priority <= 0 && isNew)
+            {
+                priority = 1;
+                while (usedPriorities.Contains(priority))
+                {
+                    priority++;
+                }
+                usedPriorities.Add(priority);
+                input.Priority = priority;
+            }
+            IReadOnlyList<string> dependencies;
+            if (input.DependenciesSubmitted == true)
+            {
+                dependencies = (input.DependencyIds ?? new List<string>()).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal).ToList();
+                foreach (var dependency in dependencies)
+                {
+                    if (string.Equals(dependency, id, StringComparison.Ordinal))
+                    {
+                        ModelState.AddModelError(key + ".DependencyIds", $"{label}: an item cannot depend on itself.");
+                    }
+                    else if (!storedIds.Contains(dependency))
+                    {
+                        ModelState.AddModelError(key + ".DependencyIds", $"{label}: dependencies must be saved roadmap items.");
+                    }
+                }
+            }
+            else
+            {
+                dependencies = existing?.Dependencies ?? Array.Empty<string>();
+            }
+            var criteria = ParseLines(input.AcceptanceCriteriaText, key + ".AcceptanceCriteriaText", label + " acceptance criteria") ?? existing?.AcceptanceCriteria ?? Array.Empty<string>();
+            var assumptions = ParseLines(input.AssumptionsText, key + ".AssumptionsText", label + " assumptions") ?? existing?.Assumptions ?? Array.Empty<string>();
+            var evidence = MergeQuestionnaireEvidence(existing?.EvidenceReferences, input.EvidenceQuestionIds, offeredQuestionIds);
+            merged.Add(new RoadmapItem(
+                id,
+                input.Title?.Trim() ?? existing?.Title ?? string.Empty,
+                input.Activities?.Trim() ?? existing?.Activities ?? string.Empty,
+                input.StartDay ?? existing?.StartDay ?? 1,
+                input.EndDay ?? existing?.EndDay ?? 1,
+                priority,
+                input.OwnerRole is null ? existing?.OwnerRole : Trimmed(input.OwnerRole),
+                dependencies,
+                criteria,
+                assumptions,
+                input.SuccessMeasure is null ? existing?.SuccessMeasure : Trimmed(input.SuccessMeasure),
+                input.Provenance ?? existing?.Provenance ?? ReportContentProvenance.ConsultantEntered,
+                input.VerificationStatus ?? existing?.VerificationStatus ?? ReportVerificationStatus.Unverified,
+                evidence));
+        }
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+
+        merged.AddRange(stored.Where(item => !submittedIds.Contains(item.Id)));
+        var updatedSection = existingSection with
+        {
+            State = RoadmapInput.State,
+            Items = merged.Count == 0 && existingSection.Items is null ? null : merged
+        };
+        var updatedContent = retrieved.Content with { ImplementationRoadmap = updatedSection };
+        var saved = await _contentService.SaveDraftAsync(revision.Id, postedConcurrencyStamp, updatedContent, User, ct);
+        ValidationIssues = saved.ValidationIssues ?? Array.Empty<ReportContentValidationIssue>();
+        if (saved.State == AssessmentReportRevisionContentState.Saved)
+        {
+            ReportContent = saved.Content;
+            ExpectedConcurrencyStamp = saved.ConcurrencyStamp ?? ExpectedConcurrencyStamp;
+            LastSavedUtc = saved.UpdatedUtc;
+            RoadmapInput = RoadmapInputModel.From(saved.Content!.ImplementationRoadmap);
+            SaveStatus = "Implementation Roadmap Draft saved.";
+            return Page();
+        }
+        if (saved.State == AssessmentReportRevisionContentState.ConcurrencyConflict)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft was changed by another editor. Your roadmap has been kept and was not saved; reload to review the newer version.");
+        }
+        else if (saved.State == AssessmentReportRevisionContentState.NotDraft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+        }
+        else if (saved.State == AssessmentReportRevisionContentState.ValidationFailed)
+        {
+            ModelState.AddModelError(string.Empty, "Review the validation issues below. Your entered roadmap has been kept.");
+        }
+        else
+        {
+            ModelState.AddModelError(string.Empty, "Draft could not be saved. Your entered roadmap has been kept.");
+        }
+        return Page();
     }
 
     public async Task<IActionResult> OnPostSaveTechnicalGapsAsync(CancellationToken ct = default)
@@ -1248,6 +1425,58 @@ public sealed class ReportModel : PageModel
             EstimateEvidenceQuestionIds = QuestionIdsOf(item.Estimate.EvidenceReferences)
         };
     }
+
+    public sealed class RoadmapInputModel
+    {
+        public ReportAssessmentState State { get; set; } = ReportAssessmentState.NotAssessed;
+        public List<RoadmapItemInput> Items { get; set; } = new();
+
+        public static RoadmapInputModel From(ImplementationRoadmapSection section) => new()
+        {
+            State = section.State,
+            Items = section.Items?.OrderBy(item => item.Priority).Select(RoadmapItemInput.From).ToList() ?? new List<RoadmapItemInput>()
+        };
+    }
+
+    public sealed class RoadmapItemInput
+    {
+        public string? Id { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Title { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Activities { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? OwnerRole { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? SuccessMeasure { get; set; }
+        public int? StartDay { get; set; }
+        public int? EndDay { get; set; }
+        public int? Priority { get; set; }
+        public bool? DependenciesSubmitted { get; set; }
+        public List<string>? DependencyIds { get; set; } = new();
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? AcceptanceCriteriaText { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? AssumptionsText { get; set; }
+        public ReportContentProvenance? Provenance { get; set; }
+        public ReportVerificationStatus? VerificationStatus { get; set; }
+        public List<string>? EvidenceQuestionIds { get; set; } = new();
+
+        public static RoadmapItemInput From(RoadmapItem item) => new()
+        {
+            Id = item.Id,
+            Title = item.Title,
+            Activities = item.Activities,
+            OwnerRole = item.OwnerRole ?? string.Empty,
+            SuccessMeasure = item.SuccessMeasure ?? string.Empty,
+            StartDay = item.StartDay,
+            EndDay = item.EndDay,
+            Priority = item.Priority,
+            DependenciesSubmitted = true,
+            DependencyIds = item.Dependencies.ToList(),
+            AcceptanceCriteriaText = string.Join("\n", item.AcceptanceCriteria),
+            AssumptionsText = string.Join("\n", item.Assumptions),
+            Provenance = item.Provenance,
+            VerificationStatus = item.VerificationStatus,
+            EvidenceQuestionIds = QuestionIdsOf(item.EvidenceReferences)
+        };
+    }
+
+    public sealed record RoadmapItemEditorModel(RoadmapItemInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, RoadmapItem? Stored, IReadOnlyList<RoadmapItem> DependencyCandidates);
 
     public sealed class TechnicalGapsInput
     {
