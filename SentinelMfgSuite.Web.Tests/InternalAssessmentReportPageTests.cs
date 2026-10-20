@@ -199,6 +199,132 @@ public sealed class InternalAssessmentReportPageTests
         Assert.Contains("Executive Summary Draft saved.", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
+    private async Task<(ReportPageFactory Factory, HttpClient Client, string Url, string Token, Guid AssessmentId, Guid ResponseId, Guid RevisionId)> SeedExecAsync(ConsultantReportContent? content = null)
+    {
+        var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        if (content is not null)
+        {
+            await factory.SetContentAsync(revision.Id, content);
+        }
+        return (factory, client, url, ExtractToken(html), ids.AssessmentId, ids.ResponseId, revision.Id);
+    }
+
+    private static Dictionary<string, string> ExecForm((ReportPageFactory Factory, HttpClient Client, string Url, string Token, Guid AssessmentId, Guid ResponseId, Guid RevisionId) s, Guid stamp)
+        => new()
+        {
+            ["__RequestVerificationToken"] = s.Token,
+            ["AssessmentId"] = s.AssessmentId.ToString(),
+            ["SubmittedResponseId"] = s.ResponseId.ToString(),
+            ["RevisionId"] = s.RevisionId.ToString(),
+            ["ExpectedConcurrencyStamp"] = stamp.ToString()
+        };
+
+    [Fact]
+    public async Task ExecutiveSummary_Findings_Create_Encode_And_Omitted_Narrative_Is_Preserved()
+    {
+        var seed = await SeedExecAsync(ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Stored narrative")
+        });
+        await using var factory = seed.Factory;
+        var stamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var form = ExecForm(seed, stamp);
+        form["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        form["Input.Findings[0].Title"] = "<b>Gap</b>";
+        form["Input.Findings[0].Narrative"] = "Narrative";
+        var response = await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form));
+        var html = await response.Content.ReadAsStringAsync();
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Equal("Stored narrative", saved.ExecutiveSummary.Narrative);
+        var finding = Assert.Single(saved.ExecutiveSummary.Findings!);
+        Assert.True(Guid.TryParse(finding.Id, out _));
+        Assert.Equal(ReportFindingClassification.PreliminaryFinding, finding.Classification);
+        Assert.Equal(ReportVerificationStatus.Unverified, finding.VerificationStatus);
+        Assert.DoesNotContain("<b>Gap</b>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Finding_Missing_Title_Is_Rejected_And_Input_Retained()
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var stamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var form = ExecForm(seed, stamp);
+        form["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        form["Input.Findings[0].Narrative"] = "Retained narrative text";
+        var response = await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form));
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Retained narrative text", html, StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Explicit_Empty_Narrative_Clears_And_Evidence_Omission_Preserves()
+    {
+        var seed = await SeedExecAsync(ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Stored narrative",
+                EvidenceReferences: new[] { new ReportEvidenceReference(ReportEvidenceKind.QuestionnaireAnswer, "q02", QuestionId: "q02") })
+        });
+        await using var factory = seed.Factory;
+        var stamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var form = ExecForm(seed, stamp);
+        form["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        form["Input.Narrative"] = string.Empty;
+        await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form));
+        var saved = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Null(saved.ExecutiveSummary.Narrative);
+        Assert.Single(saved.ExecutiveSummary.EvidenceReferences!);
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Record_And_Clear_Readiness_Match_Frozen_Snapshot()
+    {
+        var seed = await SeedExecAsync(ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Seed narrative")
+        });
+        await using var factory = seed.Factory;
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var snapshot = SentinelMfgSuite.Web.Services.Assessments.Scoring.ReadinessScoringSnapshotSerializer.Deserialize(revision.ScoringSnapshot!).Snapshot;
+        var form = ExecForm(seed, revision.ConcurrencyStamp);
+        var response = await seed.Client.PostAsync(seed.Url + "?handler=RecordReadiness", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var after = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var saved = ConsultantReportContentSerializer.Deserialize(after.ConsultantContentJson!);
+        var readiness = saved.ExecutiveSummary.Readiness!;
+        Assert.Equal(snapshot.OverallStatus, readiness.OverallStatus);
+        Assert.Equal(snapshot.OverallRawScore0To100, readiness.OverallRawScore0To100);
+        Assert.Equal(snapshot.OverallDisplayScore0To100, readiness.OverallDisplayScore0To100);
+        Assert.Equal(snapshot.Dimensions.Count, readiness.Dimensions.Count);
+        Assert.Equal(revision.ScoringSnapshot, after.ScoringSnapshot);
+
+        var replace = await seed.Client.PostAsync(seed.Url + "?handler=RecordReadiness", new FormUrlEncodedContent(ExecForm(seed, after.ConcurrencyStamp)));
+        Assert.Contains("Confirm replacement", await replace.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var clear = await seed.Client.PostAsync(seed.Url + "?handler=ClearReadiness", new FormUrlEncodedContent(ExecForm(seed, after.ConcurrencyStamp)));
+        Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+        var cleared = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+        Assert.Null(cleared.ExecutiveSummary.Readiness);
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Record_Readiness_Rejects_Stale_Stamp()
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var response = await seed.Client.PostAsync(seed.Url + "?handler=RecordReadiness", new FormUrlEncodedContent(ExecForm(seed, Guid.NewGuid())));
+        Assert.Contains("changed after you opened", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
     [Fact]
     public async Task ExecutiveSummary_Save_Rejects_Structural_Contradiction_And_Retains_Input()
     {
@@ -1834,6 +1960,253 @@ public sealed class InternalAssessmentReportPageTests
         Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
     }
 
+    private static async Task<ConsultantReportContent> ReadSavedContentAsync(ReportPageFactory factory)
+        => ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!);
+
+    private static ReportFinding StoredFinding(string id, string title)
+        => new(id, title, title + " narrative", ReportFindingClassification.PreliminaryFinding,
+            ReportContentProvenance.ConsultantEntered, ReportVerificationStatus.Unverified, Array.Empty<ReportEvidenceReference>());
+
+    private static ReadinessScoreRepresentation WithheldReadiness()
+        => new(ReadinessOverallStatus.Withheld, null, null, null, Array.Empty<ReadinessDimensionRepresentation>());
+
+    [Fact]
+    public async Task ExecutiveSummary_Findings_Reject_Duplicate_And_Invalid_Ids()
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var stamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var duplicateId = Guid.NewGuid().ToString("N");
+        var duplicate = ExecForm(seed, stamp);
+        duplicate["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        duplicate["Input.Findings[0].Id"] = duplicateId;
+        duplicate["Input.Findings[0].Title"] = "First";
+        duplicate["Input.Findings[0].Narrative"] = "First narrative";
+        duplicate["Input.Findings[1].Id"] = duplicateId;
+        duplicate["Input.Findings[1].Title"] = "Second";
+        duplicate["Input.Findings[1].Narrative"] = "Second narrative";
+        var duplicateResponse = await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(duplicate));
+        Assert.Contains("IDs must be unique", await duplicateResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+
+        var invalid = ExecForm(seed, stamp);
+        invalid["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        invalid["Input.Findings[0].Id"] = "not-a-guid";
+        invalid["Input.Findings[0].Title"] = "Invalid id";
+        invalid["Input.Findings[0].Narrative"] = "Invalid id narrative";
+        var invalidResponse = await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(invalid));
+        Assert.Contains("ID is invalid", await invalidResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Findings_Preserve_Submitted_Order()
+    {
+        var ids = new[] { Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N") };
+        var seed = await SeedExecAsync(ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Stored narrative",
+                Findings: new[] { StoredFinding(ids[0], "One"), StoredFinding(ids[1], "Two"), StoredFinding(ids[2], "Three") })
+        });
+        await using var factory = seed.Factory;
+        var stamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var form = ExecForm(seed, stamp);
+        form["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        var submittedOrder = new[] { 2, 0, 1 };
+        for (var index = 0; index < submittedOrder.Length; index++)
+        {
+            form[$"Input.Findings[{index}].Id"] = ids[submittedOrder[index]];
+            form[$"Input.Findings[{index}].Title"] = $"Title {submittedOrder[index]}";
+            form[$"Input.Findings[{index}].Narrative"] = $"Narrative {submittedOrder[index]}";
+        }
+        await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form));
+
+        var saved = await ReadSavedContentAsync(factory);
+        Assert.Equal(new[] { ids[2], ids[0], ids[1] }, saved.ExecutiveSummary.Findings!.Select(item => item.Id).ToArray());
+        Assert.Equal(new[] { "Title 2", "Title 0", "Title 1" }, saved.ExecutiveSummary.Findings!.Select(item => item.Title).ToArray());
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Record_Readiness_From_Ineligible_Snapshot_Keeps_Null_Scores()
+    {
+        var seed = await SeedExecAsync(ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Seed narrative")
+        });
+        await using var factory = seed.Factory;
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var envelope = System.Text.Json.Nodes.JsonNode.Parse(revision.ScoringSnapshot!)!;
+        var snapshot = envelope["snapshot"]!.AsObject();
+        snapshot["overallStatus"] = "Withheld";
+        snapshot["overallRawScore0To100"] = null;
+        snapshot["overallDisplayScore0To100"] = null;
+        snapshot["overallClassification"] = null;
+        foreach (var node in snapshot["dimensions"]!.AsArray())
+        {
+            var dimension = node!.AsObject();
+            dimension["status"] = "Withheld";
+            dimension["rawScore0To100"] = null;
+            dimension["displayScore0To100"] = null;
+            dimension["classification"] = null;
+        }
+        await factory.SetSnapshotAsync(revision.Id, envelope.ToJsonString(), ReadinessScoringSnapshotSerializer.PersistedSchemaVersion);
+
+        var response = await seed.Client.PostAsync(seed.Url + "?handler=RecordReadiness", new FormUrlEncodedContent(ExecForm(seed, revision.ConcurrencyStamp)));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var readiness = (await ReadSavedContentAsync(factory)).ExecutiveSummary.Readiness!;
+        Assert.Equal(ReadinessOverallStatus.Withheld, readiness.OverallStatus);
+        Assert.Null(readiness.OverallRawScore0To100);
+        Assert.Null(readiness.OverallDisplayScore0To100);
+        Assert.Null(readiness.OverallClassification);
+        Assert.NotEmpty(readiness.Dimensions);
+        Assert.All(readiness.Dimensions, dimension =>
+        {
+            Assert.Equal(ReadinessDimensionStatus.Withheld, dimension.Status);
+            Assert.Null(dimension.RawScore0To100);
+            Assert.Null(dimension.DisplayScore0To100);
+            Assert.Null(dimension.Classification);
+        });
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Record_Readiness_Rejects_Missing_Or_Invalid_Snapshot()
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var validJson = revision.ScoringSnapshot!;
+        var cases = new (string? Json, int? Version)[]
+        {
+            (null, ReadinessScoringSnapshotSerializer.PersistedSchemaVersion),
+            (validJson, null),
+            (validJson, 99),
+            ("{not valid json", ReadinessScoringSnapshotSerializer.PersistedSchemaVersion),
+            ("{\"schemaVersion\":\"9.9\",\"snapshot\":null}", ReadinessScoringSnapshotSerializer.PersistedSchemaVersion)
+        };
+        foreach (var (json, version) in cases)
+        {
+            await factory.SetSnapshotAsync(revision.Id, json, version);
+            var response = await seed.Client.PostAsync(seed.Url + "?handler=RecordReadiness", new FormUrlEncodedContent(ExecForm(seed, revision.ConcurrencyStamp)));
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Contains("unavailable or invalid", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+            Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+        }
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Record_Readiness_Replaces_Existing_Only_With_Explicit_Confirmation()
+    {
+        var seed = await SeedExecAsync(ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Seed narrative", Readiness: WithheldReadiness())
+        });
+        await using var factory = seed.Factory;
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var snapshot = ReadinessScoringSnapshotSerializer.Deserialize(revision.ScoringSnapshot!).Snapshot;
+
+        var unconfirmed = await seed.Client.PostAsync(seed.Url + "?handler=RecordReadiness", new FormUrlEncodedContent(ExecForm(seed, revision.ConcurrencyStamp)));
+        Assert.Contains("Confirm replacement", await unconfirmed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(ReadinessOverallStatus.Withheld, (await ReadSavedContentAsync(factory)).ExecutiveSummary.Readiness!.OverallStatus);
+
+        var confirmedForm = ExecForm(seed, revision.ConcurrencyStamp);
+        confirmedForm["Input.ConfirmReplaceReadiness"] = "true";
+        var confirmed = await seed.Client.PostAsync(seed.Url + "?handler=RecordReadiness", new FormUrlEncodedContent(confirmedForm));
+
+        Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode);
+        Assert.Contains("Readiness recorded from frozen snapshot.", await confirmed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        var saved = await ReadSavedContentAsync(factory);
+        Assert.Equal(snapshot.OverallStatus, saved.ExecutiveSummary.Readiness!.OverallStatus);
+        Assert.Equal(snapshot.OverallRawScore0To100, saved.ExecutiveSummary.Readiness.OverallRawScore0To100);
+        Assert.Equal(snapshot.Dimensions.Count, saved.ExecutiveSummary.Readiness.Dimensions.Count);
+        Assert.Equal("Seed narrative", saved.ExecutiveSummary.Narrative);
+        Assert.Equal(revision.ScoringSnapshot, (await factory.GetOnlyReportAsync()).Revisions.Single().ScoringSnapshot);
+    }
+
+    [Theory]
+    [InlineData("RecordReadiness")]
+    [InlineData("ClearReadiness")]
+    public async Task ExecutiveSummary_Readiness_Handlers_Reject_Missing_Antiforgery_Unauthorized_And_NonDraft(string handler)
+    {
+        var seed = await SeedExecAsync(ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Seed narrative", Readiness: WithheldReadiness())
+        });
+        await using var factory = seed.Factory;
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var originalJson = revision.ConsultantContentJson;
+        var url = seed.Url + "?handler=" + handler;
+        var withToken = ExecForm(seed, revision.ConcurrencyStamp);
+        withToken["Input.ConfirmReplaceReadiness"] = "true";
+        var withoutToken = new Dictionary<string, string>(withToken);
+        withoutToken.Remove("__RequestVerificationToken");
+
+        var noToken = await seed.Client.PostAsync(url, new FormUrlEncodedContent(withoutToken));
+        Assert.Equal(HttpStatusCode.BadRequest, noToken.StatusCode);
+
+        var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var anonymousResponse = await anonymous.PostAsync(url, new FormUrlEncodedContent(withToken));
+        Assert.Contains(anonymousResponse.StatusCode, new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden, HttpStatusCode.Redirect });
+
+        var nonAdmin = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        nonAdmin.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "standard-user");
+        var nonAdminResponse = await nonAdmin.PostAsync(url, new FormUrlEncodedContent(withToken));
+        Assert.Contains(nonAdminResponse.StatusCode, new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden, HttpStatusCode.Redirect });
+        Assert.Equal(originalJson, (await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+
+        await factory.SetStatusAsync(revision.Id, AssessmentReportRevisionStatus.Approved);
+        var nonDraft = await seed.Client.PostAsync(url, new FormUrlEncodedContent(withToken));
+        Assert.Equal(HttpStatusCode.OK, nonDraft.StatusCode);
+        Assert.Contains("Only Draft report revisions can be edited", await nonDraft.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(originalJson, (await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Governance_Gap_Record_Readiness_On_NotAssessed_Summary_Is_Rejected_By_Section_Consistency()
+    {
+        // Documents current behavior: the existing section-state/content validator blocks recording readiness
+        // while the Executive Summary is still NotAssessed; the consultant must mark it Assessed first.
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+
+        var response = await seed.Client.PostAsync(seed.Url + "?handler=RecordReadiness", new FormUrlEncodedContent(ExecForm(seed, revision.ConcurrencyStamp)));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Review the validation issues below", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task ExecutiveSummary_Governance_Gap_Stored_Readiness_Differing_From_Snapshot_Blocks_Saves_Until_Cleared()
+    {
+        // Documents current behavior: the content validator compares stored readiness to the frozen snapshot, so a
+        // differing recorded value blocks every Executive Summary save until readiness is re-recorded or cleared.
+        var seed = await SeedExecAsync(ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Seed narrative", Readiness: WithheldReadiness())
+        });
+        await using var factory = seed.Factory;
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var form = ExecForm(seed, revision.ConcurrencyStamp);
+        form["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        form["Input.Narrative"] = "Edited narrative";
+
+        var response = await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form));
+
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Review the validation issues below", html, StringComparison.Ordinal);
+        Assert.Contains("Differs from snapshot", html, StringComparison.Ordinal);
+        var unchanged = await ReadSavedContentAsync(factory);
+        Assert.Equal("Seed narrative", unchanged.ExecutiveSummary.Narrative);
+        Assert.Equal(ReadinessOverallStatus.Withheld, unchanged.ExecutiveSummary.Readiness!.OverallStatus);
+
+        var clear = await seed.Client.PostAsync(seed.Url + "?handler=ClearReadiness", new FormUrlEncodedContent(ExecForm(seed, revision.ConcurrencyStamp)));
+        Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+        Assert.Null((await ReadSavedContentAsync(factory)).ExecutiveSummary.Readiness);
+    }
+
     private static string ExtractToken(string html)
     {
         var match = System.Text.RegularExpressions.Regex.Match(html,
@@ -2053,6 +2426,25 @@ public sealed class InternalAssessmentReportPageTests
             revision.ConsultantContentSchemaVersion = ConsultantReportContent.CurrentSchemaVersion;
             revision.ConcurrencyStamp = Guid.NewGuid();
             revision.UpdatedUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SetSnapshotAsync(Guid revisionId, string? snapshotJson, int? schemaVersion)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var revision = await db.Set<AssessmentReportRevision>().SingleAsync(item => item.Id == revisionId);
+            revision.ScoringSnapshot = snapshotJson;
+            revision.ScoringSnapshotSchemaVersion = schemaVersion;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SetStatusAsync(Guid revisionId, AssessmentReportRevisionStatus status)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var revision = await db.Set<AssessmentReportRevision>().SingleAsync(item => item.Id == revisionId);
+            revision.Status = status;
             await db.SaveChangesAsync();
         }
 

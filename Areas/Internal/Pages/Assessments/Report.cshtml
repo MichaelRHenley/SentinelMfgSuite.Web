@@ -139,7 +139,9 @@
                             {
                                 <div class="alert alert-success" role="status">@saveStatus</div>
                             }
-                            <form method="post" asp-page-handler="SaveExecutiveSummary" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="executiveSummaryHeading">
+                            <section id="executiveSummary">
+                                                        <form method="post" asp-page-handler="SaveExecutiveSummary" asp-fragment="executiveSummary" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="executiveSummaryHeading">
+                                                            <input type="hidden" name="Input.EvidenceSubmitted" value="true" />
                                 <input type="hidden" asp-for="AssessmentId" />
                                 <input type="hidden" asp-for="SubmittedResponseId" />
                                 <input type="hidden" asp-for="RevisionId" />
@@ -189,9 +191,57 @@
                                         }
                                     }
                                 </fieldset>
+                                <h4 class="h6">Findings</h4>
+                                <p class="small text-secondary">Reminder: link findings to evidence and avoid unsupported conclusions. New findings are preliminary, consultant-entered and unverified. Saved findings cannot be removed here.</p>
+                                <div id="execFindingsList">
+                                    @for (var i = 0; i < Model.Input.Findings.Count; i++)
+                                    {
+                                        var storedFinding = Model.ReportContent?.ExecutiveSummary.Findings?.FirstOrDefault(f => f.Id == Model.Input.Findings[i].Id);
+                                        var execFindingModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.AiFindingEditorModel(Model.Input.Findings[i], i.ToString(), Model.EvidenceOptions, storedFinding, "Input.Findings", "exec-finding", "exec-finding-entry");
+                                        <partial name="_AiFindingEditor" model="execFindingModel" />
+                                    }
+                                </div>
+                                <button type="button" class="btn btn-outline-light btn-sm mb-3" id="addExecFinding">Add finding</button>
+                                @{
+                                    var newExecFindingModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.AiFindingEditorModel(new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.FindingInput(), "__index__", Model.EvidenceOptions, null, "Input.Findings", "exec-finding", "exec-finding-entry");
+                                }
+                                <template id="execFindingTemplate">
+                                    <partial name="_AiFindingEditor" model="newExecFindingModel" />
+                                    <button type="button" class="btn btn-outline-danger btn-sm mb-3 remove-exec-finding">Remove unsaved finding</button>
+                                </template>
+                                <div class="d-block"></div>
                                 <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                             </form>
-                            <p class="small text-secondary">@(Model.SaveConflict ? "Resolve the conflict by reloading and reviewing the newer Draft before reapplying your text." : "Only Executive Summary state, narrative, and questionnaire evidence references are editable here.")</p>
+                            <div class="border border-secondary rounded-3 p-3 mb-4" aria-labelledby="execReadinessHeading">
+                                <h4 id="execReadinessHeading" class="h6">Readiness representation</h4>
+                                <p class="small text-secondary">Read-only. Values are copied from the frozen scoring snapshot only; they cannot be entered or recalculated here.</p>
+                                @if (Model.Scoring is { } execScore)
+                                {
+                                    <p class="mb-1">Frozen snapshot: @execScore.OverallStatus@(execScore.OverallScore.HasValue ? $" · {execScore.OverallScore}/100 · {execScore.Classification}" : string.Empty)</p>
+                                }
+                                <p class="mb-1">Recorded readiness: @(Model.ReportContent?.ExecutiveSummary.Readiness is { } recordedReadiness ? $"{recordedReadiness.OverallStatus}{(recordedReadiness.OverallDisplayScore0To100.HasValue ? $" · {recordedReadiness.OverallDisplayScore0To100}/100" : string.Empty)}" : "None")</p>
+                                <p class="mb-2"><strong>Synchronization:</strong> <span id="readinessSyncStatus">@Model.ReadinessSyncStatus</span></p>
+                                <form method="post" asp-page-handler="RecordReadiness" asp-fragment="executiveSummary" class="d-inline-block me-2">
+                                    <input type="hidden" asp-for="AssessmentId" />
+                                    <input type="hidden" asp-for="SubmittedResponseId" />
+                                    <input type="hidden" asp-for="RevisionId" />
+                                    <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                    @if (Model.ReportContent?.ExecutiveSummary.Readiness is not null)
+                                    {
+                                        <div class="form-check"><input class="form-check-input" type="checkbox" id="confirmReplaceReadiness" name="Input.ConfirmReplaceReadiness" value="true" /><label class="form-check-label small" for="confirmReplaceReadiness">Replace the recorded readiness</label></div>
+                                    }
+                                    <button type="submit" class="btn btn-outline-light btn-sm" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Record readiness from frozen snapshot</button>
+                                </form>
+                                <form method="post" asp-page-handler="ClearReadiness" asp-fragment="executiveSummary" class="d-inline-block">
+                                    <input type="hidden" asp-for="AssessmentId" />
+                                    <input type="hidden" asp-for="SubmittedResponseId" />
+                                    <input type="hidden" asp-for="RevisionId" />
+                                    <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                    <button type="submit" class="btn btn-outline-warning btn-sm" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Clear recorded readiness</button>
+                                </form>
+                            </div>
+                            </section>
+                            <p class="small text-secondary">@(Model.SaveConflict ? "Resolve the conflict by reloading and reviewing the newer Draft before reapplying your text." : "Executive Summary state, narrative, findings, questionnaire evidence references and readiness recording are editable here.")</p>
                             <section class="border border-info rounded-3 p-3 mb-4" aria-labelledby="industrialSystemsHeading">
                                 <h3 id="industrialSystemsHeading" class="h5 fw-semibold">Industrial Data &amp; Systems</h3>
                                 <p class="small text-secondary">System IDs, provenance, verification status, and evidence are preserved. New systems are consultant-entered and unverified, with no evidence added automatically.</p>
@@ -687,6 +737,16 @@
         };
         wireAiAdd('addAiOpportunity', 'aiOpportunitiesList', 'aiOpportunityTemplate', '.ai-opportunity-entry');
         wireAiAdd('addAiFinding', 'aiFindingsList', 'aiFindingTemplate', '.ai-finding-entry');
+        wireAiAdd('addExecFinding', 'execFindingsList', 'execFindingTemplate', '.exec-finding-entry');
+        document.getElementById('execFindingsList')?.addEventListener('click', e => {
+            const target = e.target;
+            if (!(target instanceof HTMLElement) || !target.classList.contains('remove-exec-finding')) return;
+            target.previousElementSibling?.remove();
+            target.remove();
+            document.getElementById('execFindingsList').querySelectorAll('.exec-finding-entry').forEach((entry, index) => {
+                entry.querySelectorAll('[name]').forEach(el => { el.name = el.name.replace(/\[\d+\]/, `[${index}]`); });
+            });
+        });
 
         const wireTechnical = (buttonId, listId, templateId, selector, root) => {
             const button = document.getElementById(buttonId);

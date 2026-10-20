@@ -3,13 +3,13 @@
 @model ReportModel.AiFindingEditorModel
 @{
     var input = Model.Input;
-    var prefix = $"AiInput.Findings[{Model.Index}]";
-    var idPrefix = $"ai-finding-{Model.Index}";
+    var prefix = $"{Model.FieldPrefix}[{Model.Index}]";
+    var idPrefix = $"{Model.IdRoot}-{Model.Index}";
     var otherEvidence = Model.Stored?.EvidenceReferences
         .Where(reference => reference.Kind != ReportEvidenceKind.QuestionnaireAnswer).ToArray();
     var evidenceModel = new ReportModel.EvidenceCheckboxModel(Model.Options, prefix + ".EvidenceQuestionIds", idPrefix + "-evidence", input.EvidenceQuestionIds);
 }
-<fieldset class="border border-secondary rounded-3 p-3 mb-3 ai-finding-entry">
+<fieldset class="border border-secondary rounded-3 p-3 mb-3 @Model.EntryClass">
     <legend class="float-none w-auto px-2 small">Finding</legend>
     <input type="hidden" name="@(prefix + ".Id")" value="@input.Id" />
     <div class="mb-2"><label class="form-label" for="@(idPrefix)-title">Title <span class="text-danger">*</span></label><input id="@(idPrefix)-title" name="@(prefix + ".Title")" value="@input.Title" class="form-control bg-dark text-light border-secondary" autocomplete="off" /></div>

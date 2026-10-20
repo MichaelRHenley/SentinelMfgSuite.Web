@@ -1047,16 +1047,37 @@ public sealed class ReportModel : PageModel
         }
 
         var existing = retrieved.Content.ExecutiveSummary;
-        var selectedQuestionIds = (Input.EvidenceQuestionIds ?? new List<string>()).ToHashSet(StringComparer.Ordinal);
-        var preservedReferences = existing.EvidenceReferences?.Where(reference => reference.Kind != ReportEvidenceKind.QuestionnaireAnswer)
-            ?? Array.Empty<ReportEvidenceReference>();
-        var questionnaireReferences = selectedQuestionIds.Select(questionId => new ReportEvidenceReference(
-            ReportEvidenceKind.QuestionnaireAnswer, questionId, QuestionId: questionId));
+        var offeredQuestionIds = EvidenceOptions.Select(option => option.QuestionId).ToHashSet(StringComparer.Ordinal);
+        var storedFindings = existing.Findings ?? Array.Empty<ReportFinding>();
+        var submittedFindingIds = new HashSet<string>(StringComparer.Ordinal);
+        var mergedFindings = MergeFindingInputs(storedFindings, Input.Findings, offeredQuestionIds, "Input.Findings", submittedFindingIds);
+        for (var index = 0; index < Input.Findings.Count; index++)
+        {
+            var finding = Input.Findings[index];
+            if (string.IsNullOrWhiteSpace(finding.Title))
+            {
+                ModelState.AddModelError($"Input.Findings[{index}].Title", $"Finding {index + 1}: Title is required.");
+            }
+            if (string.IsNullOrWhiteSpace(finding.Narrative))
+            {
+                ModelState.AddModelError($"Input.Findings[{index}].Narrative", $"Finding {index + 1}: Narrative is required.");
+            }
+        }
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+        mergedFindings.AddRange(storedFindings.Where(item => !submittedFindingIds.Contains(item.Id)));
         var updatedSummary = existing with
         {
             State = Input.State,
-            Narrative = Input.Narrative,
-            EvidenceReferences = preservedReferences.Concat(questionnaireReferences).ToArray()
+            Narrative = !Request.Form.ContainsKey("Input.Narrative")
+                ? existing.Narrative
+                : (string.IsNullOrWhiteSpace(Input.Narrative) ? null : Input.Narrative),
+            Findings = mergedFindings.Count == 0 && existing.Findings is null ? null : mergedFindings,
+            EvidenceReferences = Input.EvidenceSubmitted || Request.Form.ContainsKey("Input.EvidenceQuestionIds")
+                ? MergeQuestionnaireEvidence(existing.EvidenceReferences, Input.EvidenceQuestionIds, offeredQuestionIds)
+                : existing.EvidenceReferences
         };
         var updatedContent = retrieved.Content with { ExecutiveSummary = updatedSummary };
         var saved = await _contentService.SaveDraftAsync(revision.Id, postedConcurrencyStamp, updatedContent, User, ct);
@@ -1087,6 +1108,155 @@ public sealed class ReportModel : PageModel
         {
             ModelState.AddModelError(string.Empty, "Draft could not be saved. Your entered text has been kept.");
         }
+        return Page();
+    }
+
+    private ReadinessScoreRepresentation? _frozenReadiness;
+
+    public string ReadinessSyncStatus
+    {
+        get
+        {
+            if (_frozenReadiness is null)
+            {
+                return "Snapshot unavailable";
+            }
+            var recorded = ReportContent?.ExecutiveSummary.Readiness;
+            if (recorded is null)
+            {
+                return "Not recorded";
+            }
+            return ReadinessMatches(recorded, _frozenReadiness) ? "Matches snapshot" : "Differs from snapshot";
+        }
+    }
+
+    private static bool ReadinessMatches(ReadinessScoreRepresentation a, ReadinessScoreRepresentation b)
+        => a.OverallStatus == b.OverallStatus
+            && a.OverallRawScore0To100 == b.OverallRawScore0To100
+            && a.OverallDisplayScore0To100 == b.OverallDisplayScore0To100
+            && a.OverallClassification == b.OverallClassification
+            && a.Dimensions.Count == b.Dimensions.Count
+            && a.Dimensions.Zip(b.Dimensions).All(pair => pair.First == pair.Second);
+
+    private static ReadinessScoreRepresentation? BuildReadinessRepresentation(string? json, int? schemaVersion)
+    {
+        if (json is null || schemaVersion != ReadinessScoringSnapshotSerializer.PersistedSchemaVersion)
+        {
+            return null;
+        }
+        try
+        {
+            var snapshot = ReadinessScoringSnapshotSerializer.Deserialize(json).Snapshot;
+            if (snapshot is null || snapshot.Dimensions is null)
+            {
+                return null;
+            }
+            return new ReadinessScoreRepresentation(
+                snapshot.OverallStatus,
+                snapshot.OverallRawScore0To100,
+                snapshot.OverallDisplayScore0To100,
+                snapshot.OverallClassification,
+                snapshot.Dimensions.Select(dimension => new ReadinessDimensionRepresentation(
+                    dimension.DimensionId,
+                    dimension.Status,
+                    dimension.RawScore0To100,
+                    dimension.DisplayScore0To100,
+                    dimension.Classification)).ToArray());
+        }
+        catch (Exception exception) when (exception is System.Text.Json.JsonException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    public Task<IActionResult> OnPostRecordReadinessAsync(CancellationToken ct = default) => SaveReadinessAsync(record: true, ct);
+
+    public Task<IActionResult> OnPostClearReadinessAsync(CancellationToken ct = default) => SaveReadinessAsync(record: false, ct);
+
+    private async Task<IActionResult> SaveReadinessAsync(bool record, CancellationToken ct)
+    {
+        SetPrivateHeaders();
+        var source = await FindSubmittedResponseAsync(AssessmentId, SubmittedResponseId, ct);
+        if (source is null || !IsOwnerAllowed(source.Assessment))
+        {
+            return NotFound();
+        }
+        PopulateIdentity(source.Assessment, source.Response.SubmittedUtc!.Value);
+        PopulateQuestionnaire(source.Assessment.QuestionnaireVersion, source.Response.Data);
+        EvidenceOptions = QuestionnaireSections.SelectMany(section => section.Answers).ToArray();
+        var postedConcurrencyStamp = ExpectedConcurrencyStamp;
+
+        var reportResult = await _reportService.GetBySubmittedResponseIdAsync(SubmittedResponseId, User, ct);
+        if (reportResult.State != AssessmentReportServiceState.Retrieved || reportResult.Report is not { } report)
+        {
+            return NotFound();
+        }
+        var revision = report.Revisions.SingleOrDefault(item => item.Id == RevisionId);
+        if (revision is null)
+        {
+            return NotFound();
+        }
+        RevisionId = revision.Id;
+        RevisionNumber = revision.RevisionNumber;
+        RevisionStatus = revision.Status;
+        Scoring = CreateScoringView(revision.ScoringSnapshot, revision.ScoringSnapshotSchemaVersion);
+
+        var retrieved = await _contentService.GetAsync(revision.Id, User, ct);
+        if (!retrieved.Succeeded || retrieved.Content is null)
+        {
+            return retrieved.State == AssessmentReportRevisionContentState.Forbidden ? NotFound() : StatusCode(500);
+        }
+        LastSavedUtc = retrieved.UpdatedUtc;
+        ReportContent = retrieved.Content;
+        if (revision.Status != AssessmentReportRevisionStatus.Draft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+            return Page();
+        }
+        if (retrieved.ConcurrencyStamp != postedConcurrencyStamp)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft changed after you opened it. Reload the report before recording or clearing readiness.");
+            return Page();
+        }
+
+        var existing = retrieved.Content.ExecutiveSummary;
+        ReadinessScoreRepresentation? newReadiness = null;
+        if (record)
+        {
+            newReadiness = BuildReadinessRepresentation(revision.ScoringSnapshot, revision.ScoringSnapshotSchemaVersion);
+            if (newReadiness is null)
+            {
+                ModelState.AddModelError(string.Empty, "The frozen scoring snapshot is unavailable or invalid; readiness cannot be recorded.");
+                return Page();
+            }
+            if (existing.Readiness is not null && !Input.ConfirmReplaceReadiness)
+            {
+                ModelState.AddModelError(string.Empty, "Readiness is already recorded. Confirm replacement to record it again from the frozen snapshot.");
+                return Page();
+            }
+        }
+
+        var updatedContent = retrieved.Content with { ExecutiveSummary = existing with { Readiness = newReadiness } };
+        var saved = await _contentService.SaveDraftAsync(revision.Id, postedConcurrencyStamp, updatedContent, User, ct);
+        ValidationIssues = saved.ValidationIssues ?? Array.Empty<ReportContentValidationIssue>();
+        if (saved.State == AssessmentReportRevisionContentState.Saved)
+        {
+            ReportContent = saved.Content;
+            ExpectedConcurrencyStamp = saved.ConcurrencyStamp ?? ExpectedConcurrencyStamp;
+            LastSavedUtc = saved.UpdatedUtc;
+            Input = ExecutiveSummaryInput.From(saved.Content!.ExecutiveSummary);
+            ModelState.Clear();
+            SaveStatus = record ? "Readiness recorded from frozen snapshot." : "Recorded readiness cleared.";
+            return Page();
+        }
+        ModelState.AddModelError(string.Empty, saved.State switch
+        {
+            AssessmentReportRevisionContentState.ConcurrencyConflict => "This Draft was changed by another editor and was not saved; reload to review the newer version.",
+            AssessmentReportRevisionContentState.NotDraft => "Only Draft report revisions can be edited.",
+            AssessmentReportRevisionContentState.ValidationFailed => "Review the validation issues below.",
+            _ => "Draft could not be saved."
+        });
         return Page();
     }
 
@@ -1416,8 +1586,9 @@ public sealed class ReportModel : PageModel
     private static string ChoiceLabel(IReadOnlyCollection<Choice>? choices, string value)
         => choices?.FirstOrDefault(choice => choice.Value == value)?.Label ?? value;
 
-    private static ReadinessScoreView? CreateScoringView(string? json, int? schemaVersion)
+    private ReadinessScoreView? CreateScoringView(string? json, int? schemaVersion)
     {
+        _frozenReadiness = BuildReadinessRepresentation(json, schemaVersion);
         if (json is null || schemaVersion != ReadinessScoringSnapshotSerializer.PersistedSchemaVersion)
         {
             return null;
@@ -1465,12 +1636,16 @@ public sealed class ReportModel : PageModel
     {
         public ReportAssessmentState State { get; set; } = ReportAssessmentState.NotAssessed;
         public string? Narrative { get; set; }
+        public bool EvidenceSubmitted { get; set; }
+        public bool ConfirmReplaceReadiness { get; set; }
+        public List<FindingInput> Findings { get; set; } = new();
         public List<string>? EvidenceQuestionIds { get; set; } = new();
 
         public static ExecutiveSummaryInput From(ExecutiveSummarySection section) => new()
         {
             State = section.State,
             Narrative = section.Narrative,
+            Findings = section.Findings?.Select(FindingInput.From).ToList() ?? new List<FindingInput>(),
             EvidenceQuestionIds = section.EvidenceReferences?
                 .Where(reference => reference.Kind == ReportEvidenceKind.QuestionnaireAnswer && reference.QuestionId is not null)
                 .Select(reference => reference.QuestionId!)
@@ -1763,7 +1938,7 @@ public sealed class ReportModel : PageModel
     public sealed record ArchitectureRecommendationEditorModel(ArchitectureRecommendationInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, ArchitectureRecommendation? Stored);
     public sealed record EvidenceCheckboxModel(IReadOnlyList<QuestionnaireAnswerView> Options, string FieldName, string IdPrefix, IReadOnlyCollection<string>? Selected);
     public sealed record AiOpportunityEditorModel(OpportunityInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, AiImplementationOpportunity? Stored);
-    public sealed record AiFindingEditorModel(FindingInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, ReportFinding? Stored);
+    public sealed record AiFindingEditorModel(FindingInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, ReportFinding? Stored, string FieldPrefix = "AiInput.Findings", string IdRoot = "ai-finding", string EntryClass = "ai-finding-entry");
 
     public sealed class SystemInventoryInput
     {
