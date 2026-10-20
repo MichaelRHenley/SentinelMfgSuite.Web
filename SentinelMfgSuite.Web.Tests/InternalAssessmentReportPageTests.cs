@@ -705,7 +705,9 @@ public sealed class InternalAssessmentReportPageTests
         Assert.DoesNotContain("Editing, review, approval", html, StringComparison.Ordinal);
         Assert.Contains("Draft editing is available", html, StringComparison.Ordinal);
         Assert.Contains("Approval, issuance, PDF generation, and customer delivery are not yet available", html, StringComparison.Ordinal);
-        Assert.Contains("Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, and Implementation Roadmap Drafts", html, StringComparison.Ordinal);
+        Assert.Contains("Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, Implementation Roadmap, and Executive Presentation Drafts", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"executivePresentation\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("editor not yet available", html, StringComparison.Ordinal);
         Assert.Contains("id=\"roadmap\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"technicalGaps\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"aiOpportunities\"", html, StringComparison.Ordinal);
@@ -718,6 +720,215 @@ public sealed class InternalAssessmentReportPageTests
         var successIndex = saved.IndexOf("AI Opportunities &amp; ROI Draft saved.", StringComparison.Ordinal);
         Assert.True(sectionStart >= 0 && successIndex > sectionStart);
         Assert.Equal(1, saved.Split("AI Opportunities &amp; ROI Draft saved.").Length - 1);
+    }
+
+    private static Dictionary<string, string> PresentationForm(Guid assessmentId, Guid responseId, AssessmentReportRevision revision, string html) => new()
+    {
+        ["__RequestVerificationToken"] = ExtractToken(html),
+        ["AssessmentId"] = assessmentId.ToString(),
+        ["SubmittedResponseId"] = responseId.ToString(),
+        ["RevisionId"] = revision.Id.ToString(),
+        ["ExpectedConcurrencyStamp"] = revision.ConcurrencyStamp.ToString(),
+        ["PresentationInput.State"] = nameof(ReportAssessmentState.Assessed)
+    };
+
+    private static ReportTextEntry PresEntry(string id, string text) =>
+        new(id, text, ReportContentProvenance.ConsultantEntered, ReportVerificationStatus.Unverified,
+            new[] { new ReportEvidenceReference(ReportEvidenceKind.ScoringDimension, "D1") });
+
+    private async Task<(ReportPageFactory Factory, (Guid AssessmentId, Guid ResponseId) Ids, AssessmentReportRevision Revision, HttpClient Client, string Url, string Html)> PresentationSetupAsync(ExecutivePresentationSection? section)
+    {
+        var factory = new ReportPageFactory();
+        var submission = BuildSubmission("3.0");
+        var ids = await factory.SeedAssessmentAsync("3.0", submission);
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", submission);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        if (section is not null)
+        {
+            await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+            {
+                ExecutiveSummary = new ExecutiveSummarySection(ReportAssessmentState.Assessed, "Keep summary"),
+                ExecutivePresentation = section
+            });
+            revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        }
+        var client = factory.CreateAdminClient();
+        var url = factory.PageUrl(ids.AssessmentId, ids.ResponseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        return (factory, (ids.AssessmentId, ids.ResponseId), revision, client, url, html);
+    }
+
+    [Fact]
+    public async Task Presentation_Create_Edit_Order_Ids_Encoding_And_Clear()
+    {
+        var s = await PresentationSetupAsync(new ExecutivePresentationSection(ReportAssessmentState.Assessed, "Old", "Narr",
+            new[] { PresEntry("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Msg A") }, null, new[] { "Risk old" },
+            new[] { new ReportEvidenceReference(ReportEvidenceKind.ScoringDimension, "D1") }));
+        await using var factory = s.Factory;
+        var snapshot = s.Revision.ScoringSnapshot;
+        var form = PresentationForm(s.Ids.AssessmentId, s.Ids.ResponseId, s.Revision, s.Html);
+        form["PresentationInput.Title"] = "New <b>title</b>";
+        form["PresentationInput.TopRisksSubmitted"] = "true";
+        form["PresentationInput.TopRisksText"] = "Risk one\r\n\r\nRisk two";
+        form["PresentationInput.EvidenceSubmitted"] = "true";
+        form["PresentationInput.EvidenceQuestionIds"] = "q02";
+        form["PresentationInput.KeyMessages[0].Id"] = string.Empty;
+        form["PresentationInput.KeyMessages[0].Text"] = "First new";
+        form["PresentationInput.KeyMessages[1].Id"] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        form["PresentationInput.KeyMessages[1].Text"] = "Edited <i>A</i>";
+        form["PresentationInput.KeyMessages[1].EvidenceSubmitted"] = "true";
+        form["PresentationInput.KeyMessages[1].EvidenceQuestionIds"] = "q02";
+        form["PresentationInput.DecisionsRequested[0].Id"] = string.Empty;
+        form["PresentationInput.DecisionsRequested[0].Text"] = "Approve pilot";
+        var html = await (await s.Client.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        Assert.Contains("Executive Presentation Draft saved.", html, StringComparison.Ordinal);
+        Assert.Contains("Edited &lt;i&gt;A&lt;/i&gt;", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("New <b>title</b>", html, StringComparison.Ordinal);
+
+        var after = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        Assert.Equal(snapshot, after.ScoringSnapshot);
+        var saved = ConsultantReportContentSerializer.Deserialize(after.ConsultantContentJson!);
+        Assert.Equal("Keep summary", saved.ExecutiveSummary.Narrative);
+        var p = saved.ExecutivePresentation;
+        Assert.Equal(new[] { "Risk one", "Risk two" }, p.TopRisks);
+        Assert.Equal(2, p.KeyMessages!.Count);
+        Assert.Equal("First new", p.KeyMessages[0].Text);
+        Assert.Matches("^[0-9a-f]{32}$", p.KeyMessages[0].Id);
+        Assert.Equal(ReportContentProvenance.ConsultantEntered, p.KeyMessages[0].Provenance);
+        Assert.Equal(ReportVerificationStatus.Unverified, p.KeyMessages[0].VerificationStatus);
+        Assert.Equal("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", p.KeyMessages[1].Id);
+        Assert.Contains(p.KeyMessages[1].EvidenceReferences, r => r.Kind == ReportEvidenceKind.ScoringDimension);
+        Assert.Contains(p.KeyMessages[1].EvidenceReferences, r => r.QuestionId == "q02");
+        Assert.Contains(p.EvidenceReferences!, r => r.QuestionId == "q02");
+        Assert.Contains(p.EvidenceReferences!, r => r.Kind == ReportEvidenceKind.ScoringDimension);
+        Assert.Single(p.DecisionsRequested!);
+
+        // Explicit clearing of risks and questionnaire evidence; non-questionnaire evidence preserved.
+        var html2 = await (await s.Client.GetAsync(s.Url)).Content.ReadAsStringAsync();
+        var clear = PresentationForm(s.Ids.AssessmentId, s.Ids.ResponseId, after, html2);
+        clear["PresentationInput.TopRisksSubmitted"] = "true";
+        clear["PresentationInput.TopRisksText"] = string.Empty;
+        clear["PresentationInput.EvidenceSubmitted"] = "true";
+        var cleared = await s.Client.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(clear));
+        Assert.Contains("Executive Presentation Draft saved.", await cleared.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        var c = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!).ExecutivePresentation;
+        Assert.True(c.TopRisks is null || c.TopRisks.Count == 0);
+        Assert.DoesNotContain(c.EvidenceReferences!, r => r.QuestionId == "q02");
+        Assert.Contains(c.EvidenceReferences!, r => r.Kind == ReportEvidenceKind.ScoringDimension);
+        // Omitted saved entries are preserved.
+        Assert.Equal(2, c.KeyMessages!.Count);
+        Assert.Single(c.DecisionsRequested!);
+    }
+
+    [Fact]
+    public async Task Presentation_Omitted_Fields_Preserve_Stored_Values()
+    {
+        var s = await PresentationSetupAsync(new ExecutivePresentationSection(ReportAssessmentState.Assessed, "Title", "Narr",
+            new[] { PresEntry("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Msg A") }, null, new[] { "Risk old" }, null));
+        await using var factory = s.Factory;
+        var form = PresentationForm(s.Ids.AssessmentId, s.Ids.ResponseId, s.Revision, s.Html);
+        var html = await (await s.Client.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        Assert.Contains("Executive Presentation Draft saved.", html, StringComparison.Ordinal);
+        var p = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!).ExecutivePresentation;
+        Assert.Equal(new[] { "Risk old" }, p.TopRisks);
+        Assert.Equal("Title", p.Title);
+        Assert.Single(p.KeyMessages!);
+        Assert.Contains(p.KeyMessages![0].EvidenceReferences, r => r.Kind == ReportEvidenceKind.ScoringDimension);
+    }
+
+    [Fact]
+    public async Task Presentation_Duplicate_Ids_Across_Lists_Are_Rejected_And_Input_Retained()
+    {
+        var s = await PresentationSetupAsync(new ExecutivePresentationSection(ReportAssessmentState.Assessed, "T", null,
+            new[] { PresEntry("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Msg A") }, new[] { PresEntry("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "Dec B") }, null, null));
+        await using var factory = s.Factory;
+        var form = PresentationForm(s.Ids.AssessmentId, s.Ids.ResponseId, s.Revision, s.Html);
+        form["PresentationInput.KeyMessages[0].Id"] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        form["PresentationInput.KeyMessages[0].Text"] = "Retained duplicate text";
+        form["PresentationInput.DecisionsRequested[0].Id"] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        form["PresentationInput.DecisionsRequested[0].Text"] = "Dup decision";
+        var html = await (await s.Client.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("Executive Presentation Draft saved.", html, StringComparison.Ordinal);
+        Assert.Contains("IDs must be unique", html, StringComparison.Ordinal);
+        Assert.Contains("Retained duplicate text", html, StringComparison.Ordinal);
+        var p = ConsultantReportContentSerializer.Deserialize((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson!).ExecutivePresentation;
+        Assert.Equal("Msg A", p.KeyMessages!.Single().Text);
+    }
+
+    [Fact]
+    public async Task Presentation_NotAssessed_With_Content_Is_Rejected()
+    {
+        var s = await PresentationSetupAsync(null);
+        await using var factory = s.Factory;
+        var form = PresentationForm(s.Ids.AssessmentId, s.Ids.ResponseId, s.Revision, s.Html);
+        form["PresentationInput.State"] = nameof(ReportAssessmentState.NotAssessed);
+        form["PresentationInput.Title"] = "Retained conflict title";
+        var html = await (await s.Client.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("Executive Presentation Draft saved.", html, StringComparison.Ordinal);
+        Assert.Contains("Retained conflict title", html, StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task Presentation_Stale_Stamp_And_Missing_Antiforgery_And_Unauthorized_Are_Rejected()
+    {
+        var s = await PresentationSetupAsync(null);
+        await using var factory = s.Factory;
+        var form = PresentationForm(s.Ids.AssessmentId, s.Ids.ResponseId, s.Revision, s.Html);
+        form["ExpectedConcurrencyStamp"] = Guid.NewGuid().ToString();
+        form["PresentationInput.Title"] = "Stale title";
+        var html = await (await s.Client.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        Assert.Contains("changed after you opened it", html, StringComparison.Ordinal);
+        Assert.Contains("Stale title", html, StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+
+        var noToken = await s.Client.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(new Dictionary<string, string> { ["PresentationInput.State"] = "Assessed" }));
+        Assert.Equal(HttpStatusCode.BadRequest, noToken.StatusCode);
+
+        var regular = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        regular.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "user");
+        Assert.Equal(HttpStatusCode.Forbidden, (await regular.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(new Dictionary<string, string>()))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Presentation_NonDraft_Is_Rejected()
+    {
+        var s = await PresentationSetupAsync(null);
+        await using var factory = s.Factory;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var stored = await db.Set<AssessmentReportRevision>().SingleAsync(item => item.Id == s.Revision.Id);
+            stored.Status = AssessmentReportRevisionStatus.Approved;
+            await db.SaveChangesAsync();
+        }
+        var form = PresentationForm(s.Ids.AssessmentId, s.Ids.ResponseId, s.Revision, s.Html);
+        form["PresentationInput.Title"] = "Keep non-draft title";
+        var html = await (await s.Client.PostAsync(s.Url + "?handler=SaveExecutivePresentation", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+        Assert.Contains("Only Draft report revisions can be edited", html, StringComparison.Ordinal);
+        Assert.Contains("Keep non-draft title", html, StringComparison.Ordinal);
+        Assert.Null((await factory.GetOnlyReportAsync()).Revisions.Single().ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task Presentation_Editor_Renders_Remove_Only_For_Unsaved_Entries_And_Indexed_Names()
+    {
+        var s = await PresentationSetupAsync(new ExecutivePresentationSection(ReportAssessmentState.Assessed, "T", null,
+            new[] { PresEntry("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Msg A"), PresEntry("cccccccccccccccccccccccccccccccc", "Msg C") }, null, null, null));
+        await using var factory = s.Factory;
+        var html = s.Html;
+        Assert.Contains("id=\"executivePresentation\"", html, StringComparison.Ordinal);
+        var templateStart = html.IndexOf("<template id=\"presKeyMessageTemplate\"", StringComparison.Ordinal);
+        Assert.True(templateStart > 0);
+        var listStart = html.IndexOf("id=\"presKeyMessagesList\"", StringComparison.Ordinal);
+        var saved = html[listStart..templateStart];
+        var template = html[templateStart..html.IndexOf("</template>", templateStart, StringComparison.Ordinal)];
+        Assert.DoesNotContain("Remove this unsaved entry", saved.Split("id=\"addPresKeyMessage\"")[0], StringComparison.Ordinal);
+        Assert.Contains("PresentationInput.KeyMessages[0].Text", saved, StringComparison.Ordinal);
+        Assert.Contains("PresentationInput.KeyMessages[1].Text", saved, StringComparison.Ordinal);
+        Assert.DoesNotContain("PresentationInput.KeyMessages[2]", saved.Split("id=\"addPresKeyMessage\"")[0], StringComparison.Ordinal);
+        Assert.Contains("Remove this unsaved entry", template, StringComparison.Ordinal);
+        Assert.Contains("PresentationInput.KeyMessages[__index__].Text", template, StringComparison.Ordinal);
     }
 
     private static Dictionary<string, string> RoadmapForm(Guid assessmentId, Guid responseId, AssessmentReportRevision revision, string html) => new()

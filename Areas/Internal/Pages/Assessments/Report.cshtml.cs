@@ -55,9 +55,13 @@ public sealed class ReportModel : PageModel
     [BindProperty]
     public RoadmapInputModel RoadmapInput { get; set; } = new();
 
+    [BindProperty]
+    public PresentationInputModel PresentationInput { get; set; } = new();
+
     private bool _aiInputHandled;
     private bool _technicalInputHandled;
     private bool _roadmapInputHandled;
+    private bool _presentationInputHandled;
     private const int MaxListItems = 50;
     private const int MaxListItemLength = 500;
     private const decimal MaxEstimateAmount = 1_000_000_000_000m;
@@ -355,6 +359,10 @@ public sealed class ReportModel : PageModel
         {
             RoadmapInput = RoadmapInputModel.From(ReportContent.ImplementationRoadmap);
         }
+        if (!_presentationInputHandled && ReportContent is not null)
+        {
+            PresentationInput = PresentationInputModel.From(ReportContent.ExecutivePresentation);
+        }
         base.OnPageHandlerExecuted(context);
     }
 
@@ -525,6 +533,169 @@ public sealed class ReportModel : PageModel
             ModelState.AddModelError(string.Empty, "Draft could not be saved. Your entered roadmap has been kept.");
         }
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostSaveExecutivePresentationAsync(CancellationToken ct = default)
+    {
+        _presentationInputHandled = true;
+        SetPrivateHeaders();
+        var source = await FindSubmittedResponseAsync(AssessmentId, SubmittedResponseId, ct);
+        if (source is null || !IsOwnerAllowed(source.Assessment))
+        {
+            return NotFound();
+        }
+        PopulateIdentity(source.Assessment, source.Response.SubmittedUtc!.Value);
+        PopulateQuestionnaire(source.Assessment.QuestionnaireVersion, source.Response.Data);
+        var postedConcurrencyStamp = ExpectedConcurrencyStamp;
+
+        var reportResult = await _reportService.GetBySubmittedResponseIdAsync(SubmittedResponseId, User, ct);
+        if (reportResult.State != AssessmentReportServiceState.Retrieved || reportResult.Report is not { } report)
+        {
+            return NotFound();
+        }
+        var revision = report.Revisions.SingleOrDefault(item => item.Id == RevisionId);
+        if (revision is null)
+        {
+            return NotFound();
+        }
+        RevisionId = revision.Id;
+        RevisionNumber = revision.RevisionNumber;
+        RevisionStatus = revision.Status;
+        Scoring = CreateScoringView(revision.ScoringSnapshot, revision.ScoringSnapshotSchemaVersion);
+
+        var retrieved = await _contentService.GetAsync(revision.Id, User, ct);
+        if (!retrieved.Succeeded || retrieved.Content is null)
+        {
+            return retrieved.State == AssessmentReportRevisionContentState.Forbidden ? NotFound() : StatusCode(500);
+        }
+        LastSavedUtc = retrieved.UpdatedUtc;
+        ReportContent = retrieved.Content;
+        if (revision.Status != AssessmentReportRevisionStatus.Draft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+            return Page();
+        }
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+        if (retrieved.ConcurrencyStamp != postedConcurrencyStamp)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft changed after you opened it. Your executive presentation has been kept; reload the report before saving again.");
+            return Page();
+        }
+
+        var offeredQuestionIds = EvidenceOptions.Select(option => option.QuestionId).ToHashSet(StringComparer.Ordinal);
+        var existingSection = retrieved.Content.ExecutivePresentation;
+        var storedMessages = existingSection.KeyMessages ?? Array.Empty<ReportTextEntry>();
+        var storedDecisions = existingSection.DecisionsRequested ?? Array.Empty<ReportTextEntry>();
+        var allSeen = new HashSet<string>(StringComparer.Ordinal);
+        var submittedMessageIds = new HashSet<string>(StringComparer.Ordinal);
+        var submittedDecisionIds = new HashSet<string>(StringComparer.Ordinal);
+        var mergedMessages = MergeTextEntries(storedMessages, storedDecisions, PresentationInput.KeyMessages, "PresentationInput.KeyMessages", "Key message", offeredQuestionIds, allSeen, submittedMessageIds);
+        var mergedDecisions = MergeTextEntries(storedDecisions, storedMessages, PresentationInput.DecisionsRequested, "PresentationInput.DecisionsRequested", "Decision", offeredQuestionIds, allSeen, submittedDecisionIds);
+
+        IReadOnlyList<string>? topRisks = existingSection.TopRisks;
+        if (PresentationInput.TopRisksSubmitted == true)
+        {
+            var parsed = ParseLines(PresentationInput.TopRisksText ?? string.Empty, "PresentationInput.TopRisksText", "Top risks") ?? new List<string>();
+            topRisks = parsed.Count == 0 && existingSection.TopRisks is null ? null : parsed;
+        }
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+
+        mergedMessages.AddRange(storedMessages.Where(item => !submittedMessageIds.Contains(item.Id)));
+        mergedDecisions.AddRange(storedDecisions.Where(item => !submittedDecisionIds.Contains(item.Id)));
+        var sectionEvidence = PresentationInput.EvidenceSubmitted == true
+            ? MergeQuestionnaireEvidence(existingSection.EvidenceReferences, PresentationInput.EvidenceQuestionIds, offeredQuestionIds)
+            : existingSection.EvidenceReferences;
+        var updatedSection = existingSection with
+        {
+            State = PresentationInput.State,
+            Title = PresentationInput.Title is null ? existingSection.Title : Trimmed(PresentationInput.Title),
+            Narrative = PresentationInput.Narrative is null ? existingSection.Narrative : Trimmed(PresentationInput.Narrative),
+            KeyMessages = mergedMessages.Count == 0 && existingSection.KeyMessages is null ? null : mergedMessages,
+            DecisionsRequested = mergedDecisions.Count == 0 && existingSection.DecisionsRequested is null ? null : mergedDecisions,
+            TopRisks = topRisks,
+            EvidenceReferences = sectionEvidence is { Count: 0 } && existingSection.EvidenceReferences is null ? null : sectionEvidence
+        };
+        var updatedContent = retrieved.Content with { ExecutivePresentation = updatedSection };
+        var saved = await _contentService.SaveDraftAsync(revision.Id, postedConcurrencyStamp, updatedContent, User, ct);
+        ValidationIssues = saved.ValidationIssues ?? Array.Empty<ReportContentValidationIssue>();
+        if (saved.State == AssessmentReportRevisionContentState.Saved)
+        {
+            ReportContent = saved.Content;
+            ExpectedConcurrencyStamp = saved.ConcurrencyStamp ?? ExpectedConcurrencyStamp;
+            LastSavedUtc = saved.UpdatedUtc;
+            PresentationInput = PresentationInputModel.From(saved.Content!.ExecutivePresentation);
+            SaveStatus = "Executive Presentation Draft saved.";
+            return Page();
+        }
+        if (saved.State == AssessmentReportRevisionContentState.ConcurrencyConflict)
+        {
+            SaveConflict = true;
+            ModelState.AddModelError(string.Empty, "This Draft was changed by another editor. Your executive presentation has been kept and was not saved; reload to review the newer version.");
+        }
+        else if (saved.State == AssessmentReportRevisionContentState.NotDraft)
+        {
+            ModelState.AddModelError(string.Empty, "Only Draft report revisions can be edited.");
+        }
+        else if (saved.State == AssessmentReportRevisionContentState.ValidationFailed)
+        {
+            ModelState.AddModelError(string.Empty, "Review the validation issues below. Your entered executive presentation has been kept.");
+        }
+        else
+        {
+            ModelState.AddModelError(string.Empty, "Draft could not be saved. Your entered executive presentation has been kept.");
+        }
+        return Page();
+    }
+
+    private List<ReportTextEntry> MergeTextEntries(
+        IReadOnlyList<ReportTextEntry> stored,
+        IReadOnlyList<ReportTextEntry> otherListStored,
+        List<PresentationEntryInput> inputs,
+        string keyPrefix,
+        string labelPrefix,
+        ISet<string> offeredQuestionIds,
+        ISet<string> allSeen,
+        ISet<string> submittedInList)
+    {
+        var storedIds = stored.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var otherIds = otherListStored.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var merged = new List<ReportTextEntry>();
+        for (var index = 0; index < inputs.Count; index++)
+        {
+            var input = inputs[index];
+            var key = $"{keyPrefix}[{index}].Id";
+            var label = $"{labelPrefix} {index + 1}";
+            if (!string.IsNullOrWhiteSpace(input.Id) && !storedIds.Contains(input.Id) && otherIds.Contains(input.Id))
+            {
+                ModelState.AddModelError(key, $"{label}: IDs must be unique across key messages and decisions.");
+                continue;
+            }
+            var id = ResolveItemId(input.Id, storedIds, allSeen, key, label);
+            if (id is null)
+            {
+                continue;
+            }
+            submittedInList.Add(id);
+            input.Id = id;
+            var existing = stored.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+            var evidence = input.EvidenceSubmitted == true
+                ? MergeQuestionnaireEvidence(existing?.EvidenceReferences, input.EvidenceQuestionIds, offeredQuestionIds)
+                : existing?.EvidenceReferences ?? Array.Empty<ReportEvidenceReference>();
+            merged.Add(new ReportTextEntry(
+                id,
+                input.Text?.Trim() ?? existing?.Text ?? string.Empty,
+                input.Provenance ?? existing?.Provenance ?? ReportContentProvenance.ConsultantEntered,
+                input.VerificationStatus ?? existing?.VerificationStatus ?? ReportVerificationStatus.Unverified,
+                evidence));
+        }
+        return merged;
     }
 
     public async Task<IActionResult> OnPostSaveTechnicalGapsAsync(CancellationToken ct = default)
@@ -1475,6 +1646,54 @@ public sealed class ReportModel : PageModel
             EvidenceQuestionIds = QuestionIdsOf(item.EvidenceReferences)
         };
     }
+
+    public sealed class PresentationInputModel
+    {
+        public ReportAssessmentState State { get; set; } = ReportAssessmentState.NotAssessed;
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Title { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Narrative { get; set; }
+        public List<PresentationEntryInput> KeyMessages { get; set; } = new();
+        public List<PresentationEntryInput> DecisionsRequested { get; set; } = new();
+        public bool? TopRisksSubmitted { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? TopRisksText { get; set; }
+        public bool? EvidenceSubmitted { get; set; }
+        public List<string>? EvidenceQuestionIds { get; set; } = new();
+
+        public static PresentationInputModel From(ExecutivePresentationSection section) => new()
+        {
+            State = section.State,
+            Title = section.Title ?? string.Empty,
+            Narrative = section.Narrative ?? string.Empty,
+            KeyMessages = section.KeyMessages?.Select(PresentationEntryInput.From).ToList() ?? new List<PresentationEntryInput>(),
+            DecisionsRequested = section.DecisionsRequested?.Select(PresentationEntryInput.From).ToList() ?? new List<PresentationEntryInput>(),
+            TopRisksSubmitted = true,
+            TopRisksText = string.Join("\n", section.TopRisks ?? Array.Empty<string>()),
+            EvidenceSubmitted = true,
+            EvidenceQuestionIds = QuestionIdsOf(section.EvidenceReferences)
+        };
+    }
+
+    public sealed class PresentationEntryInput
+    {
+        public string? Id { get; set; }
+        [DisplayFormat(ConvertEmptyStringToNull = false)] public string? Text { get; set; }
+        public ReportContentProvenance? Provenance { get; set; }
+        public ReportVerificationStatus? VerificationStatus { get; set; }
+        public bool? EvidenceSubmitted { get; set; }
+        public List<string>? EvidenceQuestionIds { get; set; } = new();
+
+        public static PresentationEntryInput From(ReportTextEntry entry) => new()
+        {
+            Id = entry.Id,
+            Text = entry.Text,
+            Provenance = entry.Provenance,
+            VerificationStatus = entry.VerificationStatus,
+            EvidenceSubmitted = true,
+            EvidenceQuestionIds = QuestionIdsOf(entry.EvidenceReferences)
+        };
+    }
+
+    public sealed record TextEntryEditorModel(PresentationEntryInput Input, string ListName, string Index, string Label, IReadOnlyList<QuestionnaireAnswerView> Options, ReportTextEntry? Stored);
 
     public sealed record RoadmapItemEditorModel(RoadmapItemInput Input, string Index, IReadOnlyList<QuestionnaireAnswerView> Options, RoadmapItem? Stored, IReadOnlyList<RoadmapItem> DependencyCandidates);
 

@@ -262,6 +262,86 @@ public sealed class ConsultantReportContentTests
         Assert.DoesNotContain(clean.Issues, i => i.Path.StartsWith("technicalGapsAndArchitecture.", StringComparison.Ordinal));
     }
 
+    private static ReportTextEntry PresEntry(string id, string text = "Text", bool withEvidence = true, ReportVerificationStatus verification = ReportVerificationStatus.Unverified) =>
+        new(id, text, ReportContentProvenance.ConsultantEntered, verification,
+            withEvidence ? new[] { new ReportEvidenceReference(ReportEvidenceKind.ConsultantObservation, "obs-1") } : Array.Empty<ReportEvidenceReference>());
+
+    private static AssessmentReportContentValidationResult ValidatePresentation(ExecutivePresentationSection section, AssessmentReportContentStage stage) =>
+        new AssessmentReportContentValidator().Validate(
+            ConsultantReportContent.CreateEmpty() with { ExecutivePresentation = section },
+            new(stage, ConsultantObservationIds: new HashSet<string> { "obs-1" }));
+
+    private static readonly ReportEvidenceReference[] PresSectionEvidence = { new(ReportEvidenceKind.ConsultantObservation, "obs-1") };
+
+    [Fact]
+    public void Validator_Presentation_InReview_Requires_Section_And_Entry_Evidence()
+    {
+        var noSection = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.Assessed,
+            KeyMessages: new[] { PresEntry("m1") }), AssessmentReportContentStage.InReview);
+        Assert.Contains(noSection.Issues, i => i.Code == "evidence-required" && i.Path == "executivePresentation.evidenceReferences");
+
+        var noEntry = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.Assessed,
+            KeyMessages: new[] { PresEntry("m1", withEvidence: false) },
+            DecisionsRequested: new[] { PresEntry("d1", withEvidence: false) },
+            EvidenceReferences: PresSectionEvidence), AssessmentReportContentStage.InReview);
+        Assert.Contains(noEntry.Issues, i => i.Code == "evidence-required" && i.Path == "executivePresentation.entries[0].evidenceReferences");
+        Assert.Contains(noEntry.Issues, i => i.Code == "evidence-required" && i.Path == "executivePresentation.entries[1].evidenceReferences");
+
+        var invalidRef = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.Assessed,
+            EvidenceReferences: new[] { new ReportEvidenceReference(ReportEvidenceKind.ConsultantObservation, "missing") }), AssessmentReportContentStage.InReview);
+        Assert.Contains(invalidRef.Issues, i => i.Code == "evidence-reference-invalid");
+
+        var clean = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.Assessed,
+            KeyMessages: new[] { PresEntry("m1") }, DecisionsRequested: new[] { PresEntry("d1") },
+            EvidenceReferences: PresSectionEvidence), AssessmentReportContentStage.InReview);
+        Assert.DoesNotContain(clean.Issues, i => i.Path.StartsWith("executivePresentation", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validator_Presentation_State_Rules_And_Conflicts()
+    {
+        var inReviewNotAssessed = ValidatePresentation(new ExecutivePresentationSection(), AssessmentReportContentStage.InReview);
+        Assert.Contains(inReviewNotAssessed.Issues, i => i.Code == "section-not-assessed" && i.Path == "executivePresentation");
+
+        var approvedNotAvailable = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.NotAvailable), AssessmentReportContentStage.Approved);
+        Assert.Contains(approvedNotAvailable.Issues, i => i.Code == "section-not-available" && i.Path == "executivePresentation");
+
+        var conflict = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.NotApplicable, TopRisks: new[] { "Risk" }), AssessmentReportContentStage.Draft);
+        Assert.Contains(conflict.Issues, i => i.Code == "section-state-content-conflict");
+        var conflictNa = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.NotAssessed, KeyMessages: new[] { PresEntry("m1") }), AssessmentReportContentStage.Draft);
+        Assert.Contains(conflictNa.Issues, i => i.Code == "section-state-content-conflict");
+    }
+
+    [Fact]
+    public void Validator_Presentation_Approved_Retains_Evidence_Requirements()
+    {
+        var result = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.Assessed,
+            KeyMessages: new[] { PresEntry("m1", withEvidence: false) }), AssessmentReportContentStage.Approved);
+        Assert.Contains(result.Issues, i => i.Code == "evidence-required" && i.Path == "executivePresentation.evidenceReferences");
+        Assert.Contains(result.Issues, i => i.Code == "evidence-required" && i.Path == "executivePresentation.entries[0].evidenceReferences");
+    }
+
+    [Fact]
+    public void Validator_Presentation_Rejects_Duplicate_Ids_Across_Both_Lists()
+    {
+        var result = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.Assessed,
+            KeyMessages: new[] { PresEntry("same") }, DecisionsRequested: new[] { PresEntry("same") }), AssessmentReportContentStage.Draft);
+        Assert.Contains(result.Issues, i => i.Code == "stable-id-duplicate" && i.Path == "executivePresentation");
+    }
+
+    [Fact]
+    public void Validator_Presentation_Known_Governance_Gaps_Permit_Empty_Text_Risks_And_Unverified_Entries()
+    {
+        // Known governance gaps: the validator does not require entry text, TopRisks or verification for presentation entries,
+        // even at Approved. Pinned so any future tightening is a deliberate change.
+        var result = ValidatePresentation(new ExecutivePresentationSection(ReportAssessmentState.Assessed,
+            Title: null, Narrative: null,
+            KeyMessages: new[] { PresEntry("m1", text: "", verification: ReportVerificationStatus.Unverified) },
+            DecisionsRequested: new[] { PresEntry("d1", text: "   ", verification: ReportVerificationStatus.Unverified) },
+            TopRisks: Array.Empty<string>(), EvidenceReferences: PresSectionEvidence), AssessmentReportContentStage.Approved);
+        Assert.DoesNotContain(result.Issues, i => i.Path.StartsWith("executivePresentation", StringComparison.Ordinal));
+    }
+
     private static AssessmentReportContentValidationResult ValidateRoadmap(RoadmapItem item, AssessmentReportContentStage stage) =>
         new AssessmentReportContentValidator().Validate(
             ConsultantReportContent.CreateEmpty() with

@@ -1,0 +1,33 @@
+@using SentinelMfgSuite.Web.Models.Assessments.Reports
+@using SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments
+@model ReportModel.TextEntryEditorModel
+@{
+    var input = Model.Input;
+    var prefix = $"PresentationInput.{Model.ListName}[{Model.Index}]";
+    var idPrefix = $"pres{Model.ListName}-{Model.Index}";
+    var otherEvidence = Model.Stored?.EvidenceReferences
+        .Where(reference => reference.Kind != ReportEvidenceKind.QuestionnaireAnswer).ToArray();
+    var evidenceModel = new ReportModel.EvidenceCheckboxModel(Model.Options, prefix + ".EvidenceQuestionIds", idPrefix + "-evidence", input.EvidenceQuestionIds);
+}
+<fieldset class="border border-secondary rounded-3 p-3 mb-3 presentation-entry">
+    <legend class="float-none w-auto px-2 small">@Model.Label</legend>
+    <input type="hidden" name="@(prefix + ".Id")" value="@input.Id" />
+    <input type="hidden" name="@(prefix + ".EvidenceSubmitted")" value="true" />
+    <div class="mb-2"><label class="form-label" for="@(idPrefix)-text">Text</label><textarea id="@(idPrefix)-text" name="@(prefix + ".Text")" rows="3" class="form-control bg-dark text-light border-secondary">@input.Text</textarea></div>
+    <div class="row g-2">
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-prov">Provenance</label><select id="@(idPrefix)-prov" name="@(prefix + ".Provenance")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportContentProvenance>()) { <option value="@value" selected="@(value == (input.Provenance ?? ReportContentProvenance.ConsultantEntered))">@value</option> }</select></div>
+        <div class="col-md-6 mb-2"><label class="form-label" for="@(idPrefix)-ver">Verification status</label><select id="@(idPrefix)-ver" name="@(prefix + ".VerificationStatus")" class="form-select bg-dark text-light border-secondary">@foreach (var value in Enum.GetValues<ReportVerificationStatus>()) { <option value="@value" selected="@(value == (input.VerificationStatus ?? ReportVerificationStatus.Unverified))">@value</option> }</select></div>
+    </div>
+    <details class="mb-2">
+        <summary class="small">Questionnaire evidence references</summary>
+        <partial name="_EvidenceCheckboxes" model="evidenceModel" />
+        @if (otherEvidence is { Length: > 0 })
+        {
+            <p class="small text-secondary mt-2 mb-0">Other preserved evidence references (read-only): @string.Join(", ", otherEvidence.Select(reference => $"{reference.Kind}: {reference.ReferenceId}"))</p>
+        }
+    </details>
+    @if (Model.Stored is null)
+    {
+        <button type="button" class="btn btn-outline-danger btn-sm remove-new-row" aria-label="Remove this unsaved entry">Remove unsaved entry</button>
+    }
+</fieldset>

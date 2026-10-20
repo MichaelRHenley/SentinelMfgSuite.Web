@@ -30,7 +30,7 @@
 
     <section class="container pb-5">
         <div class="alert alert-warning" role="status">
-            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, and Implementation Roadmap sections. Approval, issuance, PDF generation, and customer delivery are not yet available.
+            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, Implementation Roadmap, and Executive Presentation sections. Approval, issuance, PDF generation, and customer delivery are not yet available.
         </div>
 
         @if (!Model.RevisionId.HasValue)
@@ -134,8 +134,8 @@
                     <section class="card sentinel-card border-0 rounded-4 h-100" aria-labelledby="workspaceHeading">
                         <div class="card-body p-3 p-md-4">
                             <h2 id="workspaceHeading" class="h4 fw-semibold">Consultant report workspace</h2>
-                            <p class="small text-secondary">Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, and Implementation Roadmap Drafts. Evidence and frozen scoring remain read-only in the adjacent panel.</p>
-                            @if (Model.SaveStatus is string saveStatus && saveStatus != "AI Opportunities & ROI Draft saved." && saveStatus != "Technical Gaps & Architecture Draft saved." && saveStatus != "Implementation Roadmap Draft saved.")
+                            <p class="small text-secondary">Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, Implementation Roadmap, and Executive Presentation Drafts. Evidence and frozen scoring remain read-only in the adjacent panel.</p>
+                            @if (Model.SaveStatus is string saveStatus && saveStatus != "AI Opportunities & ROI Draft saved." && saveStatus != "Technical Gaps & Architecture Draft saved." && saveStatus != "Implementation Roadmap Draft saved." && saveStatus != "Executive Presentation Draft saved.")
                             {
                                 <div class="alert alert-success" role="status">@saveStatus</div>
                             }
@@ -557,11 +557,90 @@
                                     <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
                                 </form>
                             </section>
-                            <nav aria-label="Other consultant report sections">
-                                <ol class="list-group list-group-numbered">
-                                    <li class="list-group-item bg-transparent text-light">Executive Presentation <span class="text-secondary">— editor not yet available</span></li>
-                                </ol>
-                            </nav>
+                            <section id="executivePresentation" class="border border-info rounded-3 p-3 mb-4" aria-labelledby="executivePresentationHeading">
+                                <h3 id="executivePresentationHeading" class="h5 fw-semibold">Executive Presentation</h3>
+                                <p class="small text-secondary">Refer to the Executive Summary and Implementation Roadmap above for context. Nothing is copied automatically. New entries are consultant-entered and unverified; verification is never set automatically. Saved entries cannot be deleted here. InReview requires evidence on both the section and each entry.</p>
+                                @if (Model.SaveStatus == "Executive Presentation Draft saved.")
+                                {
+                                    <div class="alert alert-success" role="status">@Model.SaveStatus</div>
+                                }
+                                <form method="post" asp-page-handler="SaveExecutivePresentation" asp-fragment="executivePresentation">
+                                    <input type="hidden" asp-for="AssessmentId" />
+                                    <input type="hidden" asp-for="SubmittedResponseId" />
+                                    <input type="hidden" asp-for="RevisionId" />
+                                    <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                    @if (Model.ValidationIssues.Count > 0)
+                                    {
+                                        <div class="mb-3" role="status">
+                                            @foreach (var issue in Model.ValidationIssues)
+                                            {
+                                                <div class="alert @(issue.Severity == SentinelMfgSuite.Web.Services.Assessments.Reports.ReportContentValidationSeverity.Error ? "alert-danger" : "alert-warning") py-2 mb-2"><strong>@issue.Severity:</strong> @issue.Message</div>
+                                            }
+                                        </div>
+                                    }
+                                    <div class="mb-3">
+                                        <label asp-for="PresentationInput.State" class="form-label">Section assessment state</label>
+                                        <select asp-for="PresentationInput.State" asp-items="Html.GetEnumSelectList<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportAssessmentState>()" class="form-select bg-dark text-light border-secondary"></select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label asp-for="PresentationInput.Title" class="form-label">Title</label>
+                                        <input asp-for="PresentationInput.Title" class="form-control bg-dark text-light border-secondary" autocomplete="off" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label asp-for="PresentationInput.Narrative" class="form-label">Narrative</label>
+                                        <textarea asp-for="PresentationInput.Narrative" rows="4" class="form-control bg-dark text-light border-secondary"></textarea>
+                                    </div>
+                                    @{
+                                        var storedPresentation = Model.ReportContent?.ExecutivePresentation;
+                                        var storedKeyMessages = storedPresentation?.KeyMessages ?? Array.Empty<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportTextEntry>();
+                                        var storedDecisions = storedPresentation?.DecisionsRequested ?? Array.Empty<SentinelMfgSuite.Web.Models.Assessments.Reports.ReportTextEntry>();
+                                        var newKeyMessageModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.TextEntryEditorModel(new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.PresentationEntryInput(), "KeyMessages", "__index__", "Key message", Model.EvidenceOptions, null);
+                                        var newDecisionModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.TextEntryEditorModel(new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.PresentationEntryInput(), "DecisionsRequested", "__index__", "Decision requested", Model.EvidenceOptions, null);
+                                    }
+                                    <h4 class="h6">Key messages</h4>
+                                    <div id="presKeyMessagesList">
+                                        @for (var i = 0; i < Model.PresentationInput.KeyMessages.Count; i++)
+                                        {
+                                            var entry = Model.PresentationInput.KeyMessages[i];
+                                            var entryModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.TextEntryEditorModel(entry, "KeyMessages", i.ToString(), "Key message", Model.EvidenceOptions, storedKeyMessages.FirstOrDefault(s => s.Id == entry.Id));
+                                            <partial name="_ReportTextEntryEditor" model="entryModel" />
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-outline-light btn-sm mb-3" id="addPresKeyMessage">Add key message</button>
+                                    <template id="presKeyMessageTemplate"><partial name="_ReportTextEntryEditor" model="newKeyMessageModel" /></template>
+                                    <h4 class="h6">Decisions requested</h4>
+                                    <div id="presDecisionsList">
+                                        @for (var i = 0; i < Model.PresentationInput.DecisionsRequested.Count; i++)
+                                        {
+                                            var entry = Model.PresentationInput.DecisionsRequested[i];
+                                            var entryModel = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.TextEntryEditorModel(entry, "DecisionsRequested", i.ToString(), "Decision requested", Model.EvidenceOptions, storedDecisions.FirstOrDefault(s => s.Id == entry.Id));
+                                            <partial name="_ReportTextEntryEditor" model="entryModel" />
+                                        }
+                                    </div>
+                                    <button type="button" class="btn btn-outline-light btn-sm mb-3" id="addPresDecision">Add decision requested</button>
+                                    <template id="presDecisionTemplate"><partial name="_ReportTextEntryEditor" model="newDecisionModel" /></template>
+                                    <div class="mb-3">
+                                        <input type="hidden" name="PresentationInput.TopRisksSubmitted" value="true" />
+                                        <label asp-for="PresentationInput.TopRisksText" class="form-label">Top risks (one per line)</label>
+                                        <textarea asp-for="PresentationInput.TopRisksText" rows="4" class="form-control bg-dark text-light border-secondary"></textarea>
+                                    </div>
+                                    @{
+                                        var presSectionOther = storedPresentation?.EvidenceReferences?.Where(r => r.Kind != SentinelMfgSuite.Web.Models.Assessments.Reports.ReportEvidenceKind.QuestionnaireAnswer).ToArray();
+                                        var presSectionEvidence = new SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.ReportModel.EvidenceCheckboxModel(Model.EvidenceOptions, "PresentationInput.EvidenceQuestionIds", "pres-section-evidence", Model.PresentationInput.EvidenceQuestionIds);
+                                    }
+                                    <details class="mb-3">
+                                        <summary class="small">Section questionnaire evidence references</summary>
+                                        <input type="hidden" name="PresentationInput.EvidenceSubmitted" value="true" />
+                                        <partial name="_EvidenceCheckboxes" model="presSectionEvidence" />
+                                        @if (presSectionOther is { Length: > 0 })
+                                        {
+                                            <p class="small text-secondary mt-2 mb-0">Other preserved evidence references (read-only): @string.Join(", ", presSectionOther.Select(r => $"{r.Kind}: {r.ReferenceId}"))</p>
+                                        }
+                                    </details>
+                                    <div asp-validation-summary="All" class="text-danger mb-3" role="alert"></div>
+                                    <button type="submit" class="btn-sentinel-primary" disabled="@(Model.RevisionStatus != SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Draft)">Save Draft</button>
+                                </form>
+                            </section>
                         </div>
                     </section>
                 </div>
@@ -672,6 +751,39 @@
                 button.focus();
             });
         })();
+
+        const wirePresentation = (addId, listId, tplId, listName) => {
+            const button = document.getElementById(addId);
+            const list = document.getElementById(listId);
+            const tpl = document.getElementById(tplId);
+            if (!button || !list || !tpl) return;
+            const selector = '.presentation-entry';
+            const idRe = new RegExp('^pres' + listName + '-\\d+-');
+            const reindex = () => {
+                list.querySelectorAll(selector).forEach((entry, index) => {
+                    entry.querySelectorAll('[name]').forEach(e => { e.name = e.name.replace(/\[\d+\]/, `[${index}]`); });
+                    entry.querySelectorAll('[id]').forEach(e => { e.id = e.id.replace(idRe, `pres${listName}-${index}-`); });
+                    entry.querySelectorAll('[for]').forEach(e => { e.htmlFor = e.htmlFor.replace(idRe, `pres${listName}-${index}-`); });
+                });
+            };
+            button.addEventListener('click', () => {
+                const index = list.querySelectorAll(selector).length;
+                const fragment = tpl.content.cloneNode(true);
+                fragment.querySelectorAll('[name]').forEach(e => { e.name = e.name.replaceAll('__index__', index); });
+                fragment.querySelectorAll('[id]').forEach(e => { e.id = e.id.replaceAll('__index__', index); });
+                fragment.querySelectorAll('[for]').forEach(e => { e.htmlFor = e.htmlFor.replaceAll('__index__', index); });
+                list.appendChild(fragment);
+            });
+            list.addEventListener('click', event => {
+                const target = event.target.closest('.remove-new-row');
+                if (!target) return;
+                target.closest(selector)?.remove();
+                reindex();
+                button.focus();
+            });
+        };
+        wirePresentation('addPresKeyMessage', 'presKeyMessagesList', 'presKeyMessageTemplate', 'KeyMessages');
+        wirePresentation('addPresDecision', 'presDecisionsList', 'presDecisionTemplate', 'DecisionsRequested');
 
         const addFindingButton = document.getElementById('addIndustrialFinding');
         const findingList = document.getElementById('industrialFindingsList');
