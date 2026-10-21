@@ -17,6 +17,16 @@ internal static class RevisionStatusSeed
         AssessmentReportRevision? replacement = null;
         if (status == AssessmentReportRevisionStatus.Superseded)
         {
+            // Free the single active-revision slot first: the original becomes Issued before the Approved replacement exists.
+            revision.Status = AssessmentReportRevisionStatus.Issued;
+            revision.SubmittedForReviewUtc = now;
+            revision.SubmittedForReviewByUserId = "seed-submitter";
+            revision.ApprovedUtc = now;
+            revision.ApprovedByUserId = "seed-approver";
+            revision.IssuedUtc = now;
+            revision.IssuedByUserId = "seed-issuer";
+            await db.SaveChangesAsync();
+
             replacement = new AssessmentReportRevision
             {
                 Id = Guid.NewGuid(),

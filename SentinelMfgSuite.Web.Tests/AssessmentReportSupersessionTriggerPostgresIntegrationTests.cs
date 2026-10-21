@@ -17,7 +17,7 @@ namespace SentinelMfgSuite.Web.Tests;
 [Collection(PostgresIntegrationCollection.Name)]
 public sealed class AssessmentReportSupersessionTriggerPostgresIntegrationTests
 {
-    private const short Draft = 0, Approved = 2, Issued = 3;
+    private const short Draft = 0, Approved = 2, Issued = 3, Rejected = 5;
     private const string CheckViolation = "23514";
     private const string UniqueViolation = "23505";
     private const string ForeignKeyViolation = "23503";
@@ -42,18 +42,18 @@ public sealed class AssessmentReportSupersessionTriggerPostgresIntegrationTests
 
     private static async Task<(Guid ReportId, Guid Old, Guid New)> NewPairAsync(PostgresIntegrationTestFixture fixture)
     {
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var oldId = await InsertRevisionAsync(fixture, chain.ReportId, 2, Issued);
         var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved);
         return (chain.ReportId, oldId, newId);
     }
 
-    private static async Task<Guid> InsertRevisionAsync(PostgresIntegrationTestFixture fixture, Guid reportId, int number, short status)
+    private static async Task<Guid> InsertRevisionAsync(PostgresIntegrationTestFixture fixture, Guid reportId, int number, short status, bool approvedStamps = false)
     {
         var id = Guid.NewGuid();
         var now = DateTime.UtcNow.AddMinutes(-5);
         var submitted = status != Draft;
-        var approved = status is Approved or Issued;
+        var approved = approvedStamps || status is Approved or Issued;
         var issued = status is Issued;
         await using var db = fixture.CreateDbContext();
         await db.Database.ExecuteSqlInterpolatedAsync($@"INSERT INTO ""AssessmentReportRevisions""
@@ -186,7 +186,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
     {
         var fixture = await NewFixtureAsync();
         var (reportId, oldId, newId) = await NewPairAsync(fixture);
-        var other = await InsertRevisionAsync(fixture, reportId, 9, Draft);
+        var other = await InsertRevisionAsync(fixture, reportId, 9, Rejected);
 
         await AssertCommitViolationAsync(() => ReplaceAsync(fixture, reportId, oldId, newId, new Options(PredecessorEventReplacement: other)));
     }
@@ -197,7 +197,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
     {
         var fixture = await NewFixtureAsync();
         var (reportId, oldId, newId) = await NewPairAsync(fixture);
-        var other = await InsertRevisionAsync(fixture, reportId, 9, Draft);
+        var other = await InsertRevisionAsync(fixture, reportId, 9, Rejected);
 
         await AssertCommitViolationAsync(() => ReplaceAsync(fixture, reportId, oldId, newId, new Options(ReplacementEventReplaced: other)));
     }
@@ -229,7 +229,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
     public async Task Replacement_With_Lower_Revision_Number_Fails_At_Commit()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var oldId = await InsertRevisionAsync(fixture, chain.ReportId, 5, Issued);
         var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved);
 
@@ -252,7 +252,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
     {
         var fixture = await NewFixtureAsync();
         var (reportId, oldId, _) = await NewPairAsync(fixture);
-        var other = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var other = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var otherApproved = await InsertRevisionAsync(fixture, other.ReportId, 5, Approved);
 
         var ex = await Assert.ThrowsAnyAsync<Exception>(() => ReplaceAsync(fixture, reportId, oldId, otherApproved));
@@ -279,7 +279,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
         var fixture = await NewFixtureAsync();
         var (reportId, oldId, newId) = await NewPairAsync(fixture);
         await ReplaceAsync(fixture, reportId, oldId, newId);
-        var secondOld = await InsertRevisionAsync(fixture, reportId, 4, Approved);
+        var secondOld = await InsertRevisionAsync(fixture, reportId, 4, Rejected, approvedStamps: true);
 
         // Status, stamps and link satisfy every check constraint, so only the unique replacement-link index can fire.
         await using var db = fixture.CreateDbContext();
@@ -356,7 +356,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
     {
         var fixture = await NewFixtureAsync();
         var (reportId, oldId, newId) = await NewPairAsync(fixture);
-        var other = await InsertRevisionAsync(fixture, reportId, 9, Draft);
+        var other = await InsertRevisionAsync(fixture, reportId, 9, Rejected);
 
         // The replacement event carries a different correlation id; an unrelated Draft->InReview event carries corr-a.
         await AssertCommitViolationAsync(() => ReplaceAsync(fixture, reportId, oldId, newId,
@@ -371,7 +371,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
         var fixture = await NewFixtureAsync();
         var (reportId, oldId, newId) = await NewPairAsync(fixture);
         await ReplaceAsync(fixture, reportId, oldId, newId);
-        var third = await InsertRevisionAsync(fixture, reportId, 4, Approved);
+        var third = await InsertRevisionAsync(fixture, reportId, 4, Rejected, approvedStamps: true);
 
         var ex = await Assert.ThrowsAnyAsync<Exception>(() => ReplaceAsync(fixture, reportId, oldId, third, new Options(PredecessorCorrelation: "corr-r", ReplacementCorrelation: "corr-r")));
         Assert.Equal(CheckViolation, Pg(ex)!.SqlState);
@@ -413,7 +413,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
     {
         var fixture = await NewFixtureAsync();
         var (reportId, oldId, newId) = await NewPairAsync(fixture);
-        var rival = await InsertRevisionAsync(fixture, reportId, 4, Approved);
+        var rival = await InsertRevisionAsync(fixture, reportId, 4, Rejected, approvedStamps: true);
 
         await using var dbA = fixture.CreateDbContext();
         await using var txA = await dbA.Database.BeginTransactionAsync();
@@ -430,7 +430,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
         var ex = await Assert.ThrowsAnyAsync<Exception>(() => rivalTask);
         Assert.Equal(CheckViolation, Pg(ex)!.SqlState);
         Assert.Equal(AssessmentReportRevisionStatus.Issued, await StatusAsync(fixture, newId));
-        Assert.Equal(AssessmentReportRevisionStatus.Approved, await StatusAsync(fixture, rival));
+        Assert.Equal(AssessmentReportRevisionStatus.Rejected, await StatusAsync(fixture, rival));
     }
 
     private static async Task WaitForBlockedSessionAsync(PostgresIntegrationTestFixture fixture, Task rivalTask)

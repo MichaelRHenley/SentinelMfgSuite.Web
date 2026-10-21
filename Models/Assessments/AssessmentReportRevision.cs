@@ -66,6 +66,16 @@ public sealed class AssessmentReportRevision
     /// </summary>
     public Guid? SupersededByRevisionId { get; set; }
 
+    /// <summary>
+    /// The Issued revision of the same report this correction revision was based on. Null for initial revisions.
+    /// </summary>
+    public Guid? BasedOnRevisionId { get; set; }
+
+    /// <summary>
+    /// Optional reason for a correction revision. Must be null when <see cref="BasedOnRevisionId"/> is null.
+    /// </summary>
+    public string? CorrectionReason { get; set; }
+
     public string? PdfStorageKey { get; set; }
 
     public string? PdfSha256 { get; set; }

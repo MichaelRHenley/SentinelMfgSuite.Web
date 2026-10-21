@@ -164,13 +164,51 @@ public sealed class AssessmentReportPostgresIntegrationTests
         return new ReportChain(assessmentId, invitationId, responseId, result.Report!.Id, result.Report.Revisions.Single().Id, userId);
     }
 
-    private static async Task<Guid> AddRevisionAsync(PostgresIntegrationTestFixture fixture, Guid reportId, int number)
+    /// <summary>
+    /// Adds a Rejected revision (valid submitted stamp, no active-slot usage). Used as a foreign-key anchor for raw history
+    /// inserts so a report never holds more than one Draft/InReview/Approved revision.
+    /// </summary>
+    internal static async Task<Guid> AddRejectedRevisionAsync(PostgresIntegrationTestFixture fixture, Guid reportId, int number)
     {
         await using var db = fixture.CreateDbContext();
         var revision = CreateRevision(reportId, number);
+        revision.Status = AssessmentReportRevisionStatus.Rejected;
+        revision.SubmittedForReviewUtc = revision.CreatedUtc;
+        revision.SubmittedForReviewByUserId = "integration";
         db.Set<AssessmentReportRevision>().Add(revision);
         await db.SaveChangesAsync();
         return revision.Id;
+    }
+
+    internal sealed record ReportOnlyChain(Guid AssessmentId, Guid InvitationId, Guid ResponseId, Guid ReportId, string UserId);
+
+    /// <summary>
+    /// Creates a report row with no revisions, for raw-SQL constraint tests that seed their own revisions and must not
+    /// compete with a service-created Draft revision 1 for the single active-revision slot. No history is fabricated.
+    /// </summary>
+    internal static async Task<ReportOnlyChain> CreateReportWithoutRevisionsAsync(PostgresIntegrationTestFixture fixture)
+    {
+        var assessmentId = Guid.NewGuid();
+        var invitationId = Guid.NewGuid();
+        var responseId = Guid.NewGuid();
+        var userId = $"report-norev-{Guid.NewGuid():N}";
+        await SeedAsync(fixture, assessmentId, invitationId, responseId, userId, false);
+        await using var db = fixture.CreateDbContext();
+        var report = new AssessmentReport
+        {
+            Id = Guid.NewGuid(),
+            AssessmentId = assessmentId,
+            SubmittedResponseId = responseId,
+            QuestionnaireVersion = "3.0",
+            ResponseSubmittedUtc = DateTime.UtcNow,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+            CreatedByUserId = userId,
+            UpdatedByUserId = userId
+        };
+        db.Set<AssessmentReport>().Add(report);
+        await db.SaveChangesAsync();
+        return new ReportOnlyChain(assessmentId, invitationId, responseId, report.Id, userId);
     }
 
     private static async Task InsertHistoryAsync(
@@ -250,8 +288,8 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, {eventType}, {previous}, {ne
         try
         {
             var r = chain.RevisionId;
-            var other = await AddRevisionAsync(fixture, chain.ReportId, 2);
-            var third = await AddRevisionAsync(fixture, chain.ReportId, 3);
+            var other = await AddRejectedRevisionAsync(fixture, chain.ReportId, 2);
+            var third = await AddRejectedRevisionAsync(fixture, chain.ReportId, 3);
 
             await InsertHistoryAsync(fixture, chain.ReportId, r, Transition, Draft, InReview);
             await InsertHistoryAsync(fixture, chain.ReportId, r, Transition, InReview, Approved);
@@ -285,7 +323,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, {eventType}, {previous}, {ne
         {
             var r = chain.RevisionId;
             var rep = chain.ReportId;
-            var second = await AddRevisionAsync(fixture, rep, 2);
+            var second = await AddRejectedRevisionAsync(fixture, rep, 2);
 
             // Event type / status values
             await AssertViolationAsync(() => InsertHistoryAsync(fixture, rep, second, 9, null, Draft), CheckViolation);
@@ -385,7 +423,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, {eventType}, {previous}, {ne
                 ForeignKeyViolation);
 
             // A failed statement inside a transaction rolls back earlier valid inserts
-            var rolledBackRevision = await AddRevisionAsync(fixture, rep, 2);
+            var rolledBackRevision = await AddRejectedRevisionAsync(fixture, rep, 2);
             await using (var txDb = fixture.CreateDbContext())
             {
                 await using var tx = await txDb.Database.BeginTransactionAsync();

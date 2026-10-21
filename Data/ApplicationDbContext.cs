@@ -226,10 +226,21 @@ namespace SentinelMfgSuite.Web.Data
                     .HasPrincipalKey(x => new { x.AssessmentReportId, x.Id })
                     .HasConstraintName("FK_AssessmentReportRevisions_SupersededBy_SameReport")
                     .OnDelete(DeleteBehavior.Restrict);
-                b.HasIndex(x => x.AssessmentReportId)
+                b.Property(x => x.CorrectionReason).HasMaxLength(2000);
+                b.HasOne<AssessmentReportRevision>()
+                    .WithMany()
+                    .HasForeignKey(x => new { x.AssessmentReportId, x.BasedOnRevisionId })
+                    .HasPrincipalKey(x => new { x.AssessmentReportId, x.Id })
+                    .HasConstraintName("FK_AssessmentReportRevisions_BasedOn_SameReport")
+                    .OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(x => new { x.AssessmentReportId, x.BasedOnRevisionId })
+                    .HasDatabaseName("IX_AssessmentReportRevisions_Report_BasedOn");
+                b.HasIndex(new[] { nameof(AssessmentReportRevision.AssessmentReportId) }, "UX_AssessmentReportRevisions_Report_ActiveRevision")
                     .IsUnique()
-                    .HasFilter("\"Status\" = 3")
-                    .HasDatabaseName("UX_AssessmentReportRevisions_Report_CurrentIssued");
+                    .HasFilter("\"Status\" IN (0, 1, 2)");
+                b.HasIndex(new[] { nameof(AssessmentReportRevision.AssessmentReportId) }, "UX_AssessmentReportRevisions_Report_CurrentIssued")
+                    .IsUnique()
+                    .HasFilter("\"Status\" = 3");
                 b.HasIndex(x => new { x.AssessmentReportId, x.SupersededByRevisionId })
                     .HasDatabaseName("IX_AssessmentReportRevisions_Report_SupersededBy");
                 b.HasIndex(x => x.SupersededByRevisionId)
@@ -244,6 +255,10 @@ namespace SentinelMfgSuite.Web.Data
                         "\"Status\" BETWEEN 0 AND 5");
                     table.HasCheckConstraint("CK_AssessmentReportRevision_NoSelfSupersession",
                         "\"SupersededByRevisionId\" IS NULL OR \"SupersededByRevisionId\" <> \"Id\"");
+                    table.HasCheckConstraint("CK_AssessmentReportRevision_NoSelfLineage",
+                        "\"BasedOnRevisionId\" IS NULL OR \"BasedOnRevisionId\" <> \"Id\"");
+                    table.HasCheckConstraint("CK_AssessmentReportRevision_CorrectionReason",
+                        "\"CorrectionReason\" IS NULL OR (\"BasedOnRevisionId\" IS NOT NULL AND length(trim(\"CorrectionReason\")) > 0 AND length(\"CorrectionReason\") <= 2000)");
                     table.HasCheckConstraint("CK_AssessmentReportRevision_SupersededLink",
                         "(\"Status\" = 4) = (\"SupersededByRevisionId\" IS NOT NULL)");
                     table.HasCheckConstraint("CK_AssessmentReportRevision_StampPairs",

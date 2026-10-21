@@ -316,11 +316,11 @@ public sealed class AssessmentReportLifecyclePostgresIntegrationTests
         PostgresIntegrationTestFixture fixture, AssessmentReportPostgresIntegrationTests.ReportChain chain, ClaimsPrincipal caller, DateTimeOffset issuedAt)
     {
         var approveTime = new ManualTimeProvider(T1);
-        var replacementId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 2);
         var predecessorStamp = await ApproveAsync(fixture, chain.RevisionId, caller, approveTime);
-        var replacementStamp = await ApproveAsync(fixture, replacementId, caller, approveTime);
         var issued = await RunAsync(fixture, new ManualTimeProvider(issuedAt), s => s.IssueAsync(chain.RevisionId, predecessorStamp, caller));
         Assert.True(issued.Succeeded);
+        var replacementId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 2);
+        var replacementStamp = await ApproveAsync(fixture, replacementId, caller, approveTime);
         return new IssuedPair(chain.RevisionId, replacementId, replacementStamp);
     }
 
@@ -444,37 +444,44 @@ public sealed class AssessmentReportLifecyclePostgresIntegrationTests
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
-    public async Task Two_Different_Approved_Revisions_Competing_For_The_Same_Predecessor_Allow_Exactly_One()
+    public async Task Competing_Issue_And_Reject_Of_The_Single_Approved_Replacement_Allow_Exactly_One()
     {
+        // The active-revision invariant allows one Approved revision per report, so two Approved replacements can no
+        // longer compete for one predecessor. The remaining race is issuing versus rejecting that one replacement.
         var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
         await fixture.InitializeAsync();
         var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
         var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
         var pair = await CreateIssuedPairAsync(fixture, chain, caller, T2);
-        var thirdId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 3);
-        var thirdStamp = await ApproveAsync(fixture, thirdId, caller, new ManualTimeProvider(T1));
         var gate = new Rendezvous(2);
 
         var results = await Task.WhenAll(
             Task.Run(() => RunHookedAsync(fixture, new ManualTimeProvider(T3), gate.ArriveAsync, s => s.IssueAsync(pair.ReplacementId, pair.ReplacementStamp, caller))),
-            Task.Run(() => RunHookedAsync(fixture, new ManualTimeProvider(T3), gate.ArriveAsync, s => s.IssueAsync(thirdId, thirdStamp, caller))));
+            Task.Run(() => RunHookedAsync(fixture, new ManualTimeProvider(T3), gate.ArriveAsync, s => s.RejectAsync(pair.ReplacementId, pair.ReplacementStamp, "competing", caller))));
 
         Assert.Equal(1, results.Count(r => r.Succeeded));
         Assert.Equal(1, results.Count(r => r.State == AssessmentReportLifecycleState.ConcurrencyConflict));
-        var second = await LoadRevisionAsync(fixture, pair.ReplacementId);
-        var third = await LoadRevisionAsync(fixture, thirdId);
+        var replacement = await LoadRevisionAsync(fixture, pair.ReplacementId);
         var predecessor = await LoadRevisionAsync(fixture, pair.PredecessorId);
-        Assert.Single(new[] { second, third }, r => r.Status == AssessmentReportRevisionStatus.Issued);
-        var winner = second.Status == AssessmentReportRevisionStatus.Issued ? second : third;
-        var loser = winner.Id == second.Id ? third : second;
-        Assert.Equal(AssessmentReportRevisionStatus.Approved, loser.Status);
-        Assert.Null(loser.IssuedUtc);
-        Assert.Equal(AssessmentReportRevisionStatus.Superseded, predecessor.Status);
-        Assert.Equal(winner.Id, predecessor.SupersededByRevisionId);
+        var replacementHistory = await HistoryAsync(fixture, pair.ReplacementId);
+        var predecessorHistory = await HistoryAsync(fixture, pair.PredecessorId);
         Assert.Equal(1, await IssuedCountAsync(fixture, chain.ReportId));
-        Assert.Single((await HistoryAsync(fixture, pair.PredecessorId)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Superseded));
-        Assert.Single((await HistoryAsync(fixture, winner.Id)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued));
-        Assert.Empty((await HistoryAsync(fixture, loser.Id)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued));
+        if (replacement.Status == AssessmentReportRevisionStatus.Issued)
+        {
+            Assert.Equal(AssessmentReportRevisionStatus.Superseded, predecessor.Status);
+            Assert.Equal(replacement.Id, predecessor.SupersededByRevisionId);
+            Assert.Single(predecessorHistory.Where(h => h.NewStatus == AssessmentReportRevisionStatus.Superseded));
+            Assert.Empty(replacementHistory.Where(h => h.NewStatus == AssessmentReportRevisionStatus.Rejected));
+        }
+        else
+        {
+            Assert.Equal(AssessmentReportRevisionStatus.Rejected, replacement.Status);
+            Assert.Null(replacement.IssuedUtc);
+            Assert.Equal(AssessmentReportRevisionStatus.Issued, predecessor.Status);
+            Assert.Null(predecessor.SupersededByRevisionId);
+            Assert.Empty(predecessorHistory.Where(h => h.NewStatus == AssessmentReportRevisionStatus.Superseded));
+            Assert.Empty(replacementHistory.Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued));
+        }
     }
 
     [Fact]
@@ -677,32 +684,30 @@ VALUES ({Guid.NewGuid()}, {chain.ReportId}, {pair.ReplacementId}, {(short)2}, {(
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
-    public async Task Competing_Issuance_Of_Different_Approved_Revisions_Allows_Exactly_One_And_Leaves_Loser_Approved()
+    public async Task Competing_Initial_Issue_And_Reject_Of_The_Single_Approved_Revision_Allow_Exactly_One()
     {
+        // The active-revision invariant allows one Approved revision per report, so two Approved revisions can no longer
+        // compete for initial issuance. The remaining race is issuing versus rejecting the single Approved revision.
         var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
         await fixture.InitializeAsync();
         var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
         var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
         var time = new ManualTimeProvider(T1);
-        var secondId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 2);
-        var firstStamp = await ApproveAsync(fixture, chain.RevisionId, caller, time);
-        var secondStamp = await ApproveAsync(fixture, secondId, caller, time);
+        var stamp = await ApproveAsync(fixture, chain.RevisionId, caller, time);
 
         var gate = new Rendezvous(2);
         var results = await Task.WhenAll(
-            Task.Run(() => RunHookedAsync(fixture, time, gate.ArriveAsync, s => s.IssueAsync(chain.RevisionId, firstStamp, caller))),
-            Task.Run(() => RunHookedAsync(fixture, time, gate.ArriveAsync, s => s.IssueAsync(secondId, secondStamp, caller))));
+            Task.Run(() => RunHookedAsync(fixture, time, gate.ArriveAsync, s => s.IssueAsync(chain.RevisionId, stamp, caller))),
+            Task.Run(() => RunHookedAsync(fixture, time, gate.ArriveAsync, s => s.RejectAsync(chain.RevisionId, stamp, "competing", caller))));
 
         Assert.Equal(1, results.Count(r => r.Succeeded));
-        Assert.Equal(1, results.Count(r => r.State == AssessmentReportLifecycleState.InvalidTransition));
-        var first = await LoadRevisionAsync(fixture, chain.RevisionId);
-        var second = await LoadRevisionAsync(fixture, secondId);
-        Assert.Single(new[] { first, second }, r => r.Status == AssessmentReportRevisionStatus.Issued);
-        var loser = first.Status == AssessmentReportRevisionStatus.Issued ? second : first;
-        Assert.Equal(AssessmentReportRevisionStatus.Approved, loser.Status);
-        Assert.Null(loser.IssuedUtc);
-        Assert.Empty((await HistoryAsync(fixture, loser.Id)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued));
-        Assert.Single((await HistoryAsync(fixture, loser.Id == first.Id ? second.Id : first.Id)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued));
+        Assert.Equal(1, results.Count(r => r.State == AssessmentReportLifecycleState.ConcurrencyConflict));
+        var stored = await LoadRevisionAsync(fixture, chain.RevisionId);
+        var history = (await HistoryAsync(fixture, chain.RevisionId)).Where(h => h.PreviousStatus == AssessmentReportRevisionStatus.Approved).ToList();
+        Assert.Single(history);
+        Assert.Equal(stored.Status, history[0].NewStatus);
+        Assert.Contains(stored.Status, new[] { AssessmentReportRevisionStatus.Issued, AssessmentReportRevisionStatus.Rejected });
+        Assert.Equal(stored.Status == AssessmentReportRevisionStatus.Issued ? 1 : 0, await IssuedCountAsync(fixture, chain.ReportId));
     }
 
     [Fact]
@@ -714,18 +719,18 @@ VALUES ({Guid.NewGuid()}, {chain.ReportId}, {pair.ReplacementId}, {(short)2}, {(
         var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
         var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
         var time = new ManualTimeProvider(T1);
-        var secondId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 2);
-        var thirdId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 3);
         var firstStamp = await ApproveAsync(fixture, chain.RevisionId, caller, time);
-        var secondStamp = await ApproveAsync(fixture, secondId, caller, time);
-        await ApproveAsync(fixture, thirdId, caller, time);
         Assert.True((await RunAsync(fixture, time, s => s.IssueAsync(chain.RevisionId, firstStamp, caller))).Succeeded);
-
+        var secondId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 2);
+        var secondStamp = await ApproveAsync(fixture, secondId, caller, time);
         var replaced = await RunAsync(fixture, new ManualTimeProvider(T2), s => s.IssueAsync(secondId, secondStamp, caller));
 
         Assert.True(replaced.Succeeded);
         Assert.Equal(AssessmentReportRevisionStatus.Superseded, (await LoadRevisionAsync(fixture, chain.RevisionId)).Status);
         Assert.Equal(AssessmentReportRevisionStatus.Issued, (await LoadRevisionAsync(fixture, secondId)).Status);
+
+        var thirdId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(secondId), 3);
+        await ApproveAsync(fixture, thirdId, caller, time);
         Assert.Equal(AssessmentReportRevisionStatus.Approved, (await LoadRevisionAsync(fixture, thirdId)).Status);
 
         await using var db = fixture.CreateDbContext();

@@ -148,7 +148,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     {
         // Superseded rows are covered by the atomic replacement tests (the commit-time trigger requires history).
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         Guid? link = null;
 
         var id = await InsertRevisionAsync(fixture, chain.ReportId, 2, status, submitted, approved, issued, link);
@@ -184,7 +184,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Invalid_Status_And_Stamp_Combinations_Are_Rejected(short status, bool submitted, bool approved, bool issued)
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         Guid? link = null;
         if (status == Superseded)
         {
@@ -201,7 +201,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Timestamp_Without_Actor_Or_Blank_Actor_Is_Rejected()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
 
         await AssertViolationAsync(
             () => InsertRevisionAsync(fixture, chain.ReportId, 2, InReview, submittedUtc: DateTime.UtcNow, submittedBy: null),
@@ -216,7 +216,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Duplicate_Current_Issued_Revisions_Are_Rejected_But_Other_Reports_Are_Independent()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var otherChain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
 
         await InsertRevisionAsync(fixture, chain.ReportId, 2, Issued, true, true, true);
@@ -237,7 +237,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Same_Report_Supersession_Is_Accepted_And_Preserves_Historical_Stamps()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var (oldId, newId) = await InsertIssuedAndApprovedAsync(fixture, chain.ReportId);
 
         await ReplaceAsync(fixture, chain.ReportId, oldId, newId);
@@ -259,7 +259,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Cross_Report_Supersession_Reference_Is_Rejected()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var otherChain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
 
         await AssertViolationAsync(
@@ -277,7 +277,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Self_Supersession_Is_Rejected()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var id = Guid.NewGuid();
 
         await AssertViolationAsync(
@@ -295,10 +295,11 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Replacement_Link_On_Non_Superseded_Revision_Is_Rejected(short status, bool submitted, bool approved, bool issued)
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
+        var anchorId = await InsertRevisionAsync(fixture, chain.ReportId, 1, Rejected, submitted: true);
 
         await AssertViolationAsync(
-            () => InsertRevisionAsync(fixture, chain.ReportId, 2, status, submitted, approved, issued, supersededBy: chain.RevisionId),
+            () => InsertRevisionAsync(fixture, chain.ReportId, 2, status, submitted, approved, issued, supersededBy: anchorId),
             CheckViolation);
     }
 
@@ -307,7 +308,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Superseded_Revision_Without_Replacement_Link_Is_Rejected()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var issuedId = await InsertRevisionAsync(fixture, chain.ReportId, 2, Issued, true, true, true);
 
         await AssertViolationAsync(
@@ -323,7 +324,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Multiple_Predecessors_Cannot_Name_The_Same_Replacement()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var (oldId, replacementId) = await InsertIssuedAndApprovedAsync(fixture, chain.ReportId, 2, 4);
         await ReplaceAsync(fixture, chain.ReportId, oldId, replacementId);
 
@@ -338,7 +339,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     public async Task Superseded_Revision_Cannot_Be_Deleted_Out_From_Under_Its_Link()
     {
         var fixture = await NewFixtureAsync();
-        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var (oldId, replacementId) = await InsertIssuedAndApprovedAsync(fixture, chain.ReportId);
         await ReplaceAsync(fixture, chain.ReportId, oldId, replacementId);
 
