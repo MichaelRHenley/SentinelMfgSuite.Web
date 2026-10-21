@@ -80,6 +80,7 @@ builder.Services.AddScoped<IAssessmentInvitationReplacementSendService, Assessme
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAssessmentReportService, AssessmentReportService>();
 builder.Services.AddScoped<IAssessmentReportRevisionContentService, AssessmentReportRevisionContentService>();
+builder.Services.AddScoped<IAssessmentReportLifecycleService, AssessmentReportLifecycleService>();
 builder.Services.AddSingleton<IAssessmentReportContentValidator, AssessmentReportContentValidator>();
 builder.Services.AddSingleton<IReadinessScoringService, ReadinessScoringService>();
 

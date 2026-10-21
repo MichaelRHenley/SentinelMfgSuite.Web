@@ -331,14 +331,14 @@ public sealed class AssessmentReportRevisionContentServiceTests
             fixture.Db, fixture.Revision, AssessmentReportContentStage.Draft, default));
     }
 
-    private static ClaimsPrincipal AdminCaller()
+    internal static ClaimsPrincipal AdminCaller()
         => new(new ClaimsIdentity(new[]
         {
             new Claim(ClaimTypes.NameIdentifier, "author-1"),
             new Claim(ClaimTypes.Role, "AssessmentAdmin")
         }, "test"));
 
-    private sealed class Fixture : IAsyncDisposable
+    internal sealed class Fixture : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
         public ApplicationDbContext Db { get; }

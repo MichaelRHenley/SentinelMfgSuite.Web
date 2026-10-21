@@ -151,9 +151,9 @@ public sealed class AssessmentReportPostgresIntegrationTests
     private const short Draft = 0, InReview = 1, Approved = 2, Issued = 3, Superseded = 4, Rejected = 5;
     private const short Created = 1, Transition = 2;
 
-    private sealed record ReportChain(Guid AssessmentId, Guid InvitationId, Guid ResponseId, Guid ReportId, Guid RevisionId, string UserId);
+    internal sealed record ReportChain(Guid AssessmentId, Guid InvitationId, Guid ResponseId, Guid ReportId, Guid RevisionId, string UserId);
 
-    private static async Task<ReportChain> CreateChainAsync(PostgresIntegrationTestFixture fixture)
+    internal static async Task<ReportChain> CreateChainAsync(PostgresIntegrationTestFixture fixture)
     {
         var assessmentId = Guid.NewGuid();
         var invitationId = Guid.NewGuid();
@@ -530,7 +530,7 @@ VALUES ({Guid.NewGuid()}, {rep}, {rolledBackRevision}, {Transition}, {Draft}, {R
         await db.Set<Assessment>().Where(assessment => assessment.Id == assessmentId).ExecuteDeleteAsync();
     }
 
-    private static ClaimsPrincipal Admin(string userId)
+    internal static ClaimsPrincipal Admin(string userId)
         => new(new ClaimsIdentity(new[]
         {
             new Claim(ClaimTypes.NameIdentifier, userId),
@@ -574,7 +574,7 @@ VALUES ({Guid.NewGuid()}, {rep}, {rolledBackRevision}, {Transition}, {Draft}, {R
             }
         };
 
-    private static PostgresIntegrationTestFixture CreateFixtureOrSkip()
+    internal static PostgresIntegrationTestFixture CreateFixtureOrSkip()
     {
         var connection = Environment.GetEnvironmentVariable(PostgresIntegrationTestFixture.ConnectionEnvironmentVariable);
         if (string.IsNullOrWhiteSpace(connection))
