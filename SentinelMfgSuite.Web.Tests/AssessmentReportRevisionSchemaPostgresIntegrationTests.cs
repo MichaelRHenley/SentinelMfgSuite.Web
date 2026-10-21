@@ -62,6 +62,67 @@ VALUES ({revisionId}, {reportId}, {number}, {status}, '', '', '', '', {now}, {no
         return revisionId;
     }
 
+    /// <summary>
+    /// Performs a replacement in ONE transaction: supersede the Issued predecessor, issue the Approved replacement and
+    /// append the paired history events. Optional arguments deliberately break one element for negative tests.
+    /// Failures from the deferred trigger surface from CommitAsync.
+    /// </summary>
+    private static async Task ReplaceAsync(
+        PostgresIntegrationTestFixture fixture,
+        Guid reportId,
+        Guid oldId,
+        Guid newId,
+        bool issueReplacement = true,
+        bool predecessorHistory = true,
+        bool replacementHistory = true,
+        string? predecessorCorrelation = "corr-a",
+        string? replacementCorrelation = "corr-a",
+        Guid? predecessorEventReplacement = null,
+        Guid? replacementEventReplaced = null,
+        TimeSpan replacementIssuedOffset = default)
+    {
+        await using var db = fixture.CreateDbContext();
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var now = DateTime.UtcNow;
+        var issuedAt = now + replacementIssuedOffset;
+        await db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""AssessmentReportRevisions"" SET ""Status"" = 4, ""SupersededByRevisionId"" = {newId} WHERE ""Id"" = {oldId}");
+        if (issueReplacement)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""AssessmentReportRevisions"" SET ""Status"" = 3, ""IssuedUtc"" = {issuedAt}, ""IssuedByUserId"" = 'issuer' WHERE ""Id"" = {newId}");
+        }
+
+        if (predecessorHistory)
+        {
+            var replacementRef = predecessorEventReplacement ?? newId;
+            await db.Database.ExecuteSqlInterpolatedAsync($@"INSERT INTO ""AssessmentReportTransitionHistory""
+(""Id"", ""AssessmentReportId"", ""AssessmentReportRevisionId"", ""EventType"", ""PreviousStatus"", ""NewStatus"", ""ActorUserId"", ""OccurredUtc"", ""Reason"", ""ReplacedRevisionId"", ""ReplacementRevisionId"", ""CorrelationId"")
+VALUES ({Guid.NewGuid()}, {reportId}, {oldId}, 2, 3, 4, 'issuer', {now}, NULL, NULL, {replacementRef}, {predecessorCorrelation})");
+        }
+
+        if (replacementHistory)
+        {
+            var replacedRef = replacementEventReplaced ?? oldId;
+            await db.Database.ExecuteSqlInterpolatedAsync($@"INSERT INTO ""AssessmentReportTransitionHistory""
+(""Id"", ""AssessmentReportId"", ""AssessmentReportRevisionId"", ""EventType"", ""PreviousStatus"", ""NewStatus"", ""ActorUserId"", ""OccurredUtc"", ""Reason"", ""ReplacedRevisionId"", ""ReplacementRevisionId"", ""CorrelationId"")
+VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {replacedRef}, NULL, {replacementCorrelation})");
+        }
+
+        await tx.CommitAsync();
+    }
+
+    private static async Task<(Guid Old, Guid New)> InsertIssuedAndApprovedAsync(PostgresIntegrationTestFixture fixture, Guid reportId, int oldNumber = 2, int newNumber = 3)
+    {
+        var oldId = await InsertRevisionAsync(fixture, reportId, oldNumber, Issued, true, true, true);
+        var newId = await InsertRevisionAsync(fixture, reportId, newNumber, Approved, true, true);
+        return (oldId, newId);
+    }
+
+    private static async Task<AssessmentReportRevisionStatus> StatusAsync(PostgresIntegrationTestFixture fixture, Guid id)
+    {
+        await using var db = fixture.CreateDbContext();
+        return (await db.Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(item => item.Id == id)).Status;
+    }
+
     private static async Task<int> ExecuteAsync(PostgresIntegrationTestFixture fixture, FormattableString sql)
     {
         await using var db = fixture.CreateDbContext();
@@ -80,19 +141,15 @@ VALUES ({revisionId}, {reportId}, {number}, {status}, '', '', '', '', {now}, {no
     [InlineData(InReview, true, false, false)]
     [InlineData(Approved, true, true, false)]
     [InlineData(Issued, true, true, true)]
-    [InlineData(Superseded, true, true, true)]
     [InlineData(Rejected, true, false, false)]
     [InlineData(Rejected, true, true, false)]
     [Trait("Category", "PostgresIntegration")]
     public async Task Valid_Status_And_Stamp_Combinations_Are_Accepted(short status, bool submitted, bool approved, bool issued)
     {
+        // Superseded rows are covered by the atomic replacement tests (the commit-time trigger requires history).
         var fixture = await NewFixtureAsync();
         var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
         Guid? link = null;
-        if (status == Superseded)
-        {
-            link = await InsertRevisionAsync(fixture, chain.ReportId, 3, Draft);
-        }
 
         var id = await InsertRevisionAsync(fixture, chain.ReportId, 2, status, submitted, approved, issued, link);
 
@@ -181,11 +238,9 @@ VALUES ({revisionId}, {reportId}, {number}, {status}, '', '', '', '', {now}, {no
     {
         var fixture = await NewFixtureAsync();
         var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
-        var oldId = await InsertRevisionAsync(fixture, chain.ReportId, 2, Issued, true, true, true);
-        var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved, true, true);
+        var (oldId, newId) = await InsertIssuedAndApprovedAsync(fixture, chain.ReportId);
 
-        await ExecuteAsync(fixture, $@"UPDATE ""AssessmentReportRevisions"" SET ""Status"" = 4, ""SupersededByRevisionId"" = {newId} WHERE ""Id"" = {oldId}");
-        await ExecuteAsync(fixture, $@"UPDATE ""AssessmentReportRevisions"" SET ""Status"" = 3, ""IssuedUtc"" = {DateTime.UtcNow}, ""IssuedByUserId"" = 'issuer' WHERE ""Id"" = {newId}");
+        await ReplaceAsync(fixture, chain.ReportId, oldId, newId);
 
         await using var db = fixture.CreateDbContext();
         var oldRevision = await db.Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(item => item.Id == oldId);
@@ -269,9 +324,10 @@ VALUES ({revisionId}, {reportId}, {number}, {status}, '', '', '', '', {now}, {no
     {
         var fixture = await NewFixtureAsync();
         var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
-        var replacementId = await InsertRevisionAsync(fixture, chain.ReportId, 4, Draft);
+        var (oldId, replacementId) = await InsertIssuedAndApprovedAsync(fixture, chain.ReportId, 2, 4);
+        await ReplaceAsync(fixture, chain.ReportId, oldId, replacementId);
 
-        await InsertRevisionAsync(fixture, chain.ReportId, 2, Superseded, true, true, true, supersededBy: replacementId);
+        // The unique link index rejects a second predecessor immediately, before any commit-time validation.
         await AssertViolationAsync(
             () => InsertRevisionAsync(fixture, chain.ReportId, 3, Superseded, true, true, true, supersededBy: replacementId),
             UniqueViolation);
@@ -283,12 +339,12 @@ VALUES ({revisionId}, {reportId}, {number}, {status}, '', '', '', '', {now}, {no
     {
         var fixture = await NewFixtureAsync();
         var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
-        var replacementId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Draft);
-        await InsertRevisionAsync(fixture, chain.ReportId, 2, Superseded, true, true, true, supersededBy: replacementId);
+        var (oldId, replacementId) = await InsertIssuedAndApprovedAsync(fixture, chain.ReportId);
+        await ReplaceAsync(fixture, chain.ReportId, oldId, replacementId);
 
         await AssertViolationAsync(
             () => ExecuteAsync(fixture, $@"DELETE FROM ""AssessmentReportRevisions"" WHERE ""Id"" = {replacementId}"),
-            "23001");
+            "23503");
     }
 
     [Fact]

@@ -199,6 +199,29 @@ public sealed class AssessmentReportLifecyclePostgresIntegrationTests
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task Simultaneous_Approvals_Allow_Exactly_One_Winner_And_Single_History_Event()
+    {
+        var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
+        await fixture.InitializeAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
+        var time = new ManualTimeProvider(T1);
+        var stamp = (await LoadRevisionAsync(fixture, chain.RevisionId)).ConcurrencyStamp;
+        var submit = await RunAsync(fixture, time, s => s.SubmitForReviewAsync(chain.RevisionId, stamp, caller));
+        var inReviewStamp = submit.ConcurrencyStamp!.Value;
+
+        var approvals = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ =>
+            Task.Run(() => RunAsync(fixture, time, s => s.ApproveAsync(chain.RevisionId, inReviewStamp, caller)))));
+
+        Assert.Equal(1, approvals.Count(r => r.Succeeded));
+        Assert.Equal(1, approvals.Count(r => r.State == AssessmentReportLifecycleState.ConcurrencyConflict));
+        var history = await HistoryAsync(fixture, chain.RevisionId);
+        Assert.Equal(2, history.Count);
+        Assert.Equal(1, history.Count(h => h.NewStatus == AssessmentReportRevisionStatus.Approved));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task Failed_History_Insert_Rolls_Back_Revision_Update()
     {
         var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();

@@ -132,15 +132,21 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
             ReplacementRevisionId = null,
             CorrelationId = Guid.NewGuid().ToString("N")
         };
-        _db.Set<AssessmentReportTransitionHistory>().Add(history);
 
+        // The stamped revision UPDATE must run first: it takes the row lock and serializes competing callers, so
+        // stale callers fail on the concurrency token instead of colliding on the unique history index.
+        // EF does not order the history INSERT after the revision UPDATE (no FK dependency), so use two saves in one transaction.
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            // A single SaveChanges commits the revision update and the history insert in one transaction.
             await _db.SaveChangesAsync(cancellationToken);
+            _db.Set<AssessmentReportTransitionHistory>().Add(history);
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
+            await transaction.RollbackAsync(cancellationToken);
             _db.Entry(history).State = EntityState.Detached;
             _db.Entry(revision).State = EntityState.Detached;
             var latestStamp = await _db.Set<AssessmentReportRevision>()
@@ -149,6 +155,13 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
                 .Select(item => (Guid?)item.ConcurrencyStamp)
                 .SingleOrDefaultAsync(cancellationToken);
             return new(AssessmentReportLifecycleState.ConcurrencyConflict, ConcurrencyStamp: latestStamp);
+        }
+        catch
+        {
+            // The transaction is disposed (rolled back) on exit; drop tracked state that no longer matches the database.
+            _db.Entry(history).State = EntityState.Detached;
+            _db.Entry(revision).State = EntityState.Detached;
+            throw;
         }
 
         return new(AssessmentReportLifecycleState.Succeeded, target, revision.ConcurrencyStamp);
