@@ -199,6 +199,138 @@ public sealed class AssessmentReportRevisionContentServiceTests
                 })
         };
 
+    [Fact]
+    public void Access_TryGetCaller_Requires_Authentication_Actor_Id_And_AssessmentAdmin_Role()
+    {
+        Assert.True(AssessmentReportAccess.TryGetCaller(AdminCaller(), out var id));
+        Assert.Equal("author-1", id);
+
+        var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
+        Assert.False(AssessmentReportAccess.TryGetCaller(anonymous, out _));
+
+        var noRole = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, "author-1") }, "test"));
+        Assert.False(AssessmentReportAccess.TryGetCaller(noRole, out _));
+
+        var noActor = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "AssessmentAdmin") }, "test"));
+        Assert.False(AssessmentReportAccess.TryGetCaller(noActor, out _));
+
+        var blankActor = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "  "), new Claim(ClaimTypes.Role, "AssessmentAdmin")
+        }, "test"));
+        Assert.False(AssessmentReportAccess.TryGetCaller(blankActor, out _));
+
+        var wrongRole = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "author-1"), new Claim(ClaimTypes.Role, "Other")
+        }, "test"));
+        Assert.False(AssessmentReportAccess.TryGetCaller(wrongRole, out _));
+    }
+
+    [Fact]
+    public async Task Access_LoadOwnedRevision_Handles_Missing_Mismatched_Null_And_Matching_Owner()
+    {
+        await using var fixture = await Fixture.CreateAsync("3.0", validSubmission: true);
+
+        Assert.Null(await AssessmentReportAccess.LoadOwnedRevisionAsync(fixture.Db, Guid.NewGuid(), "author-1", false, default));
+        Assert.Null(await AssessmentReportAccess.LoadOwnedRevisionAsync(fixture.Db, fixture.Revision.Id, "someone-else", false, default));
+
+        var owned = await AssessmentReportAccess.LoadOwnedRevisionAsync(fixture.Db, fixture.Revision.Id, "author-1", false, default);
+        Assert.NotNull(owned);
+        Assert.NotNull(owned!.AssessmentReport);
+        Assert.NotNull(owned.AssessmentReport.Assessment);
+
+        var assessment = await fixture.Db.Set<Assessment>().SingleAsync();
+        assessment.OwnerUserId = null;
+        await fixture.Db.SaveChangesAsync();
+        Assert.NotNull(await AssessmentReportAccess.LoadOwnedRevisionAsync(fixture.Db, fixture.Revision.Id, "anyone", false, default));
+    }
+
+    [Fact]
+    public async Task Get_And_Save_Return_NotFound_For_Missing_Revision_And_Ownership_Mismatch()
+    {
+        await using var fixture = await Fixture.CreateAsync("3.0", validSubmission: true);
+        var other = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "intruder"), new Claim(ClaimTypes.Role, "AssessmentAdmin")
+        }, "test"));
+
+        Assert.Equal(AssessmentReportRevisionContentState.NotFound, (await fixture.Service.GetAsync(Guid.NewGuid(), AdminCaller())).State);
+        Assert.Equal(AssessmentReportRevisionContentState.NotFound, (await fixture.Service.GetAsync(fixture.Revision.Id, other)).State);
+        var saved = await fixture.Service.SaveDraftAsync(fixture.Revision.Id, fixture.Revision.ConcurrencyStamp, ConsultantReportContent.CreateEmpty(), other);
+        Assert.Equal(AssessmentReportRevisionContentState.NotFound, saved.State);
+        Assert.Null(fixture.Revision.ConsultantContentJson);
+    }
+
+    [Fact]
+    public async Task ValidationContextBuilder_Builds_Context_Without_Mutating_Revision_Or_Snapshot()
+    {
+        await using var fixture = await Fixture.CreateAsync("3.0", validSubmission: true);
+        var snapshotBefore = fixture.Revision.ScoringSnapshot;
+        var contentBefore = fixture.Revision.ConsultantContentJson;
+        var stampBefore = fixture.Revision.ConcurrencyStamp;
+        var updatedBefore = fixture.Revision.UpdatedUtc;
+
+        var context = await AssessmentReportValidationContextBuilder.BuildAsync(
+            fixture.Db, fixture.Revision, AssessmentReportContentStage.Draft, default);
+
+        Assert.NotNull(context);
+        Assert.Equal(AssessmentReportContentStage.Draft, context!.Stage);
+        Assert.NotNull(context.QuestionnaireDefinition);
+        Assert.NotNull(context.QuestionnaireResponse);
+        Assert.Equal("3.0", context.ScoringSnapshot!.QuestionnaireVersion);
+        Assert.Equal(snapshotBefore, fixture.Revision.ScoringSnapshot);
+        Assert.Equal(contentBefore, fixture.Revision.ConsultantContentJson);
+        Assert.Equal(stampBefore, fixture.Revision.ConcurrencyStamp);
+        Assert.Equal(updatedBefore, fixture.Revision.UpdatedUtc);
+        Assert.False(fixture.Db.ChangeTracker.HasChanges());
+    }
+
+    [Fact]
+    public async Task ValidationContextBuilder_Returns_Null_For_Missing_Or_Inconsistent_Source_Data()
+    {
+        await using var fixture = await Fixture.CreateAsync("3.0", validSubmission: true);
+        var stage = AssessmentReportContentStage.Draft;
+
+        var originalSnapshot = fixture.Revision.ScoringSnapshot;
+        fixture.Revision.ScoringSnapshot = null;
+        Assert.Null(await AssessmentReportValidationContextBuilder.BuildAsync(fixture.Db, fixture.Revision, stage, default));
+        fixture.Revision.ScoringSnapshot = originalSnapshot;
+
+        var originalSchema = fixture.Revision.ScoringSnapshotSchemaVersion;
+        fixture.Revision.ScoringSnapshotSchemaVersion = 0;
+        Assert.Null(await AssessmentReportValidationContextBuilder.BuildAsync(fixture.Db, fixture.Revision, stage, default));
+        fixture.Revision.ScoringSnapshotSchemaVersion = originalSchema;
+
+        var originalVersion = fixture.Report.QuestionnaireVersion;
+        fixture.Report.QuestionnaireVersion = "2.0";
+        Assert.Null(await AssessmentReportValidationContextBuilder.BuildAsync(fixture.Db, fixture.Revision, stage, default));
+        fixture.Report.QuestionnaireVersion = originalVersion;
+
+        fixture.Report.QuestionnaireVersion = "unknown";
+        Assert.Null(await AssessmentReportValidationContextBuilder.BuildAsync(fixture.Db, fixture.Revision, stage, default));
+        fixture.Report.QuestionnaireVersion = originalVersion;
+
+        fixture.Response.IsDraft = true;
+        await fixture.Db.SaveChangesAsync();
+        Assert.Null(await AssessmentReportValidationContextBuilder.BuildAsync(fixture.Db, fixture.Revision, stage, default));
+        fixture.Response.IsDraft = false;
+        await fixture.Db.SaveChangesAsync();
+
+        fixture.Response.Data = "{ not json";
+        await fixture.Db.SaveChangesAsync();
+        Assert.Null(await AssessmentReportValidationContextBuilder.BuildAsync(fixture.Db, fixture.Revision, stage, default));
+    }
+
+    [Fact]
+    public async Task ValidationContextBuilder_Returns_Null_When_Source_Response_Is_Incomplete()
+    {
+        await using var fixture = await Fixture.CreateAsync("3.0", validSubmission: false);
+
+        Assert.Null(await AssessmentReportValidationContextBuilder.BuildAsync(
+            fixture.Db, fixture.Revision, AssessmentReportContentStage.Draft, default));
+    }
+
     private static ClaimsPrincipal AdminCaller()
         => new(new ClaimsIdentity(new[]
         {

@@ -1,11 +1,9 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models.Assessments;
-using SentinelMfgSuite.Web.Models.Assessments.Questionnaire;
 using SentinelMfgSuite.Web.Models.Assessments.Reports;
-using SentinelMfgSuite.Web.Services.Assessments.Scoring;
 
 namespace SentinelMfgSuite.Web.Services.Assessments.Reports;
 
@@ -102,51 +100,14 @@ public sealed class AssessmentReportRevisionContentService : IAssessmentReportRe
             return new(AssessmentReportRevisionContentState.InvalidSourceData);
         }
 
-        var source = await _db.Set<AssessmentResponse>()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == report.SubmittedResponseId, cancellationToken);
-        if (source is null || source.AssessmentId != report.AssessmentId || source.IsDraft || source.SubmittedUtc is null)
+        var validationContext = await AssessmentReportValidationContextBuilder.BuildAsync(
+            _db, revision, AssessmentReportContentStage.Draft, cancellationToken);
+        if (validationContext is null)
         {
             return new(AssessmentReportRevisionContentState.InvalidSourceData);
         }
 
-        QuestionnaireDefinition definition;
-        QuestionnaireResponseV1? response;
-        ReadinessScoringSnapshot snapshot;
-        try
-        {
-            definition = QuestionnaireDefinitionResolver.Resolve(report.QuestionnaireVersion);
-            response = QuestionnaireResponseV1Serializer.Deserialize(source.Data);
-            if (response is null)
-            {
-                return new(AssessmentReportRevisionContentState.InvalidSourceData);
-            }
-            var sourceValidation = QuestionnaireResponseV1Validator.Validate(response, definition, QuestionnaireValidationMode.Submission);
-            if (!sourceValidation.IsValid)
-            {
-                return new(AssessmentReportRevisionContentState.InvalidSourceData);
-            }
-            if (revision.ScoringSnapshot is null || revision.ScoringSnapshotSchemaVersion != ReadinessScoringSnapshotSerializer.PersistedSchemaVersion)
-            {
-                return new(AssessmentReportRevisionContentState.InvalidSourceData);
-            }
-            var envelope = ReadinessScoringSnapshotSerializer.Deserialize(revision.ScoringSnapshot);
-            snapshot = envelope.Snapshot;
-            if (!string.Equals(snapshot.QuestionnaireVersion, report.QuestionnaireVersion, StringComparison.Ordinal))
-            {
-                return new(AssessmentReportRevisionContentState.InvalidSourceData);
-            }
-        }
-        catch (Exception exception) when (exception is ArgumentException or JsonException or NotSupportedException)
-        {
-            return new(AssessmentReportRevisionContentState.InvalidSourceData);
-        }
-
-        var validation = _validator.Validate(content, new AssessmentReportContentValidationContext(
-            AssessmentReportContentStage.Draft,
-            definition,
-            response,
-            snapshot));
+        var validation = _validator.Validate(content, validationContext);
         if (!validation.IsValid)
         {
             return new(AssessmentReportRevisionContentState.ValidationFailed, content, revision.ConcurrencyStamp, validation.Issues, revision.UpdatedUtc);
@@ -177,35 +138,13 @@ public sealed class AssessmentReportRevisionContentService : IAssessmentReportRe
         return new(AssessmentReportRevisionContentState.Saved, content, revision.ConcurrencyStamp, validation.Issues, revision.UpdatedUtc);
     }
 
-    private async Task<AssessmentReportRevision?> LoadOwnedRevisionAsync(
+    private Task<AssessmentReportRevision?> LoadOwnedRevisionAsync(
         Guid revisionId,
         string callerId,
         bool tracking,
         CancellationToken cancellationToken)
-    {
-        var query = _db.Set<AssessmentReportRevision>().AsQueryable();
-        if (!tracking)
-        {
-            query = query.AsNoTracking();
-        }
-        var revision = await query
-            .Include(item => item.AssessmentReport)
-                .ThenInclude(report => report.Assessment)
-            .SingleOrDefaultAsync(item => item.Id == revisionId, cancellationToken);
-        if (revision is null)
-        {
-            return null;
-        }
-        var ownerId = revision.AssessmentReport.Assessment.OwnerUserId;
-        return string.IsNullOrWhiteSpace(ownerId) || string.Equals(ownerId, callerId, StringComparison.Ordinal)
-            ? revision
-            : null;
-    }
+        => AssessmentReportAccess.LoadOwnedRevisionAsync(_db, revisionId, callerId, tracking, cancellationToken);
 
     private static bool TryGetCaller(ClaimsPrincipal caller, out string callerId)
-    {
-        callerId = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        return caller.Identity?.IsAuthenticated == true &&
-            !string.IsNullOrWhiteSpace(callerId) && caller.IsInRole("AssessmentAdmin");
-    }
+        => AssessmentReportAccess.TryGetCaller(caller, out callerId);
 }

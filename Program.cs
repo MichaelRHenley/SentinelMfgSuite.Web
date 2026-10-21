@@ -77,6 +77,7 @@ builder.Services.AddScoped<IAssessmentInvitationReplacementEligibilityService, A
 builder.Services.AddScoped<IAssessmentInvitationDeliveryService, AssessmentInvitationDeliveryService>();
 builder.Services.AddScoped<IAssessmentInvitationSendService, AssessmentInvitationSendService>();
 builder.Services.AddScoped<IAssessmentInvitationReplacementSendService, AssessmentInvitationReplacementSendService>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAssessmentReportService, AssessmentReportService>();
 builder.Services.AddScoped<IAssessmentReportRevisionContentService, AssessmentReportRevisionContentService>();
 builder.Services.AddSingleton<IAssessmentReportContentValidator, AssessmentReportContentValidator>();

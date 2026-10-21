@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models.Assessments;
 using SentinelMfgSuite.Web.Models.Assessments.Questionnaire;
+using SentinelMfgSuite.Web.Services.Assessments.Reports;
 using SentinelMfgSuite.Web.Services.Assessments.Scoring;
 
 namespace SentinelMfgSuite.Web.Services.Assessments;
@@ -228,14 +229,8 @@ public sealed class AssessmentReportService : IAssessmentReportService
             .SingleOrDefaultAsync(report => report.SubmittedResponseId == submittedResponseId, ct);
 
     private static bool IsAssessmentAdmin(ClaimsPrincipal caller, out string callerUserId)
-    {
-        callerUserId = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        return caller.Identity?.IsAuthenticated == true
-            && !string.IsNullOrWhiteSpace(callerUserId)
-            && caller.IsInRole("AssessmentAdmin");
-    }
+        => AssessmentReportAccess.TryGetCaller(caller, out callerUserId);
 
     private static bool IsOwnerAllowed(Assessment assessment, string callerUserId)
-        => string.IsNullOrWhiteSpace(assessment.OwnerUserId)
-            || string.Equals(assessment.OwnerUserId, callerUserId, StringComparison.Ordinal);
+        => AssessmentReportAccess.IsOwnerAllowed(assessment, callerUserId);
 }
