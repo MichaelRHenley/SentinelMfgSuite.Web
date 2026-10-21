@@ -174,8 +174,7 @@ public sealed class AssessmentReportServiceTests
         var initial = await fixture.Service.CreateAsync(assessmentId, responseId, caller);
         var revision = Assert.Single(initial.Report!.Revisions);
         revision.ExecutiveSummary = "Historically approved content";
-        revision.Status = AssessmentReportRevisionStatus.Approved;
-        await fixture.Db.SaveChangesAsync();
+        await RevisionStatusSeed.SetAsync(fixture.Db, revision, AssessmentReportRevisionStatus.Approved);
 
         var retry = await fixture.Service.CreateAsync(assessmentId, responseId, caller);
 

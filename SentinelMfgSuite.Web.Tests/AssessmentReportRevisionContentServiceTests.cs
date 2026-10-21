@@ -80,8 +80,7 @@ public sealed class AssessmentReportRevisionContentServiceTests
     public async Task SaveDraft_Rejects_NonDraft_Revisions(AssessmentReportRevisionStatus status)
     {
         await using var fixture = await Fixture.CreateAsync("3.0", validSubmission: true);
-        fixture.Revision.Status = status;
-        await fixture.Db.SaveChangesAsync();
+        await RevisionStatusSeed.SetAsync(fixture.Db, fixture.Revision, status);
         var original = fixture.Revision.ConsultantContentJson;
 
         var result = await fixture.Service.SaveDraftAsync(fixture.Revision.Id, fixture.Revision.ConcurrencyStamp,

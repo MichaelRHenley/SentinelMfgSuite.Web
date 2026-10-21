@@ -60,6 +60,12 @@ public sealed class AssessmentReportRevision
 
     public string? IssuedByUserId { get; set; }
 
+    /// <summary>
+    /// The revision that replaced this one. Set only when <see cref="Status"/> is Superseded
+    /// and always refers to a revision of the same report.
+    /// </summary>
+    public Guid? SupersededByRevisionId { get; set; }
+
     public string? PdfStorageKey { get; set; }
 
     public string? PdfSha256 { get; set; }

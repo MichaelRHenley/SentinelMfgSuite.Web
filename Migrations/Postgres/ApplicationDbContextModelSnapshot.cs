@@ -493,6 +493,9 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                     b.Property<DateTime?>("SubmittedForReviewUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("SupersededByRevisionId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("UpdatedByUserId")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -503,12 +506,35 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AssessmentReportId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssessmentReportRevisions_Report_CurrentIssued")
+                        .HasFilter("\"Status\" = 3");
+
+                    b.HasIndex("SupersededByRevisionId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssessmentReportRevisions_SupersededBy")
+                        .HasFilter("\"SupersededByRevisionId\" IS NOT NULL");
+
                     b.HasIndex("AssessmentReportId", "RevisionNumber")
                         .IsUnique();
 
+                    b.HasIndex("AssessmentReportId", "SupersededByRevisionId")
+                        .HasDatabaseName("IX_AssessmentReportRevisions_Report_SupersededBy");
+
                     b.ToTable("AssessmentReportRevisions", t =>
                         {
+                            t.HasCheckConstraint("CK_AssessmentReportRevision_NoSelfSupersession", "\"SupersededByRevisionId\" IS NULL OR \"SupersededByRevisionId\" <> \"Id\"");
+
                             t.HasCheckConstraint("CK_AssessmentReportRevision_RevisionNumber_Positive", "\"RevisionNumber\" > 0");
+
+                            t.HasCheckConstraint("CK_AssessmentReportRevision_StampPairs", "((\"SubmittedForReviewUtc\" IS NULL) = (\"SubmittedForReviewByUserId\" IS NULL)) AND ((\"ApprovedUtc\" IS NULL) = (\"ApprovedByUserId\" IS NULL)) AND ((\"IssuedUtc\" IS NULL) = (\"IssuedByUserId\" IS NULL)) AND (\"SubmittedForReviewByUserId\" IS NULL OR length(trim(\"SubmittedForReviewByUserId\")) > 0) AND (\"ApprovedByUserId\" IS NULL OR length(trim(\"ApprovedByUserId\")) > 0) AND (\"IssuedByUserId\" IS NULL OR length(trim(\"IssuedByUserId\")) > 0)");
+
+                            t.HasCheckConstraint("CK_AssessmentReportRevision_StatusStamps", "(\"Status\" = 0 AND \"SubmittedForReviewUtc\" IS NULL AND \"ApprovedUtc\" IS NULL AND \"IssuedUtc\" IS NULL) OR (\"Status\" = 1 AND \"SubmittedForReviewUtc\" IS NOT NULL AND \"ApprovedUtc\" IS NULL AND \"IssuedUtc\" IS NULL) OR (\"Status\" = 2 AND \"SubmittedForReviewUtc\" IS NOT NULL AND \"ApprovedUtc\" IS NOT NULL AND \"IssuedUtc\" IS NULL) OR (\"Status\" IN (3, 4) AND \"SubmittedForReviewUtc\" IS NOT NULL AND \"ApprovedUtc\" IS NOT NULL AND \"IssuedUtc\" IS NOT NULL) OR (\"Status\" = 5 AND \"SubmittedForReviewUtc\" IS NOT NULL AND \"IssuedUtc\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_AssessmentReportRevision_StatusValues", "\"Status\" BETWEEN 0 AND 5");
+
+                            t.HasCheckConstraint("CK_AssessmentReportRevision_SupersededLink", "(\"Status\" = 4) = (\"SupersededByRevisionId\" IS NOT NULL)");
                         });
                 });
 
@@ -871,6 +897,13 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                         .HasForeignKey("AssessmentReportId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevision", null)
+                        .WithMany()
+                        .HasForeignKey("AssessmentReportId", "SupersededByRevisionId")
+                        .HasPrincipalKey("AssessmentReportId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AssessmentReportRevisions_SupersededBy_SameReport");
 
                     b.Navigation("AssessmentReport");
                 });

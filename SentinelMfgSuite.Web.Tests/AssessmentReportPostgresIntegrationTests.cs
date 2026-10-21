@@ -49,8 +49,7 @@ public sealed class AssessmentReportPostgresIntegrationTests
             {
                 var revision = await updateDb.Set<AssessmentReportRevision>().SingleAsync(item => item.Id == revisionId);
                 revision.ExecutiveSummary = "Historical content to preserve";
-                revision.Status = AssessmentReportRevisionStatus.Approved;
-                await updateDb.SaveChangesAsync();
+                await RevisionStatusSeed.SetAsync(updateDb, revision, AssessmentReportRevisionStatus.Approved);
             }
 
             parallelAssessmentId = Guid.NewGuid();

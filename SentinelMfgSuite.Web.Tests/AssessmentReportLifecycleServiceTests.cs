@@ -130,8 +130,7 @@ public sealed class AssessmentReportLifecycleServiceTests
     public async Task Reject_Does_Not_Require_Content_To_Pass_Validation()
     {
         await using var f = await Fixture.CreateAsync("3.0", true);
-        f.Revision.Status = AssessmentReportRevisionStatus.InReview;
-        await f.Db.SaveChangesAsync();
+        await RevisionStatusSeed.SetAsync(f.Db, f.Revision, AssessmentReportRevisionStatus.InReview);
         var validator = new StubValidator(false);
         var service = Create(f, new ManualTimeProvider(T1), validator);
 
@@ -148,8 +147,7 @@ public sealed class AssessmentReportLifecycleServiceTests
     public async Task Reject_Requires_Reason(string? reason)
     {
         await using var f = await Fixture.CreateAsync("3.0", true);
-        f.Revision.Status = AssessmentReportRevisionStatus.InReview;
-        await f.Db.SaveChangesAsync();
+        await RevisionStatusSeed.SetAsync(f.Db, f.Revision, AssessmentReportRevisionStatus.InReview);
         var service = Create(f, new ManualTimeProvider(T1));
 
         var result = await service.RejectAsync(f.Revision.Id, f.Revision.ConcurrencyStamp, reason, Caller("author-1"));
@@ -163,8 +161,7 @@ public sealed class AssessmentReportLifecycleServiceTests
     public async Task Reject_Reason_Length_Boundary()
     {
         await using var f = await Fixture.CreateAsync("3.0", true);
-        f.Revision.Status = AssessmentReportRevisionStatus.InReview;
-        await f.Db.SaveChangesAsync();
+        await RevisionStatusSeed.SetAsync(f.Db, f.Revision, AssessmentReportRevisionStatus.InReview);
         var service = Create(f, new ManualTimeProvider(T1));
 
         var tooLong = await service.RejectAsync(f.Revision.Id, f.Revision.ConcurrencyStamp,
@@ -185,15 +182,17 @@ public sealed class AssessmentReportLifecycleServiceTests
 
         var approveDraft = await service.ApproveAsync(f.Revision.Id, stamp, Caller("author-1"));
         var rejectDraft = await service.RejectAsync(f.Revision.Id, stamp, "reason", Caller("author-1"));
-        f.Revision.Status = AssessmentReportRevisionStatus.Rejected;
-        await f.Db.SaveChangesAsync();
+        await RevisionStatusSeed.SetAsync(f.Db, f.Revision, AssessmentReportRevisionStatus.Rejected);
+        var seededSubmittedUtc = f.Revision.SubmittedForReviewUtc;
+        var seededUpdatedUtc = f.Revision.UpdatedUtc;
         var submitRejected = await service.SubmitForReviewAsync(f.Revision.Id, f.Revision.ConcurrencyStamp, Caller("author-1"));
 
         Assert.Equal(AssessmentReportLifecycleState.InvalidTransition, approveDraft.State);
         Assert.Equal(AssessmentReportLifecycleState.InvalidTransition, rejectDraft.State);
         Assert.Equal(AssessmentReportLifecycleState.InvalidTransition, submitRejected.State);
         Assert.Empty(await HistoryAsync(f));
-        Assert.Null(f.Revision.SubmittedForReviewUtc);
+        Assert.Equal(seededSubmittedUtc, f.Revision.SubmittedForReviewUtc);
+        Assert.Equal(seededUpdatedUtc, f.Revision.UpdatedUtc);
     }
 
     [Theory]
@@ -203,8 +202,7 @@ public sealed class AssessmentReportLifecycleServiceTests
     public async Task Submit_Rejects_NonDraft_And_Duplicate_Requests(AssessmentReportRevisionStatus status)
     {
         await using var f = await Fixture.CreateAsync("3.0", true);
-        f.Revision.Status = status;
-        await f.Db.SaveChangesAsync();
+        await RevisionStatusSeed.SetAsync(f.Db, f.Revision, status);
         var service = Create(f, new ManualTimeProvider(T1));
 
         var result = await service.SubmitForReviewAsync(f.Revision.Id, f.Revision.ConcurrencyStamp, Caller("author-1"));

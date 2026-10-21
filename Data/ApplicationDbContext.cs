@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SentinelMfgSuite.Web.Models;
 using SentinelMfgSuite.Web.Models.Assessments;
@@ -218,7 +218,48 @@ namespace SentinelMfgSuite.Web.Data
 
                 b.HasAlternateKey(x => new { x.AssessmentReportId, x.Id });
                 b.HasIndex(x => new { x.AssessmentReportId, x.RevisionNumber }).IsUnique();
-                b.ToTable(table => table.HasCheckConstraint("CK_AssessmentReportRevision_RevisionNumber_Positive", "\"RevisionNumber\" > 0"));
+
+                b.Property(x => x.SupersededByRevisionId);
+                b.HasOne<AssessmentReportRevision>()
+                    .WithMany()
+                    .HasForeignKey(x => new { x.AssessmentReportId, x.SupersededByRevisionId })
+                    .HasPrincipalKey(x => new { x.AssessmentReportId, x.Id })
+                    .HasConstraintName("FK_AssessmentReportRevisions_SupersededBy_SameReport")
+                    .OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(x => x.AssessmentReportId)
+                    .IsUnique()
+                    .HasFilter("\"Status\" = 3")
+                    .HasDatabaseName("UX_AssessmentReportRevisions_Report_CurrentIssued");
+                b.HasIndex(x => new { x.AssessmentReportId, x.SupersededByRevisionId })
+                    .HasDatabaseName("IX_AssessmentReportRevisions_Report_SupersededBy");
+                b.HasIndex(x => x.SupersededByRevisionId)
+                    .IsUnique()
+                    .HasFilter("\"SupersededByRevisionId\" IS NOT NULL")
+                    .HasDatabaseName("UX_AssessmentReportRevisions_SupersededBy");
+
+                b.ToTable(table =>
+                {
+                    table.HasCheckConstraint("CK_AssessmentReportRevision_RevisionNumber_Positive", "\"RevisionNumber\" > 0");
+                    table.HasCheckConstraint("CK_AssessmentReportRevision_StatusValues",
+                        "\"Status\" BETWEEN 0 AND 5");
+                    table.HasCheckConstraint("CK_AssessmentReportRevision_NoSelfSupersession",
+                        "\"SupersededByRevisionId\" IS NULL OR \"SupersededByRevisionId\" <> \"Id\"");
+                    table.HasCheckConstraint("CK_AssessmentReportRevision_SupersededLink",
+                        "(\"Status\" = 4) = (\"SupersededByRevisionId\" IS NOT NULL)");
+                    table.HasCheckConstraint("CK_AssessmentReportRevision_StampPairs",
+                        "((\"SubmittedForReviewUtc\" IS NULL) = (\"SubmittedForReviewByUserId\" IS NULL)) AND " +
+                        "((\"ApprovedUtc\" IS NULL) = (\"ApprovedByUserId\" IS NULL)) AND " +
+                        "((\"IssuedUtc\" IS NULL) = (\"IssuedByUserId\" IS NULL)) AND " +
+                        "(\"SubmittedForReviewByUserId\" IS NULL OR length(trim(\"SubmittedForReviewByUserId\")) > 0) AND " +
+                        "(\"ApprovedByUserId\" IS NULL OR length(trim(\"ApprovedByUserId\")) > 0) AND " +
+                        "(\"IssuedByUserId\" IS NULL OR length(trim(\"IssuedByUserId\")) > 0)");
+                    table.HasCheckConstraint("CK_AssessmentReportRevision_StatusStamps",
+                        "(\"Status\" = 0 AND \"SubmittedForReviewUtc\" IS NULL AND \"ApprovedUtc\" IS NULL AND \"IssuedUtc\" IS NULL) OR " +
+                        "(\"Status\" = 1 AND \"SubmittedForReviewUtc\" IS NOT NULL AND \"ApprovedUtc\" IS NULL AND \"IssuedUtc\" IS NULL) OR " +
+                        "(\"Status\" = 2 AND \"SubmittedForReviewUtc\" IS NOT NULL AND \"ApprovedUtc\" IS NOT NULL AND \"IssuedUtc\" IS NULL) OR " +
+                        "(\"Status\" IN (3, 4) AND \"SubmittedForReviewUtc\" IS NOT NULL AND \"ApprovedUtc\" IS NOT NULL AND \"IssuedUtc\" IS NOT NULL) OR " +
+                        "(\"Status\" = 5 AND \"SubmittedForReviewUtc\" IS NOT NULL AND \"IssuedUtc\" IS NULL)");
+                });
             });
 
             modelBuilder.Entity<AssessmentReportTransitionHistory>(b =>

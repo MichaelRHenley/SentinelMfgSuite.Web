@@ -24,7 +24,9 @@ public sealed class AssessmentReportPersistenceModelTests
         var responseFk = report.GetForeignKeys().Single(fk => fk.Properties.Select(property => property.Name).SequenceEqual(new[] { nameof(AssessmentReport.SubmittedResponseId) }));
         Assert.Equal(DeleteBehavior.Restrict, responseFk.DeleteBehavior);
         Assert.Equal(nameof(AssessmentResponse.Id), responseFk.PrincipalKey.Properties.Single().Name);
-        Assert.Equal(DeleteBehavior.Restrict, revision.GetForeignKeys().Single().DeleteBehavior);
+        Assert.All(revision.GetForeignKeys(), fk => Assert.Equal(DeleteBehavior.Restrict, fk.DeleteBehavior));
+        var supersessionFk = revision.GetForeignKeys().Single(fk => fk.Properties.Select(property => property.Name).SequenceEqual(new[] { nameof(AssessmentReportRevision.AssessmentReportId), nameof(AssessmentReportRevision.SupersededByRevisionId) }));
+        Assert.Equal(new[] { nameof(AssessmentReportRevision.AssessmentReportId), nameof(AssessmentReportRevision.Id) }, supersessionFk.PrincipalKey.Properties.Select(property => property.Name));
     }
 
     [Fact]
