@@ -19,7 +19,9 @@ public sealed record AssessmentReportLifecycleResult(
     AssessmentReportLifecycleState State,
     AssessmentReportRevisionStatus? Status = null,
     Guid? ConcurrencyStamp = null,
-    IReadOnlyList<ReportContentValidationIssue>? ValidationIssues = null)
+    IReadOnlyList<ReportContentValidationIssue>? ValidationIssues = null,
+    Guid? SupersededRevisionId = null,
+    Guid? SupersededRevisionStamp = null)
 {
     public bool Succeeded => State == AssessmentReportLifecycleState.Succeeded;
 }
@@ -41,8 +43,10 @@ public interface IAssessmentReportLifecycleService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Approved to Issued for a report that has no existing Issued revision. Replacement issuance (superseding an
-    /// existing Issued revision) is not supported here; such a request returns InvalidTransition.
+    /// Approved to Issued. When the report has no other Issued revision this is initial issuance. When exactly one
+    /// other Issued revision exists it is superseded atomically (replacement issuance) provided the target has a
+    /// greater revision number; otherwise InvalidTransition is returned. The predecessor is never caller-supplied.
+    /// On replacement success the result carries SupersededRevisionId and SupersededRevisionStamp.
     /// </summary>
     Task<AssessmentReportLifecycleResult> IssueAsync(
         Guid revisionId,

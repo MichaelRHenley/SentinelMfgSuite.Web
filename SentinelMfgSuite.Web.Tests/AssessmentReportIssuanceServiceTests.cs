@@ -211,7 +211,7 @@ public sealed class AssessmentReportIssuanceServiceTests
     }
 
     [Fact]
-    public async Task Existing_Issued_Revision_Blocks_Initial_Issuance_Without_Superseding_It()
+    public async Task Older_Approved_Revision_Cannot_Replace_Higher_Numbered_Issued_Revision()
     {
         await using var f = await ApprovedAsync();
         var now = DateTime.UtcNow;
