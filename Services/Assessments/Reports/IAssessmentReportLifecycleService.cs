@@ -12,7 +12,9 @@ public enum AssessmentReportLifecycleState
     InvalidReason,
     ConcurrencyConflict,
     InvalidSourceData,
-    ValidationFailed
+    ValidationFailed,
+    ActiveCorrectionExists,
+    NoIssuedRevision
 }
 
 public sealed record AssessmentReportLifecycleResult(
@@ -26,8 +28,31 @@ public sealed record AssessmentReportLifecycleResult(
     public bool Succeeded => State == AssessmentReportLifecycleState.Succeeded;
 }
 
+public sealed record AssessmentReportCorrectionResult(
+    AssessmentReportLifecycleState State,
+    Guid? RevisionId = null,
+    int? RevisionNumber = null,
+    Guid? ConcurrencyStamp = null,
+    Guid? SourceRevisionId = null,
+    Guid? SourceConcurrencyStamp = null)
+{
+    public bool Succeeded => State == AssessmentReportLifecycleState.Succeeded;
+}
+
 public interface IAssessmentReportLifecycleService
 {
+    /// <summary>
+    /// Creates a Draft correction revision from the report's current Issued revision, which is resolved server-side and
+    /// never modified. The expected stamp must match that Issued revision. Fails with ActiveCorrectionExists while a
+    /// Draft, InReview or Approved revision exists. The optional reason is trimmed; blank or over-long values are InvalidReason.
+    /// </summary>
+    Task<AssessmentReportCorrectionResult> CreateCorrectionAsync(
+        Guid reportId,
+        Guid expectedSourceConcurrencyStamp,
+        string? correctionReason,
+        ClaimsPrincipal caller,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Draft to InReview.</summary>
     Task<AssessmentReportLifecycleResult> SubmitForReviewAsync(
         Guid revisionId,

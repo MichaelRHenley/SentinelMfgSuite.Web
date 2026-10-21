@@ -43,6 +43,183 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
         => TransitionAsync(revisionId, expectedConcurrencyStamp, AssessmentReportRevisionStatus.Rejected,
             reason, null, caller, cancellationToken);
 
+    private const string ActiveRevisionIndexName = "UX_AssessmentReportRevisions_Report_ActiveRevision";
+    private const string RevisionNumberIndexName = "IX_AssessmentReportRevisions_AssessmentReportId_RevisionNumber";
+
+    public async Task<AssessmentReportCorrectionResult> CreateCorrectionAsync(
+        Guid reportId,
+        Guid expectedSourceConcurrencyStamp,
+        string? correctionReason,
+        ClaimsPrincipal caller,
+        CancellationToken cancellationToken = default)
+    {
+        if (!AssessmentReportAccess.TryGetCaller(caller, out var actorId))
+        {
+            return new(AssessmentReportLifecycleState.Forbidden);
+        }
+
+        var report = await _db.Set<AssessmentReport>().AsNoTracking()
+            .Include(item => item.Assessment)
+            .SingleOrDefaultAsync(item => item.Id == reportId, cancellationToken);
+        if (report is null || !AssessmentReportAccess.IsOwnerAllowed(report.Assessment, actorId))
+        {
+            return new(AssessmentReportLifecycleState.NotFound);
+        }
+
+        string? reason = null;
+        if (correctionReason is not null)
+        {
+            reason = correctionReason.Trim();
+            if (reason.Length == 0 || reason.Length > AssessmentReportTransitionPolicy.MaxReasonLength)
+            {
+                return new(AssessmentReportLifecycleState.InvalidReason);
+            }
+        }
+
+        AssessmentReportRevision? created = null;
+        AssessmentReportTransitionHistory? history = null;
+
+        void DetachTracked()
+        {
+            if (history is not null)
+            {
+                _db.Entry(history).State = EntityState.Detached;
+            }
+            if (created is not null)
+            {
+                _db.Entry(created).State = EntityState.Detached;
+            }
+        }
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            // On PostgreSQL the parent report row is locked first: concurrent creators serialize here, and the revision
+            // read below is a new statement that observes whatever the previous holder committed (a blocked FOR UPDATE
+            // on the revisions alone would not see rows inserted meanwhile). The revision rows are then locked too, so
+            // stamp updates and transitions of any revision of this report wait behind this transaction instead of
+            // changing the source mid-creation. The unique indexes remain a backstop.
+            List<AssessmentReportRevision> revisions;
+            if (_db.Database.IsNpgsql())
+            {
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT 1 FROM \"AssessmentReports\" WHERE \"Id\" = {reportId} FOR NO KEY UPDATE", cancellationToken);
+                revisions = await _db.Set<AssessmentReportRevision>()
+                    .FromSqlInterpolated($"SELECT * FROM \"AssessmentReportRevisions\" WHERE \"AssessmentReportId\" = {reportId} ORDER BY \"RevisionNumber\" FOR NO KEY UPDATE")
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken);
+            }
+            else
+            {
+                revisions = await _db.Set<AssessmentReportRevision>().AsNoTracking()
+                    .Where(item => item.AssessmentReportId == reportId)
+                    .ToListAsync(cancellationToken);
+            }
+
+            var issued = revisions.Where(item => item.Status == AssessmentReportRevisionStatus.Issued).ToList();
+            if (issued.Count == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new(AssessmentReportLifecycleState.NoIssuedRevision);
+            }
+            if (issued.Count > 1)
+            {
+                throw new InvalidOperationException($"Invariant violation: report {reportId} has more than one Issued revision.");
+            }
+
+            var source = issued[0];
+            if (source.AssessmentReportId != reportId)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new(AssessmentReportLifecycleState.InvalidSourceData, SourceRevisionId: source.Id);
+            }
+            if (source.ConcurrencyStamp != expectedSourceConcurrencyStamp)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new(AssessmentReportLifecycleState.ConcurrencyConflict,
+                    SourceRevisionId: source.Id, SourceConcurrencyStamp: source.ConcurrencyStamp);
+            }
+            if (revisions.Any(item => item.Status is AssessmentReportRevisionStatus.Draft
+                or AssessmentReportRevisionStatus.InReview or AssessmentReportRevisionStatus.Approved))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new(AssessmentReportLifecycleState.ActiveCorrectionExists, SourceRevisionId: source.Id);
+            }
+
+            var now = _timeProvider.GetUtcNow().UtcDateTime;
+            created = new AssessmentReportRevision
+            {
+                Id = Guid.NewGuid(),
+                AssessmentReportId = reportId,
+                RevisionNumber = revisions.Max(item => item.RevisionNumber) + 1,
+                BasedOnRevisionId = source.Id,
+                CorrectionReason = reason,
+                Status = AssessmentReportRevisionStatus.Draft,
+                ExecutiveSummary = source.ExecutiveSummary,
+                ScopeAndMethodology = source.ScopeAndMethodology,
+                AssumptionsAndLimitations = source.AssumptionsAndLimitations,
+                NextSteps = source.NextSteps,
+                ScoringContractVersion = source.ScoringContractVersion,
+                ScoringSnapshotSchemaVersion = source.ScoringSnapshotSchemaVersion,
+                ScoringSnapshot = source.ScoringSnapshot,
+                ConsultantContentJson = source.ConsultantContentJson,
+                ConsultantContentSchemaVersion = source.ConsultantContentSchemaVersion,
+                ReportTemplateVersion = source.ReportTemplateVersion,
+                CreatedUtc = now,
+                UpdatedUtc = now,
+                CreatedByUserId = actorId,
+                UpdatedByUserId = actorId,
+                ConcurrencyStamp = Guid.NewGuid()
+            };
+            history = new AssessmentReportTransitionHistory
+            {
+                Id = Guid.NewGuid(),
+                AssessmentReportId = reportId,
+                AssessmentReportRevisionId = created.Id,
+                EventType = AssessmentReportTransitionEventType.Created,
+                PreviousStatus = null,
+                NewStatus = AssessmentReportRevisionStatus.Draft,
+                ActorUserId = actorId,
+                OccurredUtc = now,
+                Reason = null,
+                ReplacedRevisionId = null,
+                ReplacementRevisionId = null,
+                CorrelationId = Guid.NewGuid().ToString("N")
+            };
+
+            // EF orders the revision INSERT before the history INSERT through the history foreign key.
+            _db.Set<AssessmentReportRevision>().Add(created);
+            _db.Set<AssessmentReportTransitionHistory>().Add(history);
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return new(AssessmentReportLifecycleState.Succeeded, created.Id, created.RevisionNumber,
+                created.ConcurrencyStamp, source.Id, source.ConcurrencyStamp);
+        }
+        catch (DbUpdateException ex) when (UniqueViolationConstraint(ex) is ActiveRevisionIndexName)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            DetachTracked();
+            return new(AssessmentReportLifecycleState.ActiveCorrectionExists);
+        }
+        catch (DbUpdateException ex) when (UniqueViolationConstraint(ex) is RevisionNumberIndexName)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            DetachTracked();
+            return new(AssessmentReportLifecycleState.ConcurrencyConflict);
+        }
+        catch
+        {
+            DetachTracked();
+            throw;
+        }
+    }
+
+    private static string? UniqueViolationConstraint(DbUpdateException ex)
+        => ex.InnerException is Npgsql.PostgresException pg && pg.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation
+            ? pg.ConstraintName
+            : null;
+
     private async Task<AssessmentReportLifecycleResult> TransitionAsync(
         Guid revisionId,
         Guid expectedConcurrencyStamp,
