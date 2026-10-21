@@ -304,10 +304,17 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
                     $"Invariant violation: report {reportId} has more than one Issued revision besides {revisionId}.");
             }
 
+            if (issued.Count == 0 && revision.BasedOnRevisionId is not null)
+            {
+                // An orphaned correction (its source is no longer the current Issued revision) is never initial issuance.
+                return new(AssessmentReportLifecycleState.InvalidTransition, previous, revision.ConcurrencyStamp);
+            }
+
             if (issued.Count == 1)
             {
                 predecessor = issued[0];
-                if (revision.RevisionNumber <= predecessor.RevisionNumber)
+                if (revision.BasedOnRevisionId != predecessor.Id
+                    || revision.RevisionNumber <= predecessor.RevisionNumber)
                 {
                     _db.Entry(predecessor).State = EntityState.Detached;
                     return new(AssessmentReportLifecycleState.InvalidTransition, previous, revision.ConcurrencyStamp);

@@ -60,6 +60,7 @@ public sealed class AssessmentReportReplacementIssuanceServiceTests
             Id = Guid.NewGuid(),
             AssessmentReportId = original.AssessmentReportId,
             RevisionNumber = replacementNumber,
+            BasedOnRevisionId = original.Id,
             Status = replacementStatus,
             ExecutiveSummary = original.ExecutiveSummary,
             ScopeAndMethodology = original.ScopeAndMethodology,

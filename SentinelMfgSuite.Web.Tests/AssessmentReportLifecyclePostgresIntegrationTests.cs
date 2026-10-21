@@ -241,6 +241,7 @@ public sealed class AssessmentReportLifecyclePostgresIntegrationTests
             Id = Guid.NewGuid(),
             AssessmentReportId = original.AssessmentReportId,
             RevisionNumber = number,
+            BasedOnRevisionId = original.Id,
             ExecutiveSummary = original.ExecutiveSummary,
             ScopeAndMethodology = original.ScopeAndMethodology,
             AssumptionsAndLimitations = original.AssumptionsAndLimitations,

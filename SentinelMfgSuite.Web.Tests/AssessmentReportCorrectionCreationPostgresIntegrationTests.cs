@@ -49,6 +49,12 @@ public sealed class AssessmentReportCorrectionCreationPostgresIntegrationTests
             .Where(r => r.AssessmentReportId == reportId).OrderBy(r => r.RevisionNumber).ToListAsync();
     }
 
+    private static async Task<int> ReportHistoryCountAsync(PostgresIntegrationTestFixture fixture, Guid reportId)
+    {
+        await using var db = fixture.CreateDbContext();
+        return await db.Set<AssessmentReportTransitionHistory>().CountAsync(h => h.AssessmentReportId == reportId);
+    }
+
     private static async Task<int> CreatedEventsAsync(PostgresIntegrationTestFixture fixture, Guid revisionId)
     {
         await using var db = fixture.CreateDbContext();
@@ -181,6 +187,75 @@ public sealed class AssessmentReportCorrectionCreationPostgresIntegrationTests
         Assert.Equal(AssessmentReportLifecycleState.ConcurrencyConflict, result.State);
         Assert.Equal(newStamp, result.SourceConcurrencyStamp);
         Assert.Single(await RevisionsAsync(fixture, chain.ReportId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Correction_Lifecycle_End_To_End_Supersedes_Source_With_Reciprocal_History()
+    {
+        var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
+        await fixture.InitializeAsync();
+        var (chain, caller, sourceStamp) = await IssuedChainAsync(fixture);
+        var created = await RunAsync(fixture, T1.AddHours(2), s => s.CreateCorrectionAsync(chain.ReportId, sourceStamp, "fix", caller));
+        var approvedStamp = await ApproveAsync(fixture, created.RevisionId!.Value, caller);
+
+        var issued = await RunAsync(fixture, T1.AddHours(3), s => s.IssueAsync(created.RevisionId!.Value, approvedStamp, caller));
+
+        Assert.True(issued.Succeeded);
+        Assert.Equal(chain.RevisionId, issued.SupersededRevisionId);
+        var source = await LoadAsync(fixture, chain.RevisionId);
+        var replacement = await LoadAsync(fixture, created.RevisionId.Value);
+        Assert.Equal(AssessmentReportRevisionStatus.Superseded, source.Status);
+        Assert.Equal(replacement.Id, source.SupersededByRevisionId);
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, replacement.Status);
+        Assert.Equal(chain.RevisionId, replacement.BasedOnRevisionId);
+
+        await using var db = fixture.CreateDbContext();
+        var events = await db.Set<AssessmentReportTransitionHistory>().AsNoTracking()
+            .Where(h => h.AssessmentReportId == chain.ReportId && h.NewStatus == AssessmentReportRevisionStatus.Superseded
+                || h.AssessmentReportRevisionId == replacement.Id && h.NewStatus == AssessmentReportRevisionStatus.Issued)
+            .ToListAsync();
+        var superseded = events.Single(h => h.NewStatus == AssessmentReportRevisionStatus.Superseded);
+        var issuedEvent = events.Single(h => h.NewStatus == AssessmentReportRevisionStatus.Issued);
+        Assert.Equal(replacement.Id, superseded.ReplacementRevisionId);
+        Assert.Equal(chain.RevisionId, issuedEvent.ReplacedRevisionId);
+        Assert.Equal(superseded.CorrelationId, issuedEvent.CorrelationId);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Stale_Correction_Lineage_Is_Rejected_And_Changes_Nothing()
+    {
+        var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
+        await fixture.InitializeAsync();
+        var (chain, caller, sourceStamp) = await IssuedChainAsync(fixture);
+        var first = await RunAsync(fixture, T1.AddHours(2), s => s.CreateCorrectionAsync(chain.ReportId, sourceStamp, null, caller));
+        var firstApproved = await ApproveAsync(fixture, first.RevisionId!.Value, caller);
+        Assert.True((await RunAsync(fixture, T1.AddHours(3), s => s.IssueAsync(first.RevisionId!.Value, firstApproved, caller))).Succeeded);
+        var firstStamp = (await LoadAsync(fixture, first.RevisionId.Value)).ConcurrencyStamp;
+        var second = await RunAsync(fixture, T1.AddHours(4), s => s.CreateCorrectionAsync(chain.ReportId, firstStamp, null, caller));
+        Assert.True(second.Succeeded);
+        var secondApproved = await ApproveAsync(fixture, second.RevisionId!.Value, caller);
+
+        // Re-point the approved correction at the superseded revision through a valid-by-schema same-report update.
+        await using (var db = fixture.CreateDbContext())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE ""AssessmentReportRevisions"" SET ""BasedOnRevisionId"" = {chain.RevisionId} WHERE ""Id"" = {second.RevisionId}");
+        }
+        var stampBefore = (await LoadAsync(fixture, second.RevisionId.Value)).ConcurrencyStamp;
+        var currentBefore = await LoadAsync(fixture, first.RevisionId.Value);
+        var historyBefore = await ReportHistoryCountAsync(fixture, chain.ReportId);
+
+        var result = await RunAsync(fixture, T1.AddHours(5), s => s.IssueAsync(second.RevisionId.Value, stampBefore, caller));
+
+        Assert.Equal(AssessmentReportLifecycleState.InvalidTransition, result.State);
+        var currentAfter = await LoadAsync(fixture, first.RevisionId.Value);
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, currentAfter.Status);
+        Assert.Equal(currentBefore.ConcurrencyStamp, currentAfter.ConcurrencyStamp);
+        Assert.Equal(AssessmentReportRevisionStatus.Approved, (await LoadAsync(fixture, second.RevisionId.Value)).Status);
+        Assert.Equal(secondApproved, (await LoadAsync(fixture, second.RevisionId.Value)).ConcurrencyStamp);
+        Assert.Equal(historyBefore, await ReportHistoryCountAsync(fixture, chain.ReportId));
     }
 
     [Fact]
