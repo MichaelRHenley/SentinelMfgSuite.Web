@@ -33,6 +33,11 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
         => TransitionAsync(revisionId, expectedConcurrencyStamp, AssessmentReportRevisionStatus.Approved,
             null, AssessmentReportContentStage.Approved, caller, cancellationToken);
 
+    public Task<AssessmentReportLifecycleResult> IssueAsync(
+        Guid revisionId, Guid expectedConcurrencyStamp, ClaimsPrincipal caller, CancellationToken cancellationToken = default)
+        => TransitionAsync(revisionId, expectedConcurrencyStamp, AssessmentReportRevisionStatus.Issued,
+            null, AssessmentReportContentStage.Issued, caller, cancellationToken);
+
     public Task<AssessmentReportLifecycleResult> RejectAsync(
         Guid revisionId, Guid expectedConcurrencyStamp, string? reason, ClaimsPrincipal caller, CancellationToken cancellationToken = default)
         => TransitionAsync(revisionId, expectedConcurrencyStamp, AssessmentReportRevisionStatus.Rejected,
@@ -99,6 +104,13 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
             }
         }
 
+        if (target == AssessmentReportRevisionStatus.Issued
+            && await HasOtherIssuedRevisionAsync(revision, cancellationToken))
+        {
+            // Replacement issuance (superseding the current Issued revision) is a separate operation.
+            return new(AssessmentReportLifecycleState.InvalidTransition, previous, revision.ConcurrencyStamp);
+        }
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         revision.Status = target;
         revision.UpdatedUtc = now;
@@ -112,6 +124,10 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
             case AssessmentReportRevisionStatus.Approved:
                 revision.ApprovedUtc = now;
                 revision.ApprovedByUserId = actorId;
+                break;
+            case AssessmentReportRevisionStatus.Issued:
+                revision.IssuedUtc = now;
+                revision.IssuedByUserId = actorId;
                 break;
         }
         revision.ConcurrencyStamp = Guid.NewGuid();
@@ -156,6 +172,20 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
                 .SingleOrDefaultAsync(cancellationToken);
             return new(AssessmentReportLifecycleState.ConcurrencyConflict, ConcurrencyStamp: latestStamp);
         }
+        catch (DbUpdateException ex) when (IsCurrentIssuedViolation(ex))
+        {
+            // Lost a race with a concurrent issuance of a different revision of the same report. Only this specific
+            // unique index is classified, and only after confirming that another Issued revision is now persisted.
+            await transaction.RollbackAsync(cancellationToken);
+            _db.Entry(history).State = EntityState.Detached;
+            _db.Entry(revision).State = EntityState.Detached;
+            if (!await HasOtherIssuedRevisionAsync(revision, cancellationToken))
+            {
+                throw;
+            }
+
+            return new(AssessmentReportLifecycleState.InvalidTransition, previous);
+        }
         catch
         {
             // The transaction is disposed (rolled back) on exit; drop tracked state that no longer matches the database.
@@ -165,6 +195,24 @@ public sealed class AssessmentReportLifecycleService : IAssessmentReportLifecycl
         }
 
         return new(AssessmentReportLifecycleState.Succeeded, target, revision.ConcurrencyStamp);
+    }
+
+    private const string CurrentIssuedIndexName = "UX_AssessmentReportRevisions_Report_CurrentIssued";
+
+    private static bool IsCurrentIssuedViolation(DbUpdateException ex)
+        => ex.InnerException is Npgsql.PostgresException pg
+            && pg.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation
+            && string.Equals(pg.ConstraintName, CurrentIssuedIndexName, StringComparison.Ordinal);
+
+    private Task<bool> HasOtherIssuedRevisionAsync(AssessmentReportRevision revision, CancellationToken cancellationToken)
+    {
+        var reportId = revision.AssessmentReportId;
+        var revisionId = revision.Id;
+        return _db.Set<AssessmentReportRevision>().AsNoTracking().AnyAsync(
+            item => item.AssessmentReportId == reportId
+                && item.Id != revisionId
+                && item.Status == AssessmentReportRevisionStatus.Issued,
+            cancellationToken);
     }
 
     private static ConsultantReportContent ReadContent(AssessmentReportRevision revision)

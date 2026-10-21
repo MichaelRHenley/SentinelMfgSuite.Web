@@ -220,6 +220,197 @@ public sealed class AssessmentReportLifecyclePostgresIntegrationTests
         Assert.Equal(1, history.Count(h => h.NewStatus == AssessmentReportRevisionStatus.Approved));
     }
 
+    private static async Task<Guid> ApproveAsync(PostgresIntegrationTestFixture fixture, Guid revisionId, ClaimsPrincipal caller, TimeProvider time)
+    {
+        var stamp = (await LoadRevisionAsync(fixture, revisionId)).ConcurrencyStamp;
+        var submit = await RunAsync(fixture, time, s => s.SubmitForReviewAsync(revisionId, stamp, caller));
+        Assert.True(submit.Succeeded);
+        var approve = await RunAsync(fixture, time, s => s.ApproveAsync(revisionId, submit.ConcurrencyStamp!.Value, caller));
+        Assert.True(approve.Succeeded);
+        return approve.ConcurrencyStamp!.Value;
+    }
+
+    private static async Task<Guid> CloneDraftRevisionAsync(PostgresIntegrationTestFixture fixture, AssessmentReportRevisionSource source, int number)
+    {
+        await using var db = fixture.CreateDbContext();
+        var original = await db.Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(r => r.Id == source.RevisionId);
+        var now = DateTime.UtcNow;
+        var clone = new AssessmentReportRevision
+        {
+            Id = Guid.NewGuid(),
+            AssessmentReportId = original.AssessmentReportId,
+            RevisionNumber = number,
+            ExecutiveSummary = original.ExecutiveSummary,
+            ScopeAndMethodology = original.ScopeAndMethodology,
+            AssumptionsAndLimitations = original.AssumptionsAndLimitations,
+            NextSteps = original.NextSteps,
+            ScoringContractVersion = original.ScoringContractVersion,
+            ScoringSnapshotSchemaVersion = original.ScoringSnapshotSchemaVersion,
+            ScoringSnapshot = original.ScoringSnapshot,
+            ConsultantContentJson = original.ConsultantContentJson,
+            ConsultantContentSchemaVersion = original.ConsultantContentSchemaVersion,
+            ReportTemplateVersion = original.ReportTemplateVersion,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            CreatedByUserId = original.CreatedByUserId,
+            UpdatedByUserId = original.UpdatedByUserId
+        };
+        db.Set<AssessmentReportRevision>().Add(clone);
+        await db.SaveChangesAsync();
+        return clone.Id;
+    }
+
+    private sealed record AssessmentReportRevisionSource(Guid RevisionId);
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Initial_Issuance_Persists_Stamps_Preserves_Frozen_Data_And_Writes_One_History_Event()
+    {
+        var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
+        await fixture.InitializeAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
+        var time = new ManualTimeProvider(T1);
+        var approvedStamp = await ApproveAsync(fixture, chain.RevisionId, caller, time);
+        var approved = await LoadRevisionAsync(fixture, chain.RevisionId);
+        time.Now = T3;
+
+        var issued = await RunAsync(fixture, time, s => s.IssueAsync(chain.RevisionId, approvedStamp, caller));
+
+        Assert.True(issued.Succeeded);
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, issued.Status);
+        var stored = await LoadRevisionAsync(fixture, chain.RevisionId);
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, stored.Status);
+        Assert.Equal(T3.UtcDateTime, stored.IssuedUtc);
+        Assert.Equal(chain.UserId, stored.IssuedByUserId);
+        Assert.Equal(T3.UtcDateTime, stored.UpdatedUtc);
+        Assert.Equal(issued.ConcurrencyStamp, stored.ConcurrencyStamp);
+        Assert.Null(stored.SupersededByRevisionId);
+        Assert.Equal(approved.ScoringSnapshot, stored.ScoringSnapshot);
+        Assert.Equal(approved.ConsultantContentJson, stored.ConsultantContentJson);
+        Assert.Equal(approved.SubmittedForReviewUtc, stored.SubmittedForReviewUtc);
+        Assert.Equal(approved.SubmittedForReviewByUserId, stored.SubmittedForReviewByUserId);
+        Assert.Equal(approved.ApprovedUtc, stored.ApprovedUtc);
+        Assert.Equal(approved.ApprovedByUserId, stored.ApprovedByUserId);
+        Assert.Null(stored.PdfStorageKey);
+
+        var history = (await HistoryAsync(fixture, chain.RevisionId)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued).ToList();
+        var evt = Assert.Single(history);
+        Assert.Equal(AssessmentReportRevisionStatus.Approved, evt.PreviousStatus);
+        Assert.Equal(chain.UserId, evt.ActorUserId);
+        Assert.Equal(T3.UtcDateTime, evt.OccurredUtc);
+        Assert.Null(evt.Reason);
+        Assert.Null(evt.ReplacedRevisionId);
+        Assert.Null(evt.ReplacementRevisionId);
+        Assert.False(string.IsNullOrWhiteSpace(evt.CorrelationId));
+        Assert.Equal(3, (await HistoryAsync(fixture, chain.RevisionId)).Count);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Simultaneous_Issuance_Of_Same_Revision_Allows_One_Winner_And_Single_History_Event()
+    {
+        var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
+        await fixture.InitializeAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
+        var time = new ManualTimeProvider(T1);
+        var stamp = await ApproveAsync(fixture, chain.RevisionId, caller, time);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ =>
+            Task.Run(() => RunAsync(fixture, time, s => s.IssueAsync(chain.RevisionId, stamp, caller)))));
+
+        Assert.Equal(1, results.Count(r => r.Succeeded));
+        Assert.Equal(3, results.Count(r => r.State == AssessmentReportLifecycleState.ConcurrencyConflict));
+        Assert.Equal(1, (await HistoryAsync(fixture, chain.RevisionId)).Count(h => h.NewStatus == AssessmentReportRevisionStatus.Issued));
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, (await LoadRevisionAsync(fixture, chain.RevisionId)).Status);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Competing_Issuance_Of_Different_Approved_Revisions_Allows_Exactly_One_And_Leaves_Loser_Approved()
+    {
+        var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
+        await fixture.InitializeAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
+        var time = new ManualTimeProvider(T1);
+        var secondId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 2);
+        var firstStamp = await ApproveAsync(fixture, chain.RevisionId, caller, time);
+        var secondStamp = await ApproveAsync(fixture, secondId, caller, time);
+
+        var results = await Task.WhenAll(
+            Task.Run(() => RunAsync(fixture, time, s => s.IssueAsync(chain.RevisionId, firstStamp, caller))),
+            Task.Run(() => RunAsync(fixture, time, s => s.IssueAsync(secondId, secondStamp, caller))));
+
+        Assert.Equal(1, results.Count(r => r.Succeeded));
+        Assert.Equal(1, results.Count(r => r.State == AssessmentReportLifecycleState.InvalidTransition));
+        var first = await LoadRevisionAsync(fixture, chain.RevisionId);
+        var second = await LoadRevisionAsync(fixture, secondId);
+        Assert.Single(new[] { first, second }, r => r.Status == AssessmentReportRevisionStatus.Issued);
+        var loser = first.Status == AssessmentReportRevisionStatus.Issued ? second : first;
+        Assert.Equal(AssessmentReportRevisionStatus.Approved, loser.Status);
+        Assert.Null(loser.IssuedUtc);
+        Assert.Empty((await HistoryAsync(fixture, loser.Id)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued));
+        Assert.Single((await HistoryAsync(fixture, loser.Id == first.Id ? second.Id : first.Id)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Issuing_While_Another_Revision_Is_Issued_Returns_InvalidTransition_And_Unique_Index_Rejects_Direct_Update()
+    {
+        var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
+        await fixture.InitializeAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
+        var time = new ManualTimeProvider(T1);
+        var secondId = await CloneDraftRevisionAsync(fixture, new AssessmentReportRevisionSource(chain.RevisionId), 2);
+        var firstStamp = await ApproveAsync(fixture, chain.RevisionId, caller, time);
+        var secondStamp = await ApproveAsync(fixture, secondId, caller, time);
+        Assert.True((await RunAsync(fixture, time, s => s.IssueAsync(chain.RevisionId, firstStamp, caller))).Succeeded);
+
+        var blocked = await RunAsync(fixture, time, s => s.IssueAsync(secondId, secondStamp, caller));
+
+        Assert.Equal(AssessmentReportLifecycleState.InvalidTransition, blocked.State);
+        Assert.Equal(AssessmentReportRevisionStatus.Approved, (await LoadRevisionAsync(fixture, secondId)).Status);
+
+        await using var db = fixture.CreateDbContext();
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE ""AssessmentReportRevisions"" SET ""Status"" = 3, ""IssuedUtc"" = {DateTime.UtcNow}, ""IssuedByUserId"" = {"direct"} WHERE ""Id"" = {secondId}"));
+        var pg = ex as Npgsql.PostgresException ?? ex.InnerException as Npgsql.PostgresException;
+        Assert.NotNull(pg);
+        Assert.Equal(Npgsql.PostgresErrorCodes.UniqueViolation, pg!.SqlState);
+        Assert.Equal("UX_AssessmentReportRevisions_Report_CurrentIssued", pg.ConstraintName);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Failed_History_Insert_Rolls_Back_Issuance()
+    {
+        var fixture = AssessmentReportPostgresIntegrationTests.CreateFixtureOrSkip();
+        await fixture.InitializeAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
+        var caller = AssessmentReportPostgresIntegrationTests.Admin(chain.UserId);
+        var time = new ManualTimeProvider(T1);
+        var stamp = await ApproveAsync(fixture, chain.RevisionId, caller, time);
+        var before = await LoadRevisionAsync(fixture, chain.RevisionId);
+
+        await using (var db = fixture.CreateDbContext())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($@"INSERT INTO ""AssessmentReportTransitionHistory""
+(""Id"", ""AssessmentReportId"", ""AssessmentReportRevisionId"", ""EventType"", ""PreviousStatus"", ""NewStatus"", ""ActorUserId"", ""OccurredUtc"", ""Reason"", ""ReplacedRevisionId"", ""ReplacementRevisionId"", ""CorrelationId"")
+VALUES ({Guid.NewGuid()}, {chain.ReportId}, {chain.RevisionId}, {(short)2}, {(short)2}, {(short)3}, {"seed-actor"}, {DateTime.UtcNow}, {(string?)null}, {(Guid?)null}, {(Guid?)null}, {"seed-correlation"})");
+        }
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => RunAsync(fixture, time, s => s.IssueAsync(chain.RevisionId, stamp, caller)));
+
+        var after = await LoadRevisionAsync(fixture, chain.RevisionId);
+        Assert.Equal(AssessmentReportRevisionStatus.Approved, after.Status);
+        Assert.Null(after.IssuedUtc);
+        Assert.Equal(before.ConcurrencyStamp, after.ConcurrencyStamp);
+        Assert.Equal("seed-actor", Assert.Single((await HistoryAsync(fixture, chain.RevisionId)).Where(h => h.NewStatus == AssessmentReportRevisionStatus.Issued)).ActorUserId);
+    }
+
     [Fact]
     [Trait("Category", "PostgresIntegration")]
     public async Task Failed_History_Insert_Rolls_Back_Revision_Update()

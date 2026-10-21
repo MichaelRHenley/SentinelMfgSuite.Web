@@ -40,6 +40,16 @@ public interface IAssessmentReportLifecycleService
         ClaimsPrincipal caller,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Approved to Issued for a report that has no existing Issued revision. Replacement issuance (superseding an
+    /// existing Issued revision) is not supported here; such a request returns InvalidTransition.
+    /// </summary>
+    Task<AssessmentReportLifecycleResult> IssueAsync(
+        Guid revisionId,
+        Guid expectedConcurrencyStamp,
+        ClaimsPrincipal caller,
+        CancellationToken cancellationToken = default);
+
     /// <summary>InReview to Rejected or Approved to Rejected. A reason is required.</summary>
     Task<AssessmentReportLifecycleResult> RejectAsync(
         Guid revisionId,
