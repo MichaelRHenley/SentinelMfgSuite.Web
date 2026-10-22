@@ -575,10 +575,18 @@ VALUES ({Guid.NewGuid()}, {chain.ReportId}, {pair.ReplacementId}, {(short)2}, {(
             RunHookedAsync(fixture, new ManualTimeProvider(T3),
                 async () =>
                 {
+                    // The immutability guard forbids changing IssuedUtc, so this simulated clock skew disables ONLY that one
+                    // trigger, inside one short transaction, and re-enables it before commit. The catalog change is
+                    // transactional, so no other session (including the service under test) ever sees it disabled; all other
+                    // triggers and foreign keys stay enforced. This needs table ownership, not superuser.
                     await using var other = fixture.CreateDbContext();
+                    await using var tx = await other.Database.BeginTransactionAsync();
+                    await other.Database.ExecuteSqlRawAsync("ALTER TABLE \"AssessmentReportRevisions\" DISABLE TRIGGER \"TR_AssessmentReportRevisions_IssuedIsImmutable\"");
                     var changed = await other.Set<AssessmentReportRevision>().Where(r => r.Id == pair.PredecessorId)
                         .ExecuteUpdateAsync(s => s.SetProperty(r => r.IssuedUtc, laterIssuedUtc));
                     Assert.Equal(1, changed);
+                    await other.Database.ExecuteSqlRawAsync("ALTER TABLE \"AssessmentReportRevisions\" ENABLE TRIGGER \"TR_AssessmentReportRevisions_IssuedIsImmutable\"");
+                    await tx.CommitAsync();
                 },
                 s => s.IssueAsync(pair.ReplacementId, pair.ReplacementStamp, caller)));
 
@@ -586,6 +594,14 @@ VALUES ({Guid.NewGuid()}, {chain.ReportId}, {pair.ReplacementId}, {(short)2}, {(
         Assert.NotNull(pg);
         Assert.Equal(Npgsql.PostgresErrorCodes.CheckViolation, pg!.SqlState);
         Assert.Contains("was issued before superseded revision", pg.MessageText);
+
+        // The deferred supersession trigger fired (message above) and no trigger was left disabled by the setup.
+        await using (var check = fixture.CreateDbContext())
+        {
+            var disabled = await check.Database.SqlQuery<string>(
+                $"SELECT tgname AS \"Value\" FROM pg_trigger WHERE tgrelid = 'public.\"AssessmentReportRevisions\"'::regclass AND NOT tgisinternal AND tgenabled <> 'O'").ToListAsync();
+            Assert.Empty(disabled);
+        }
 
         var predecessor = await LoadRevisionAsync(fixture, pair.PredecessorId);
         var replacement = await LoadRevisionAsync(fixture, pair.ReplacementId);

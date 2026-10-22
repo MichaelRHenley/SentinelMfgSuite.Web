@@ -324,29 +324,29 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
-    public async Task Existing_Issued_Revision_And_Unrelated_Updates_Are_Unaffected()
+    public async Task Existing_Issued_Revision_Frozen_Content_Update_Is_Rejected_By_The_Immutability_Guard()
     {
         var fixture = await NewFixtureAsync();
         var chain = await AssessmentReportPostgresIntegrationTests.CreateChainAsync(fixture);
         var issued = await InsertRevisionAsync(fixture, chain.ReportId, 2, Issued);
 
         await using var db = fixture.CreateDbContext();
-        await db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""AssessmentReportRevisions"" SET ""ExecutiveSummary"" = 'edited' WHERE ""Id"" = {issued}");
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""AssessmentReportRevisions"" SET ""ExecutiveSummary"" = 'edited' WHERE ""Id"" = {issued}"));
+        Assert.Equal("23514", (ex as Npgsql.PostgresException ?? ex.InnerException as Npgsql.PostgresException)?.SqlState);
         Assert.Equal(AssessmentReportRevisionStatus.Issued, await StatusAsync(fixture, issued));
     }
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
-    public async Task Unrelated_Update_On_Superseded_Revision_Is_Not_Revalidated()
+    public async Task Frozen_Content_Update_On_Superseded_Revision_Is_Rejected_By_The_Immutability_Guard()
     {
-        // Boundary: the trigger fires only when Status or SupersededByRevisionId changes on the row, so unrelated
-        // updates to existing Superseded rows (including legacy rows without history) are not re-validated.
         var fixture = await NewFixtureAsync();
         var (reportId, oldId, newId) = await NewPairAsync(fixture);
         await ReplaceAsync(fixture, reportId, oldId, newId);
 
         await using var db = fixture.CreateDbContext();
-        await db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""AssessmentReportRevisions"" SET ""ExecutiveSummary"" = 'edited' WHERE ""Id"" = {oldId}");
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""AssessmentReportRevisions"" SET ""ExecutiveSummary"" = 'edited' WHERE ""Id"" = {oldId}"));
+        Assert.Equal("23514", (ex as Npgsql.PostgresException ?? ex.InnerException as Npgsql.PostgresException)?.SqlState);
         Assert.Equal(AssessmentReportRevisionStatus.Superseded, await StatusAsync(fixture, oldId));
     }
 
