@@ -24,10 +24,18 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.7" />
+    <PackageReference Include="QuestPDF" Version="2026.9.1" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="App_Data\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Reports\Fonts\Lato-Regular.ttf" />
+    <EmbeddedResource Include="Resources\Reports\Fonts\Lato-Bold.ttf" />
+    <EmbeddedResource Include="Resources\Reports\Fonts\Lato-Italic.ttf" />
+    <None Include="Resources\Reports\Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Tools/ProvisionAdmin is a separate project; do not include the project file as content in the web project. -->

@@ -138,6 +138,7 @@ public sealed class AssessmentReportService : IAssessmentReportService
                     NextSteps = string.Empty,
                     ScoringSnapshotSchemaVersion = ReadinessScoringSnapshotSerializer.PersistedSchemaVersion,
                     ScoringSnapshot = scoringSnapshot,
+                    ReportTemplateVersion = SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportTemplateVersions.Current,
                     CreatedUtc = generatedUtc,
                     UpdatedUtc = generatedUtc,
                     CreatedByUserId = callerUserId,
