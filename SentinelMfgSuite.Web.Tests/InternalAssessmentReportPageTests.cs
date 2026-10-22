@@ -2283,12 +2283,331 @@ public sealed class InternalAssessmentReportPageTests
         return response;
     }
 
+    private static async Task<HttpResponseMessage> PostLifecycleAsync(
+        ReportPageFactory factory, HttpClient client, Guid assessmentId, Guid responseId, string handler,
+        Guid? revisionId, Guid stamp, string? reason = null, bool withToken = true)
+    {
+        var url = factory.PageUrl(assessmentId, responseId);
+        var html = await (await client.GetAsync(url)).Content.ReadAsStringAsync();
+        var fields = new Dictionary<string, string>
+        {
+            ["AssessmentId"] = assessmentId.ToString(),
+            ["SubmittedResponseId"] = responseId.ToString(),
+            ["ExpectedConcurrencyStamp"] = stamp.ToString()
+        };
+        if (revisionId.HasValue) fields["RevisionId"] = revisionId.Value.ToString();
+        if (reason is not null) fields["LifecycleReason"] = reason;
+        if (withToken)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(html,
+                "name=\"__RequestVerificationToken\"[^>]*value=\"(?<token>[^\"]+)\"");
+            Assert.True(match.Success);
+            fields["__RequestVerificationToken"] = WebUtility.HtmlDecode(match.Groups["token"].Value);
+        }
+        return await client.PostAsync(url + "?handler=" + handler, new FormUrlEncodedContent(fields));
+    }
+
+    private static async Task<(ReportPageFactory Factory, Guid AssessmentId, Guid ResponseId, AssessmentReportRevision Revision)> SeedAsync(
+        AssessmentReportRevisionStatus status, string owner = "test-user")
+    {
+        var factory = new ReportPageFactory(owner, stubLifecycleValidator: true);
+        var ids = await factory.SeedAssessmentAsync("3.0", BuildSubmission("3.0"));
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", BuildSubmission("3.0"));
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        await factory.SetContentAsync(revision.Id, ConsultantReportContent.CreateEmpty() with
+        {
+            ExecutiveSummary = new ExecutiveSummarySection(Narrative: "Lifecycle test narrative")
+        });
+        revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        if (status != AssessmentReportRevisionStatus.Draft)
+        {
+            await factory.SetStatusAsync(revision.Id, status);
+        }
+        return (factory, ids.AssessmentId, ids.ResponseId, revision);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Post_Requires_Antiforgery_Token()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.InReview);
+        await using var _ = factory;
+        var response = await PostLifecycleAsync(factory, factory.CreateAdminClient(), a, r, "Approve", rev.Id, rev.ConcurrencyStamp, withToken: false);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(AssessmentReportRevisionStatus.InReview, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Post_Rejects_NonAdmin()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.InReview);
+        await using var _ = factory;
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        client.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "user");
+        var response = await client.PostAsync(factory.PageUrl(a, r) + "?handler=Approve", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["RevisionId"] = rev.Id.ToString()
+        }));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(AssessmentReportRevisionStatus.InReview, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Post_NonOwner_Is_NotFound_And_Unchanged()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.InReview, owner: "different-user");
+        await using var _ = factory;
+        var client = factory.CreateAdminClient();
+        var response = await client.PostAsync(factory.PageUrl(a, r) + "?handler=Approve", new FormUrlEncodedContent(new Dictionary<string, string>()));
+        Assert.True(response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest);
+        Assert.Equal(AssessmentReportRevisionStatus.InReview, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Approve_Succeeds_And_Redirects()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.InReview);
+        await using var _ = factory;
+        var client = factory.CreateAdminClient();
+        var response = await PostLifecycleAsync(factory, client, a, r, "Approve", rev.Id, rev.ConcurrencyStamp);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var follow = await client.GetAsync(response.Headers.Location);
+        var followHtml = await follow.Content.ReadAsStringAsync();
+        var alert = System.Text.RegularExpressions.Regex.Match(followHtml, "alert-(success|danger)[^>]*>(?<m>[^<]+)");
+        Assert.True(alert.Success && alert.Groups[1].Value == "success", alert.Success ? alert.Groups["m"].Value.Trim() : "no alert");
+        Assert.DoesNotContain("alert-danger", followHtml, StringComparison.Ordinal);
+        Assert.Equal(AssessmentReportRevisionStatus.Approved, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Reject_Requires_Reason_And_Succeeds_With_Reason()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.InReview);
+        await using var _ = factory;
+        var client = factory.CreateAdminClient();
+        var blank = await PostLifecycleAsync(factory, client, a, r, "Reject", rev.Id, rev.ConcurrencyStamp, reason: "  ");
+        Assert.Equal(HttpStatusCode.Redirect, blank.StatusCode);
+        Assert.Equal(AssessmentReportRevisionStatus.InReview, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+
+        var ok = await PostLifecycleAsync(factory, client, a, r, "Reject", rev.Id, rev.ConcurrencyStamp, reason: "Needs rework");
+        Assert.Equal(HttpStatusCode.Redirect, ok.StatusCode);
+        Assert.Equal(AssessmentReportRevisionStatus.Rejected, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Stale_Stamp_Does_Not_Apply()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.InReview);
+        await using var _ = factory;
+        var response = await PostLifecycleAsync(factory, factory.CreateAdminClient(), a, r, "Approve", rev.Id, Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal(AssessmentReportRevisionStatus.InReview, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Invalid_Revision_Identifier_Is_Rejected()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.InReview);
+        await using var _ = factory;
+        var client = factory.CreateAdminClient();
+        var unknown = await PostLifecycleAsync(factory, client, a, r, "Approve", Guid.NewGuid(), rev.ConcurrencyStamp);
+        var missing = await PostLifecycleAsync(factory, client, a, r, "Approve", null, rev.ConcurrencyStamp);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Invalid_Transition_Is_Not_Forced()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Draft);
+        await using var _ = factory;
+        var response = await PostLifecycleAsync(factory, factory.CreateAdminClient(), a, r, "Issue", rev.Id, rev.ConcurrencyStamp);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal(AssessmentReportRevisionStatus.Draft, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Issue_Then_Correction_Creates_Draft()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Approved);
+        await using var _ = factory;
+        var client = factory.CreateAdminClient();
+        var issued = await PostLifecycleAsync(factory, client, a, r, "Issue", rev.Id, rev.ConcurrencyStamp);
+        Assert.Equal(HttpStatusCode.Redirect, issued.StatusCode);
+        var afterIssue = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, afterIssue.Status);
+
+        var correction = await PostLifecycleAsync(factory, client, a, r, "CreateCorrection", afterIssue.Id, afterIssue.ConcurrencyStamp, reason: "Fix typo");
+        Assert.Equal(HttpStatusCode.Redirect, correction.StatusCode);
+        var revisions = (await factory.GetOnlyReportAsync()).Revisions.OrderBy(item => item.RevisionNumber).ToList();
+        Assert.Equal(2, revisions.Count);
+        Assert.Equal(AssessmentReportRevisionStatus.Draft, revisions[1].Status);
+        Assert.Equal(afterIssue.Id, revisions[1].BasedOnRevisionId);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Handlers_Are_Not_Exposed_Through_Get()
+    {
+        var (factory, a, r, _) = await SeedAsync(AssessmentReportRevisionStatus.InReview);
+        await using var _ = factory;
+        var html = await (await factory.CreateAdminClient().GetAsync(factory.PageUrl(a, r) + "?handler=Approve")).Content.ReadAsStringAsync();
+        Assert.Equal(AssessmentReportRevisionStatus.InReview, (await factory.GetOnlyReportAsync()).Revisions.Single().Status);
+        Assert.DoesNotContain("Revision approved.", html, StringComparison.Ordinal);
+    }
+
+    private static async Task<string> GetHtmlAsync(ReportPageFactory factory, Guid a, Guid r, Guid? revisionId = null)
+    {
+        var url = factory.PageUrl(a, r) + (revisionId.HasValue ? "?selectedRevisionId=" + revisionId.Value : string.Empty);
+        return await (await factory.CreateAdminClient().GetAsync(url)).Content.ReadAsStringAsync();
+    }
+
+    private static readonly string[] LifecycleHandlers = { "SubmitForReview", "Approve", "Issue", "Reject", "CreateCorrection" };
+
+    [Theory]
+    [InlineData(AssessmentReportRevisionStatus.Draft, "SubmitForReview")]
+    [InlineData(AssessmentReportRevisionStatus.InReview, "Approve,Reject")]
+    [InlineData(AssessmentReportRevisionStatus.Approved, "Issue,Reject")]
+    [InlineData(AssessmentReportRevisionStatus.Issued, "CreateCorrection")]
+    [InlineData(AssessmentReportRevisionStatus.Rejected, "")]
+    [InlineData(AssessmentReportRevisionStatus.Superseded, "")]
+    public async Task Lifecycle_Action_Visibility_Matches_Status(AssessmentReportRevisionStatus status, string expected)
+    {
+        var (factory, a, r, _) = await SeedAsync(status);
+        await using var _ = factory;
+        var html = await GetHtmlAsync(factory, a, r);
+        var expectedSet = expected.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var handler in LifecycleHandlers)
+        {
+            var present = html.Contains("handler=" + handler, StringComparison.Ordinal);
+            Assert.Equal(expectedSet.Contains(handler), present);
+        }
+    }
+
+    [Fact]
+    public async Task Lifecycle_Submit_Draft_Moves_To_InReview()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Draft);
+        await using var _ = factory;
+        var response = await PostLifecycleAsync(factory, factory.CreateAdminClient(), a, r, "SubmitForReview", rev.Id, rev.ConcurrencyStamp);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var after = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        Assert.Equal(AssessmentReportRevisionStatus.InReview, after.Status);
+        Assert.NotNull(after.SubmittedForReviewUtc);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Replacement_Issuance_Supersedes_Predecessor()
+    {
+        var (factory, a, r, rev1) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        var rev2 = await factory.AddRevisionAsync(2, AssessmentReportRevisionStatus.Approved, rev1.Id);
+        var response = await PostLifecycleAsync(factory, factory.CreateAdminClient(), a, r, "Issue", rev2.Id, rev2.ConcurrencyStamp);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, (await factory.GetRevisionAsync(rev2.Id)).Status);
+        var old = await factory.GetRevisionAsync(rev1.Id);
+        Assert.Equal(AssessmentReportRevisionStatus.Superseded, old.Status);
+        Assert.Equal(rev2.Id, old.SupersededByRevisionId);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Correction_Rejected_Then_Another_Correction_From_Current_Issued()
+    {
+        var (factory, a, r, rev1) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        var rev2 = await factory.AddRevisionAsync(2, AssessmentReportRevisionStatus.Rejected, rev1.Id);
+        var html = await GetHtmlAsync(factory, a, r);
+        Assert.Contains("handler=CreateCorrection", html, StringComparison.Ordinal);
+        var rev1Now = await factory.GetRevisionAsync(rev1.Id);
+        var response = await PostLifecycleAsync(factory, factory.CreateAdminClient(), a, r, "CreateCorrection", rev1Now.Id, rev1Now.ConcurrencyStamp, reason: "Second attempt");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var revisions = (await factory.GetOnlyReportAsync()).Revisions.OrderBy(item => item.RevisionNumber).ToList();
+        Assert.Equal(3, revisions.Count);
+        Assert.Equal(AssessmentReportRevisionStatus.Draft, revisions[2].Status);
+        Assert.Equal(rev1.Id, revisions[2].BasedOnRevisionId);
+        Assert.Equal(AssessmentReportRevisionStatus.Rejected, revisions[1].Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_No_Create_Correction_While_Active_Correction_Exists()
+    {
+        var (factory, a, r, rev1) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        var rev2 = await factory.AddRevisionAsync(2, AssessmentReportRevisionStatus.Draft, rev1.Id);
+        var issuedView = await GetHtmlAsync(factory, a, r, rev1.Id);
+        Assert.DoesNotContain("handler=CreateCorrection", issuedView, StringComparison.Ordinal);
+        Assert.Contains("correction is already in progress", issuedView, StringComparison.Ordinal);
+        var defaultView = await GetHtmlAsync(factory, a, r);
+        Assert.Contains("handler=SubmitForReview", defaultView, StringComparison.Ordinal);
+        Assert.Contains(rev2.Id.ToString(), defaultView, StringComparison.Ordinal);
+
+        var blocked = await PostLifecycleAsync(factory, factory.CreateAdminClient(), a, r, "CreateCorrection", rev1.Id, (await factory.GetRevisionAsync(rev1.Id)).ConcurrencyStamp);
+        Assert.Equal(HttpStatusCode.Redirect, blocked.StatusCode);
+        Assert.Equal(2, (await factory.GetOnlyReportAsync()).Revisions.Count);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Historical_Revisions_Are_ReadOnly()
+    {
+        var (factory, a, r, rev1) = await SeedAsync(AssessmentReportRevisionStatus.Superseded);
+        await using var _ = factory;
+        var rev2 = await factory.AddRevisionAsync(2, AssessmentReportRevisionStatus.Issued, rev1.Id);
+        var html = await GetHtmlAsync(factory, a, r, rev1.Id);
+        Assert.Contains("historical revision", html, StringComparison.OrdinalIgnoreCase);
+        foreach (var handler in LifecycleHandlers)
+        {
+            Assert.DoesNotContain("handler=" + handler, html, StringComparison.Ordinal);
+        }
+        var current = await GetHtmlAsync(factory, a, r);
+        Assert.Contains("handler=CreateCorrection", current, StringComparison.Ordinal);
+        Assert.Contains(rev2.Id.ToString(), current, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Stale_Stamp_Shows_Conflict_Message_And_Refresh_Link()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.InReview);
+        await using var _ = factory;
+        var client = factory.CreateAdminClient();
+        var response = await PostLifecycleAsync(factory, client, a, r, "Approve", rev.Id, Guid.NewGuid());
+        var html = await (await client.GetAsync(response.Headers.Location)).Content.ReadAsStringAsync();
+        Assert.Contains("This report changed after you opened it", html, StringComparison.Ordinal);
+        Assert.Contains("Refresh", html, StringComparison.Ordinal);
+        Assert.Equal(AssessmentReportRevisionStatus.InReview, (await factory.GetRevisionAsync(rev.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Lifecycle_Submit_With_Real_Validator_Rejects_Incomplete_Content_Without_Changing_State()
+    {
+        var factory = new ReportPageFactory();
+        await using var _ = factory;
+        var ids = await factory.SeedAssessmentAsync("3.0", BuildSubmission("3.0"));
+        await factory.SeedReportAsync(ids.AssessmentId, ids.ResponseId, "3.0", BuildSubmission("3.0"));
+        var rev = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var client = factory.CreateAdminClient();
+        var response = await PostLifecycleAsync(factory, client, ids.AssessmentId, ids.ResponseId, "SubmitForReview", rev.Id, rev.ConcurrencyStamp);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var html = await (await client.GetAsync(response.Headers.Location)).Content.ReadAsStringAsync();
+        Assert.Contains("incomplete or invalid", html, StringComparison.Ordinal);
+        Assert.Equal(AssessmentReportRevisionStatus.Draft, (await factory.GetRevisionAsync(rev.Id)).Status);
+    }
+
+    private sealed class AlwaysValidContentValidator : IAssessmentReportContentValidator
+    {
+        public AssessmentReportContentValidationResult Validate(ConsultantReportContent content, AssessmentReportContentValidationContext context)
+            => new(Array.Empty<ReportContentValidationIssue>());
+    }
+
     private sealed class ReportPageFactory : WebApplicationFactory<Program>
     {
         private readonly string _databaseName = $"report-page-{Guid.NewGuid():N}";
         private readonly string _ownerUserId;
 
-        public ReportPageFactory(string ownerUserId = "test-user") => _ownerUserId = ownerUserId;
+        private readonly bool _stubLifecycleValidator;
+
+        public ReportPageFactory(string ownerUserId = "test-user", bool stubLifecycleValidator = false)
+        {
+            _ownerUserId = ownerUserId;
+            _stubLifecycleValidator = stubLifecycleValidator;
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -2300,6 +2619,11 @@ public sealed class InternalAssessmentReportPageTests
             {
                 services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
                 services.RemoveAll<ApplicationDbContext>();
+                if (_stubLifecycleValidator)
+                {
+                    services.RemoveAll<IAssessmentReportContentValidator>();
+                    services.AddSingleton<IAssessmentReportContentValidator, AlwaysValidContentValidator>();
+                }
                 services.AddDbContext<ApplicationDbContext>(options => options
                     .UseInMemoryDatabase(_databaseName)
                     .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning)));
@@ -2459,6 +2783,39 @@ public sealed class InternalAssessmentReportPageTests
             revision.ScoringSnapshot = snapshotJson;
             revision.ScoringSnapshotSchemaVersion = schemaVersion;
             await db.SaveChangesAsync();
+        }
+
+        public async Task<AssessmentReportRevision> AddRevisionAsync(int number, AssessmentReportRevisionStatus status, Guid? basedOnRevisionId = null)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var template = await db.Set<AssessmentReportRevision>().AsNoTracking().OrderBy(item => item.RevisionNumber).FirstAsync();
+            var now = DateTime.UtcNow;
+            var added = new AssessmentReportRevision
+            {
+                Id = Guid.NewGuid(),
+                AssessmentReportId = template.AssessmentReportId,
+                RevisionNumber = number,
+                Status = status,
+                BasedOnRevisionId = basedOnRevisionId,
+                ScoringSnapshot = template.ScoringSnapshot,
+                ScoringSnapshotSchemaVersion = template.ScoringSnapshotSchemaVersion,
+                ConsultantContentJson = template.ConsultantContentJson,
+                ConsultantContentSchemaVersion = template.ConsultantContentSchemaVersion,
+                CreatedUtc = now,
+                UpdatedUtc = now,
+                CreatedByUserId = _ownerUserId,
+                UpdatedByUserId = _ownerUserId
+            };
+            db.Add(added);
+            await db.SaveChangesAsync();
+            return added;
+        }
+
+        public async Task<AssessmentReportRevision> GetRevisionAsync(Guid revisionId)
+        {
+            using var scope = Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(item => item.Id == revisionId);
         }
 
         public async Task SetStatusAsync(Guid revisionId, AssessmentReportRevisionStatus status)

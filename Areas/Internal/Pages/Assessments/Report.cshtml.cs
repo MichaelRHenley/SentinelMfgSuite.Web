@@ -23,16 +23,64 @@ public sealed class ReportModel : PageModel
     private readonly ApplicationDbContext _db;
     private readonly IAssessmentReportService _reportService;
     private readonly IAssessmentReportRevisionContentService _contentService;
+    private readonly IAssessmentReportLifecycleService _lifecycleService;
 
     public ReportModel(
         ApplicationDbContext db,
         IAssessmentReportService reportService,
-        IAssessmentReportRevisionContentService contentService)
+        IAssessmentReportRevisionContentService contentService,
+        IAssessmentReportLifecycleService lifecycleService)
     {
         _db = db;
         _reportService = reportService;
         _contentService = contentService;
+        _lifecycleService = lifecycleService;
     }
+
+    [BindProperty(SupportsGet = true)]
+    public Guid? SelectedRevisionId { get; set; }
+
+    [BindProperty]
+    [StringLength(2000)]
+    public string? LifecycleReason { get; set; }
+
+    [TempData]
+    public string? LifecycleMessage { get; set; }
+
+    [TempData]
+    public string? LifecycleError { get; set; }
+
+    public sealed record RevisionHistoryItem(
+        Guid Id,
+        int RevisionNumber,
+        AssessmentReportRevisionStatus Status,
+        bool IsSelected,
+        DateTime CreatedUtc,
+        DateTime? SubmittedForReviewUtc,
+        string? SubmittedForReviewByUserId,
+        DateTime? ApprovedUtc,
+        string? ApprovedByUserId,
+        DateTime? IssuedUtc,
+        string? IssuedByUserId,
+        int? BasedOnRevisionNumber,
+        string? CorrectionReason,
+        int? SupersededByRevisionNumber);
+
+    public IReadOnlyList<RevisionHistoryItem> RevisionHistory { get; private set; } = Array.Empty<RevisionHistoryItem>();
+    public int? CurrentIssuedRevisionNumber { get; private set; }
+    public bool ActiveCorrectionExists { get; private set; }
+    public bool IsLatestRevision { get; private set; }
+    public int? LatestRevisionNumber { get; private set; }
+
+    public bool IsActiveCorrectionRevision => RevisionStatus is AssessmentReportRevisionStatus.Draft
+        or AssessmentReportRevisionStatus.InReview or AssessmentReportRevisionStatus.Approved;
+    public bool IsCurrentIssuedRevision => RevisionStatus == AssessmentReportRevisionStatus.Issued && CurrentIssuedRevisionNumber == RevisionNumber;
+    public bool IsHistoricalRevision => RevisionStatus is AssessmentReportRevisionStatus.Rejected or AssessmentReportRevisionStatus.Superseded;
+    public bool CanSubmitForReview => RevisionStatus == AssessmentReportRevisionStatus.Draft;
+    public bool CanApprove => RevisionStatus == AssessmentReportRevisionStatus.InReview;
+    public bool CanReject => RevisionStatus is AssessmentReportRevisionStatus.InReview or AssessmentReportRevisionStatus.Approved;
+    public bool CanIssue => RevisionStatus == AssessmentReportRevisionStatus.Approved;
+    public bool CanCreateCorrection => RevisionStatus == AssessmentReportRevisionStatus.Issued && CurrentIssuedRevisionNumber == RevisionNumber && !ActiveCorrectionExists;
 
     [BindProperty(SupportsGet = true)]
     public Guid AssessmentId { get; set; }
@@ -103,7 +151,14 @@ public sealed class ReportModel : PageModel
         }
         if (reportResult.State == AssessmentReportServiceState.Retrieved && reportResult.Report is { } report)
         {
-            var revision = report.Revisions.OrderByDescending(item => item.RevisionNumber).FirstOrDefault();
+            var latest = report.Revisions.OrderByDescending(item => item.RevisionNumber).FirstOrDefault();
+            if (latest is null)
+            {
+                return NotFound();
+            }
+            var revision = SelectedRevisionId.HasValue
+                ? report.Revisions.SingleOrDefault(item => item.Id == SelectedRevisionId.Value)
+                : DefaultRevision(report, latest);
             if (revision is null)
             {
                 return NotFound();
@@ -112,6 +167,7 @@ public sealed class ReportModel : PageModel
             RevisionNumber = revision.RevisionNumber;
             RevisionStatus = revision.Status;
             RevisionId = revision.Id;
+            PopulateLifecycle(report, revision, latest);
             var contentResult = await _contentService.GetAsync(revision.Id, User, ct);
             if (!contentResult.Succeeded)
             {
@@ -135,6 +191,138 @@ public sealed class ReportModel : PageModel
         PopulateQuestionnaire(source.Assessment.QuestionnaireVersion, source.Response.Data);
         return Page();
     }
+
+    private static AssessmentReportRevision DefaultRevision(AssessmentReport report, AssessmentReportRevision latest)
+        => report.Revisions.Where(item => item.Status is AssessmentReportRevisionStatus.Draft
+                or AssessmentReportRevisionStatus.InReview or AssessmentReportRevisionStatus.Approved)
+            .OrderByDescending(item => item.RevisionNumber).FirstOrDefault()
+        ?? report.Revisions.Where(item => item.Status == AssessmentReportRevisionStatus.Issued)
+            .OrderByDescending(item => item.RevisionNumber).FirstOrDefault()
+        ?? latest;
+
+    private void PopulateLifecycle(AssessmentReport report, AssessmentReportRevision selected, AssessmentReportRevision latest)
+    {
+        var byId = report.Revisions.ToDictionary(item => item.Id);        int? NumberOf(Guid? id) => id.HasValue && byId.TryGetValue(id.Value, out var found) ? found.RevisionNumber : null;
+        IsLatestRevision = selected.Id == latest.Id;
+        LatestRevisionNumber = latest.RevisionNumber;
+        CurrentIssuedRevisionNumber = report.Revisions.Where(item => item.Status == AssessmentReportRevisionStatus.Issued)
+            .Select(item => (int?)item.RevisionNumber).Max();
+        ActiveCorrectionExists = report.Revisions.Any(item => item.Status is AssessmentReportRevisionStatus.Draft
+            or AssessmentReportRevisionStatus.InReview or AssessmentReportRevisionStatus.Approved);
+        RevisionHistory = report.Revisions.OrderByDescending(item => item.RevisionNumber)
+            .Select(item => new RevisionHistoryItem(
+                item.Id, item.RevisionNumber, item.Status, item.Id == selected.Id, item.CreatedUtc,
+                item.SubmittedForReviewUtc, item.SubmittedForReviewByUserId,
+                item.ApprovedUtc, item.ApprovedByUserId,
+                item.IssuedUtc, item.IssuedByUserId,
+                NumberOf(item.BasedOnRevisionId), item.CorrectionReason, NumberOf(item.SupersededByRevisionId)))
+            .ToList();
+    }
+
+    public Task<IActionResult> OnPostSubmitForReviewAsync(CancellationToken ct = default)
+        => RunLifecycleAsync("Revision submitted for review.", async (revisionId, _) =>
+        {
+            var result = await _lifecycleService.SubmitForReviewAsync(revisionId, ExpectedConcurrencyStamp, User, ct);
+            return (result.State, revisionId);
+        }, ct);
+
+    public Task<IActionResult> OnPostApproveAsync(CancellationToken ct = default)
+        => RunLifecycleAsync("Revision approved.", async (revisionId, _) =>
+        {
+            var result = await _lifecycleService.ApproveAsync(revisionId, ExpectedConcurrencyStamp, User, ct);
+            return (result.State, revisionId);
+        }, ct);
+
+    public Task<IActionResult> OnPostRejectAsync(CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(LifecycleReason))
+        {
+            return RedirectWithMessageAsync("A reason is required to reject a revision.", isError: true);
+        }
+        return RunLifecycleAsync("Revision rejected.", async (revisionId, _) =>
+        {
+            var result = await _lifecycleService.RejectAsync(revisionId, ExpectedConcurrencyStamp, LifecycleReason, User, ct);
+            return (result.State, revisionId);
+        }, ct);
+    }
+
+    public Task<IActionResult> OnPostIssueAsync(CancellationToken ct = default)
+        => RunLifecycleAsync("Revision issued.", async (revisionId, _) =>
+        {
+            var result = await _lifecycleService.IssueAsync(revisionId, ExpectedConcurrencyStamp, User, ct);
+            return (result.State, revisionId);
+        }, ct);
+
+    public Task<IActionResult> OnPostCreateCorrectionAsync(CancellationToken ct = default)
+        => RunLifecycleAsync("Correction draft created.", async (_, reportId) =>
+        {
+            var result = await _lifecycleService.CreateCorrectionAsync(reportId, ExpectedConcurrencyStamp, LifecycleReason, User, ct);
+            return (result.State, result.RevisionId);
+        }, ct);
+
+    private Task<IActionResult> RedirectWithMessageAsync(string message, bool isError)
+    {
+        if (isError)
+        {
+            LifecycleError = message;
+        }
+        else
+        {
+            LifecycleMessage = message;
+        }
+        return Task.FromResult<IActionResult>(RedirectToPage("/Assessments/Report",
+            new { area = "Internal", assessmentId = AssessmentId, submittedResponseId = SubmittedResponseId, selectedRevisionId = RevisionId }));
+    }
+
+    private async Task<IActionResult> RunLifecycleAsync(
+        string successMessage,
+        Func<Guid, Guid, Task<(AssessmentReportLifecycleState State, Guid? RedirectRevisionId)>> action,
+        CancellationToken ct)
+    {
+        SetPrivateHeaders();
+        if (!RevisionId.HasValue || RevisionId.Value == Guid.Empty || ExpectedConcurrencyStamp == Guid.Empty)
+        {
+            return BadRequest();
+        }
+        var source = await FindSubmittedResponseAsync(AssessmentId, SubmittedResponseId, ct);
+        if (source is null || !IsOwnerAllowed(source.Assessment))
+        {
+            return NotFound();
+        }
+        var reportResult = await _reportService.GetBySubmittedResponseIdAsync(SubmittedResponseId, User, ct);
+        if (reportResult.State != AssessmentReportServiceState.Retrieved || reportResult.Report is not { } report
+            || report.Revisions.All(item => item.Id != RevisionId.Value))
+        {
+            return NotFound();
+        }
+
+        var (state, redirectRevisionId) = await action(RevisionId.Value, report.Id);
+        if (state == AssessmentReportLifecycleState.Forbidden || state == AssessmentReportLifecycleState.NotFound)
+        {
+            return NotFound();
+        }
+        if (state == AssessmentReportLifecycleState.Succeeded)
+        {
+            if (redirectRevisionId.HasValue)
+            {
+                RevisionId = redirectRevisionId;
+            }
+            return await RedirectWithMessageAsync(successMessage, isError: false);
+        }
+        return await RedirectWithMessageAsync(LifecycleErrorMessage(state), isError: true);
+    }
+
+    private static string LifecycleErrorMessage(AssessmentReportLifecycleState state) => state switch
+    {
+        AssessmentReportLifecycleState.ConcurrencyConflict => "This report changed after you opened it. Nothing was applied. Review the latest state below and try again if the action is still appropriate.",
+        AssessmentReportLifecycleState.InvalidTransition => "That action is not available for the revision in its current status.",
+        AssessmentReportLifecycleState.InvalidReason => "The reason provided is missing or invalid.",
+        AssessmentReportLifecycleState.ValidationFailed => "The report content is incomplete or invalid and cannot move forward. Review and correct the Draft first.",
+        AssessmentReportLifecycleState.InvalidSourceData => "The report source data is invalid for this action.",
+        AssessmentReportLifecycleState.ActiveCorrectionExists => "A correction is already in progress for this report.",
+        AssessmentReportLifecycleState.NoIssuedRevision => "There is no Issued revision to correct.",
+        _ => "The action could not be completed."
+    };
 
     public async Task<IActionResult> OnPostSaveIndustrialDataAsync(CancellationToken ct = default)
     {

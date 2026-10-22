@@ -51,6 +51,125 @@
         }
         else
         {
+            @if (!string.IsNullOrEmpty(Model.LifecycleMessage))
+            {
+                <div class="alert alert-success" role="status">@Model.LifecycleMessage</div>
+            }
+            @if (!string.IsNullOrEmpty(Model.LifecycleError))
+            {
+                <div class="alert alert-danger" role="alert">
+                    @Model.LifecycleError
+                    <a class="alert-link ms-2" asp-page="/Assessments/Report" asp-area="Internal" asp-route-assessmentId="@Model.AssessmentId" asp-route-submittedResponseId="@Model.SubmittedResponseId" asp-route-selectedRevisionId="@Model.RevisionId">Refresh</a>
+                </div>
+            }
+            <section class="card sentinel-card border-0 rounded-4 mb-4" aria-labelledby="lifecycleHeading">
+                <div class="card-body p-3 p-md-4">
+                    <h2 id="lifecycleHeading" class="h4 fw-semibold">Report lifecycle</h2>
+                    <p class="small text-secondary mb-2">
+                        Revision @Model.RevisionNumber · @Model.RevisionStatus
+                        @if (Model.CurrentIssuedRevisionNumber is { } issuedNumber) { <text> · Current Issued revision: @issuedNumber</text> }
+                        else { <text> · No Issued revision</text> }
+                    </p>
+                    <p class="small mb-2">
+                        <span class="badge text-bg-secondary">@(Model.IsActiveCorrectionRevision ? "Active revision" : Model.IsCurrentIssuedRevision ? "Current Issued revision" : "Historical revision")</span>
+                        @if (Model.IsLatestRevision) { <span class="badge text-bg-light">Latest</span> }
+                    </p>
+                    @if (Model.IsHistoricalRevision || (Model.RevisionStatus == SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Issued && !Model.IsCurrentIssuedRevision))
+                    {
+                        <div class="alert alert-info small">You are viewing a historical revision. It is read-only.
+                            <a class="alert-link" asp-page="/Assessments/Report" asp-area="Internal" asp-route-assessmentId="@Model.AssessmentId" asp-route-submittedResponseId="@Model.SubmittedResponseId">View the working revision</a>
+                        </div>
+                    }
+                    <div class="d-flex flex-wrap gap-3 align-items-start">
+                        @if (Model.CanSubmitForReview)
+                        {
+                            <form method="post" asp-page-handler="SubmitForReview">
+                                <input type="hidden" asp-for="AssessmentId" />
+                                <input type="hidden" asp-for="SubmittedResponseId" />
+                                <input type="hidden" asp-for="RevisionId" />
+                                <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                <button type="submit" class="btn-sentinel-primary">Submit for review</button>
+                            </form>
+                        }
+                        @if (Model.CanApprove)
+                        {
+                            <form method="post" asp-page-handler="Approve">
+                                <input type="hidden" asp-for="AssessmentId" />
+                                <input type="hidden" asp-for="SubmittedResponseId" />
+                                <input type="hidden" asp-for="RevisionId" />
+                                <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                <button type="submit" class="btn-sentinel-primary">Approve</button>
+                            </form>
+                        }
+                        @if (Model.CanIssue)
+                        {
+                            <form method="post" asp-page-handler="Issue">
+                                <input type="hidden" asp-for="AssessmentId" />
+                                <input type="hidden" asp-for="SubmittedResponseId" />
+                                <input type="hidden" asp-for="RevisionId" />
+                                <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                <button type="submit" class="btn-sentinel-primary">Issue</button>
+                            </form>
+                        }
+                        @if (Model.CanReject)
+                        {
+                            <form method="post" asp-page-handler="Reject">
+                                <input type="hidden" asp-for="AssessmentId" />
+                                <input type="hidden" asp-for="SubmittedResponseId" />
+                                <input type="hidden" asp-for="RevisionId" />
+                                <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                <label class="form-label small" for="rejectReason">Rejection reason (required)</label>
+                                <textarea id="rejectReason" name="LifecycleReason" class="form-control form-control-sm mb-2" maxlength="2000" required></textarea>
+                                <button type="submit" class="btn btn-outline-warning btn-sm">Reject</button>
+                            </form>
+                        }
+                        @if (Model.CanCreateCorrection)
+                        {
+                            <form method="post" asp-page-handler="CreateCorrection">
+                                <input type="hidden" asp-for="AssessmentId" />
+                                <input type="hidden" asp-for="SubmittedResponseId" />
+                                <input type="hidden" asp-for="RevisionId" />
+                                <input type="hidden" asp-for="ExpectedConcurrencyStamp" />
+                                <label class="form-label small" for="correctionReason">Correction reason (optional)</label>
+                                <textarea id="correctionReason" name="LifecycleReason" class="form-control form-control-sm mb-2" maxlength="2000"></textarea>
+                                <button type="submit" class="btn-sentinel-primary">Create correction</button>
+                            </form>
+                        }
+                    </div>
+                    @if (Model.RevisionStatus == SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Issued && Model.ActiveCorrectionExists)
+                    {
+                        <p class="small text-secondary mt-2 mb-0">A correction is already in progress, so a new one cannot be created.</p>
+                    }
+                    @if (Model.RevisionStatus is SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Rejected or SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Superseded)
+                    {
+                        <p class="small text-secondary mt-2 mb-0">This revision is @Model.RevisionStatus and read-only.</p>
+                    }
+                    <h3 class="h6 mt-4">Revision history</h3>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Revision</th><th>Status</th><th>Created</th><th>Submitted</th><th>Approved</th><th>Issued</th><th>Based on</th><th>Superseded by</th></tr></thead>
+                            <tbody>
+                            @foreach (var item in Model.RevisionHistory)
+                            {
+                                <tr>
+                                    <td>
+                                        @if (item.IsSelected) { <strong>@item.RevisionNumber (viewing)</strong> }
+                                        else { <a asp-page="/Assessments/Report" asp-area="Internal" asp-route-assessmentId="@Model.AssessmentId" asp-route-submittedResponseId="@Model.SubmittedResponseId" asp-route-selectedRevisionId="@item.Id">@item.RevisionNumber</a> }
+                                    </td>
+                                    <td>@item.Status</td>
+                                    <td>@item.CreatedUtc.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                                    <td>@(item.SubmittedForReviewUtc?.ToString("yyyy-MM-dd HH:mm") ?? "—")@(item.SubmittedForReviewByUserId is null ? "" : " · " + item.SubmittedForReviewByUserId)</td>
+                                    <td>@(item.ApprovedUtc?.ToString("yyyy-MM-dd HH:mm") ?? "—")@(item.ApprovedByUserId is null ? "" : " · " + item.ApprovedByUserId)</td>
+                                    <td>@(item.IssuedUtc?.ToString("yyyy-MM-dd HH:mm") ?? "—")@(item.IssuedByUserId is null ? "" : " · " + item.IssuedByUserId)</td>
+                                    <td>@(item.BasedOnRevisionNumber?.ToString() ?? "—")@(string.IsNullOrEmpty(item.CorrectionReason) ? "" : " · " + item.CorrectionReason)</td>
+                                    <td>@(item.SupersededByRevisionNumber?.ToString() ?? "—")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
             <div class="row g-4">
                 <div class="col-12 col-xl-6">
                     <section class="card sentinel-card border-0 rounded-4 h-100" aria-labelledby="evidenceHeading">
