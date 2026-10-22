@@ -13,7 +13,7 @@ namespace SentinelMfgSuite.Web.Tests;
 
 public sealed class ReportPdfRenderingTests
 {
-    private static readonly JsonSerializerOptions SnapshotJson = new()
+    internal static readonly JsonSerializerOptions SnapshotJson = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
@@ -582,12 +582,42 @@ public sealed class ReportPdfRenderingTests
 
     // ------------------------------------------------------ frozen-source guarantees
 
+    private static readonly string[] OrchestrationAndStorageTypeNames =
+    [
+        nameof(ReportPdfFinalizationService), nameof(IReportPdfFinalizationService),
+        nameof(ReportPdfFinalizationState), nameof(ReportPdfFinalizationResult),
+        nameof(ReportPdfReadState), nameof(ReportPdfReadResult),
+        nameof(IReportPdfStorage), nameof(FileSystemReportPdfStorage), nameof(ReportPdfStorageConfiguration),
+        nameof(ReportPdfStorageKeys), nameof(ReportPdfStorageWriteOutcome),
+        nameof(ReportPdfStorageException), nameof(ReportPdfStorageConflictException)
+    ];
+
+    /// <summary>
+    /// Every type in the PDF namespace is a rendering component unless it is on the explicit orchestration/storage
+    /// allow-list above, so a new database-dependent type cannot silently enter the rendering path.
+    /// </summary>
+    private static IEnumerable<Type> RenderingComponentTypes()
+        => typeof(ReportPdfModelBuilder).Assembly.GetTypes()
+            .Where(t => t.Namespace == typeof(ReportPdfModelBuilder).Namespace)
+            .Where(t => !t.Name.StartsWith('<') && !t.Name.Contains("DisplayClass", StringComparison.Ordinal))
+            .Where(t => !OrchestrationAndStorageTypeNames.Contains(t.Name));
+
+    [Fact]
+    public void Rendering_Component_Set_Includes_Builder_Renderer_Registry_And_Template()
+    {
+        var names = RenderingComponentTypes().Select(t => t.Name).ToHashSet();
+        Assert.Contains(nameof(ReportPdfModelBuilder), names);
+        Assert.Contains(nameof(ReportPdfRenderer), names);
+        Assert.Contains(nameof(ReportPdfTemplateRegistry), names);
+        Assert.Contains(nameof(SentinelAssessmentReportTemplateV1), names);
+        Assert.DoesNotContain(nameof(ReportPdfFinalizationService), names);
+    }
+
     [Fact]
     public void Rendering_Types_Have_No_Database_Scoring_Or_Questionnaire_Dependencies()
     {
         var forbidden = new[] { "DbContext", "IReadinessScoringService", "QuestionnaireDefinitionResolver", "AssessmentResponse" };
-        var types = typeof(ReportPdfModelBuilder).Assembly.GetTypes()
-            .Where(t => t.Namespace == typeof(ReportPdfModelBuilder).Namespace);
+        var types = RenderingComponentTypes();
 
         foreach (var type in types)
         {

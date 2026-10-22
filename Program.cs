@@ -82,6 +82,12 @@ builder.Services.AddScoped<IAssessmentReportService, AssessmentReportService>();
 builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfTemplateRegistry, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfTemplateRegistry>();
 builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfModelBuilder, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfModelBuilder>();
 builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfRenderer, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfRenderer>();
+builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfStorage>(sp =>
+    new SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.FileSystemReportPdfStorage(
+        SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfStorageConfiguration.ResolveRoot(
+            sp.GetRequiredService<IConfiguration>()[SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfStorageConfiguration.RootPathSetting],
+            sp.GetRequiredService<IHostEnvironment>())));
+builder.Services.AddScoped<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfFinalizationService, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationService>();
 builder.Services.AddScoped<IAssessmentReportRevisionContentService, AssessmentReportRevisionContentService>();
 builder.Services.AddScoped<IAssessmentReportLifecycleService, AssessmentReportLifecycleService>();
 builder.Services.AddSingleton<IAssessmentReportContentValidator, AssessmentReportContentValidator>();
