@@ -42,7 +42,8 @@ public sealed class AssessmentReportRevisionSchemaPostgresIntegrationTests
         Guid? supersededBy = null,
         Guid? id = null,
         string? submittedBy = null,
-        DateTime? submittedUtc = null)
+        DateTime? submittedUtc = null,
+        Guid? basedOn = null)
     {
         var revisionId = id ?? Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -56,9 +57,9 @@ public sealed class AssessmentReportRevisionSchemaPostgresIntegrationTests
         await db.Database.ExecuteSqlInterpolatedAsync($@"INSERT INTO ""AssessmentReportRevisions""
 (""Id"", ""AssessmentReportId"", ""RevisionNumber"", ""Status"", ""ExecutiveSummary"", ""ScopeAndMethodology"", ""AssumptionsAndLimitations"", ""NextSteps"",
  ""CreatedUtc"", ""UpdatedUtc"", ""CreatedByUserId"", ""UpdatedByUserId"", ""SubmittedForReviewUtc"", ""SubmittedForReviewByUserId"",
- ""ApprovedUtc"", ""ApprovedByUserId"", ""IssuedUtc"", ""IssuedByUserId"", ""SupersededByRevisionId"", ""ConcurrencyStamp"")
+ ""ApprovedUtc"", ""ApprovedByUserId"", ""IssuedUtc"", ""IssuedByUserId"", ""SupersededByRevisionId"", ""BasedOnRevisionId"", ""ConcurrencyStamp"")
 VALUES ({revisionId}, {reportId}, {number}, {status}, '', '', '', '', {now}, {now}, 'schema-test', 'schema-test', {submittedAt}, {submittedActor},
- {approvedAt}, {approvedActor}, {issuedAt}, {issuedActor}, {supersededBy}, {Guid.NewGuid()})");
+ {approvedAt}, {approvedActor}, {issuedAt}, {issuedActor}, {supersededBy}, {basedOn}, {Guid.NewGuid()})");
         return revisionId;
     }
 
@@ -113,7 +114,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {newId}, 2, 2, 3, 'issuer', {now}, NULL, {
     private static async Task<(Guid Old, Guid New)> InsertIssuedAndApprovedAsync(PostgresIntegrationTestFixture fixture, Guid reportId, int oldNumber = 2, int newNumber = 3)
     {
         var oldId = await InsertRevisionAsync(fixture, reportId, oldNumber, Issued, true, true, true);
-        var newId = await InsertRevisionAsync(fixture, reportId, newNumber, Approved, true, true);
+        var newId = await InsertRevisionAsync(fixture, reportId, newNumber, Approved, true, true, basedOn: oldId);
         return (oldId, newId);
     }
 

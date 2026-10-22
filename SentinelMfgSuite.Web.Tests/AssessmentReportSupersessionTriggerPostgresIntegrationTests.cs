@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models.Assessments;
@@ -17,7 +17,7 @@ namespace SentinelMfgSuite.Web.Tests;
 [Collection(PostgresIntegrationCollection.Name)]
 public sealed class AssessmentReportSupersessionTriggerPostgresIntegrationTests
 {
-    private const short Draft = 0, Approved = 2, Issued = 3, Rejected = 5;
+    private const short Draft = 0, Approved = 2, Issued = 3, Superseded = 4, Rejected = 5;
     private const string CheckViolation = "23514";
     private const string UniqueViolation = "23505";
     private const string ForeignKeyViolation = "23503";
@@ -44,25 +44,25 @@ public sealed class AssessmentReportSupersessionTriggerPostgresIntegrationTests
     {
         var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var oldId = await InsertRevisionAsync(fixture, chain.ReportId, 2, Issued);
-        var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved);
+        var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved, basedOn: oldId);
         return (chain.ReportId, oldId, newId);
     }
 
-    private static async Task<Guid> InsertRevisionAsync(PostgresIntegrationTestFixture fixture, Guid reportId, int number, short status, bool approvedStamps = false)
+    private static async Task<Guid> InsertRevisionAsync(PostgresIntegrationTestFixture fixture, Guid reportId, int number, short status, bool approvedStamps = false, Guid? basedOn = null, Guid? supersededBy = null)
     {
         var id = Guid.NewGuid();
         var now = DateTime.UtcNow.AddMinutes(-5);
         var submitted = status != Draft;
-        var approved = approvedStamps || status is Approved or Issued;
-        var issued = status is Issued;
+        var approved = approvedStamps || status is Approved or Issued or Superseded;
+        var issued = status is Issued or Superseded;
         await using var db = fixture.CreateDbContext();
         await db.Database.ExecuteSqlInterpolatedAsync($@"INSERT INTO ""AssessmentReportRevisions""
 (""Id"", ""AssessmentReportId"", ""RevisionNumber"", ""Status"", ""ExecutiveSummary"", ""ScopeAndMethodology"", ""AssumptionsAndLimitations"", ""NextSteps"",
  ""CreatedUtc"", ""UpdatedUtc"", ""CreatedByUserId"", ""UpdatedByUserId"", ""SubmittedForReviewUtc"", ""SubmittedForReviewByUserId"",
- ""ApprovedUtc"", ""ApprovedByUserId"", ""IssuedUtc"", ""IssuedByUserId"", ""SupersededByRevisionId"", ""ConcurrencyStamp"")
+ ""ApprovedUtc"", ""ApprovedByUserId"", ""IssuedUtc"", ""IssuedByUserId"", ""SupersededByRevisionId"", ""BasedOnRevisionId"", ""ConcurrencyStamp"")
 VALUES ({id}, {reportId}, {number}, {status}, '', '', '', '', {now}, {now}, 'trigger-test', 'trigger-test',
  {(submitted ? now : (DateTime?)null)}, {(submitted ? "submitter" : null)}, {(approved ? now : (DateTime?)null)}, {(approved ? "approver" : null)},
- {(issued ? now : (DateTime?)null)}, {(issued ? "issuer" : null)}, NULL, {Guid.NewGuid()})");
+ {(issued ? now : (DateTime?)null)}, {(issued ? "issuer" : null)}, {supersededBy}, {basedOn}, {Guid.NewGuid()})");
         return id;
     }
 
@@ -231,7 +231,7 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
         var fixture = await NewFixtureAsync();
         var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
         var oldId = await InsertRevisionAsync(fixture, chain.ReportId, 5, Issued);
-        var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved);
+        var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved, basedOn: oldId);
 
         await AssertCommitViolationAsync(() => ReplaceAsync(fixture, chain.ReportId, oldId, newId));
     }
@@ -451,6 +451,125 @@ VALUES ({Guid.NewGuid()}, {reportId}, {revisionId}, 2, {prev}, {next}, 'issuer',
         }
 
         Assert.Fail("Rival transaction never blocked on the first transaction's row lock.");
+    }
+
+    private static async Task AssertLineageViolationAsync(Func<Task> action)
+    {
+        var ex = await Assert.ThrowsAnyAsync<Exception>(action);
+        var pg = Pg(ex);
+        Assert.NotNull(pg);
+        Assert.Equal(CheckViolation, pg!.SqlState);
+        Assert.Contains("must be based on the revision it supersedes", pg.MessageText);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Correct_Lineage_Replacement_Commits_And_Is_Persisted()
+    {
+        var fixture = await NewFixtureAsync();
+        var (reportId, oldId, newId) = await NewPairAsync(fixture);
+
+        await ReplaceAsync(fixture, reportId, oldId, newId);
+
+        await using var db = fixture.CreateDbContext();
+        var replacement = await db.Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(r => r.Id == newId);
+        Assert.Equal(oldId, replacement.BasedOnRevisionId);
+        Assert.Equal(AssessmentReportRevisionStatus.Superseded, await StatusAsync(fixture, oldId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Null_Lineage_Replacement_Fails_At_Commit_And_Rolls_Back_Everything()
+    {
+        var fixture = await NewFixtureAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
+        var oldId = await InsertRevisionAsync(fixture, chain.ReportId, 2, Issued);
+        var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved);
+
+        await AssertLineageViolationAsync(() => ReplaceAsync(fixture, chain.ReportId, oldId, newId));
+
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, await StatusAsync(fixture, oldId));
+        Assert.Equal(AssessmentReportRevisionStatus.Approved, await StatusAsync(fixture, newId));
+        await using var db = fixture.CreateDbContext();
+        Assert.Null((await db.Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(r => r.Id == oldId)).SupersededByRevisionId);
+        Assert.Empty(await db.Set<AssessmentReportTransitionHistory>().AsNoTracking().Where(h => h.AssessmentReportId == chain.ReportId && h.EventType == AssessmentReportTransitionEventType.Transition).ToListAsync());
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Wrong_Non_Null_Lineage_Replacement_Fails_At_Commit_And_Rolls_Back_Everything()
+    {
+        var fixture = await NewFixtureAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
+        var earlier = await InsertRevisionAsync(fixture, chain.ReportId, 1, Rejected, approvedStamps: true);
+        var oldId = await InsertRevisionAsync(fixture, chain.ReportId, 2, Issued);
+        var newId = await InsertRevisionAsync(fixture, chain.ReportId, 3, Approved, basedOn: earlier);
+
+        await AssertLineageViolationAsync(() => ReplaceAsync(fixture, chain.ReportId, oldId, newId));
+
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, await StatusAsync(fixture, oldId));
+        Assert.Equal(AssessmentReportRevisionStatus.Approved, await StatusAsync(fixture, newId));
+        await using var db = fixture.CreateDbContext();
+        Assert.Empty(await db.Set<AssessmentReportTransitionHistory>().AsNoTracking().Where(h => h.AssessmentReportId == chain.ReportId && h.EventType == AssessmentReportTransitionEventType.Transition).ToListAsync());
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Cross_Report_Lineage_Cannot_Be_Persisted()
+    {
+        var fixture = await NewFixtureAsync();
+        var (reportId, oldId, _) = await NewPairAsync(fixture);
+        var other = await NewPairAsync(fixture);
+
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => InsertRevisionAsync(fixture, reportId, 7, Rejected, basedOn: other.Old));
+        Assert.Equal(ForeignKeyViolation, Pg(ex)!.SqlState);
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, await StatusAsync(fixture, oldId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Direct_Insert_As_Superseded_With_Null_Lineage_Replacement_Is_Rejected()
+    {
+        // Compatibility exploit attempt: a brand-new Superseded row (no migration-time grandfathering) pointing at an
+        // existing Issued replacement that has no lineage must be validated strictly.
+        var fixture = await NewFixtureAsync();
+        var chain = await AssessmentReportPostgresIntegrationTests.CreateReportWithoutRevisionsAsync(fixture);
+        var replacement = await InsertRevisionAsync(fixture, chain.ReportId, 5, Issued);
+
+        await AssertLineageViolationAsync(() => InsertRevisionAsync(fixture, chain.ReportId, 4, Superseded, supersededBy: replacement));
+
+        await using var db = fixture.CreateDbContext();
+        Assert.Equal(1, await db.Set<AssessmentReportRevision>().AsNoTracking().CountAsync(r => r.AssessmentReportId == chain.ReportId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Validator_Function_Enforces_Lineage()
+    {
+        var fixture = await NewFixtureAsync();
+        await using var db = fixture.CreateDbContext();
+        var definition = await db.Database.SqlQuery<string>(
+            $@"SELECT pg_get_functiondef('""AssessmentReportRevision_ValidateSupersession""()'::regprocedure) AS ""Value""").SingleAsync();
+        Assert.Contains("must be based on the revision it supersedes", definition);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Replacement_Lineage_Cannot_Be_Nulled_Or_Redirected_After_Issuance()
+    {
+        var fixture = await NewFixtureAsync();
+        var (reportId, oldId, newId) = await NewPairAsync(fixture);
+        await ReplaceAsync(fixture, reportId, oldId, newId);
+        var earlier = await InsertRevisionAsync(fixture, reportId, 1, Rejected, approvedStamps: true);
+
+        await using var db = fixture.CreateDbContext();
+        var nulled = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""AssessmentReportRevisions"" SET ""BasedOnRevisionId"" = NULL WHERE ""Id"" = {newId}"));
+        Assert.Equal(CheckViolation, Pg(nulled)!.SqlState);
+        var redirected = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""AssessmentReportRevisions"" SET ""BasedOnRevisionId"" = {earlier} WHERE ""Id"" = {newId}"));
+        Assert.Equal(CheckViolation, Pg(redirected)!.SqlState);
+
+        await using var verify = fixture.CreateDbContext();
+        Assert.Equal(oldId, (await verify.Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(r => r.Id == newId)).BasedOnRevisionId);
     }
 
     [Fact]
