@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using SentinelMfgSuite.Web.Data;
@@ -69,36 +69,11 @@ public sealed class AssessmentInvitationDeliveryService : IAssessmentInvitationD
             request.InvitationId,
             request.RawInvitationToken);
 
-        var encodedInvitationUrl = WebUtility.HtmlEncode(invitationUrl);
-        var encodedExpiration = WebUtility.HtmlEncode(request.ExpiresUtc.ToString("yyyy-MM-dd HH:mm 'UTC'"));
-
-        const string subject = "Sentinel AI Systems | Industrial Data & AI Readiness Assessment Invitation";
-        var htmlBody = $"""
-            <p>Hello,</p>
-            <p>
-                You are invited to complete the <strong>Industrial Data &amp; AI Readiness Assessment</strong>
-                from <strong>Sentinel AI Systems</strong>.
-            </p>
-            <p>
-                This questionnaire helps identify your current industrial data posture, integration priorities,
-                and practical AI readiness opportunities.
-            </p>
-            <p>
-                Start your assessment using this secure link:<br />
-                <a href=\"{encodedInvitationUrl}\">{encodedInvitationUrl}</a>
-            </p>
-            <p>
-                This invitation expires on <strong>{encodedExpiration}</strong>.
-            </p>
-            <p>
-                Regards,<br />
-                Sentinel AI Systems
-            </p>
-            """;
+        var rendered = SentinelMfgSuite.Web.Services.Email.BrandedEmailTemplates.AssessmentInvitation(invitationUrl, request.ExpiresUtc);
 
         try
         {
-            var sendResult = await _emailSender.SendAsync(request.RecipientEmail, subject, htmlBody);
+            var sendResult = await _emailSender.SendAsync(new EmailMessage(request.RecipientEmail, rendered.Subject, rendered.HtmlBody, rendered.TextBody, rendered.Classification));
 
             if (sendResult.Outcome == EmailSendOutcome.Suppressed)
             {
@@ -188,3 +163,4 @@ public sealed class AssessmentInvitationDeliveryService : IAssessmentInvitationD
             or AssessmentStatus.Completed;
 
 }
+

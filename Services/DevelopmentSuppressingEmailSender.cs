@@ -13,5 +13,10 @@ namespace SentinelMfgSuite.Web.Services
         {
             return Task.FromResult(EmailSendResult.Suppressed());
         }
+
+        public Task<EmailSendResult> SendAsync(EmailMessage message)
+        {
+            return Task.FromResult(EmailSendResult.Suppressed());
+        }
     }
 }

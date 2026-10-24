@@ -124,6 +124,39 @@ namespace SentinelMfgSuite.Web.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
+            modelBuilder.Entity<SentinelMfgSuite.Web.Models.Email.EmailOutboxMessage>(b =>
+            {
+                b.ToTable("EmailOutboxMessages");
+                b.HasKey(x => x.Id);
+                b.Property(x => x.BusinessEventKey).HasMaxLength(200).IsRequired();
+                b.Property(x => x.Classification).HasMaxLength(64).IsRequired();
+                b.Property(x => x.RecipientEmail).HasMaxLength(320).IsRequired();
+                b.Property(x => x.Subject).HasMaxLength(300).IsRequired();
+                b.Property(x => x.HtmlBody).IsRequired();
+                b.Property(x => x.TextBody).IsRequired();
+                b.Property(x => x.ProviderMessageId).HasMaxLength(200);
+                b.Property(x => x.LastFailureCode).HasMaxLength(100);
+                b.Property(x => x.NextAttemptUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.LockedUntilUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.CreatedUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.ProviderAcceptedUtc).HasColumnType("timestamp with time zone");
+                b.HasIndex(x => x.BusinessEventKey).IsUnique();
+                b.HasIndex(x => new { x.Status, x.NextAttemptUtc });
+                b.HasIndex(x => x.AssessmentId);
+                b.HasMany(x => x.Attempts).WithOne().HasForeignKey(a => a.OutboxMessageId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<SentinelMfgSuite.Web.Models.Email.EmailOutboxAttempt>(b =>
+            {
+                b.ToTable("EmailOutboxAttempts");
+                b.HasKey(x => x.Id);
+                b.Property(x => x.Outcome).HasMaxLength(50);
+                b.Property(x => x.FailureCode).HasMaxLength(100);
+                b.Property(x => x.StartedUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.CompletedUtc).HasColumnType("timestamp with time zone");
+                b.HasIndex(x => new { x.OutboxMessageId, x.AttemptNumber });
+            });
+
             modelBuilder.Entity<AssessmentResponse>(b =>
             {
                 b.HasKey(x => x.Id);

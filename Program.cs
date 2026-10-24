@@ -76,6 +76,12 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, TenantProvider>();
 builder.Services.AddScoped<IAssessmentInvitationAccessService, AssessmentInvitationAccessService>();
 builder.Services.AddScoped<IAssessmentQuestionnaireService, AssessmentQuestionnaireService>();
+builder.Services.AddScoped<SentinelMfgSuite.Web.Services.Email.IEmailOutboxWriter, SentinelMfgSuite.Web.Services.Email.EmailOutboxWriter>();
+builder.Services.AddScoped<SentinelMfgSuite.Web.Services.Email.IEmailOutboxDispatcher, SentinelMfgSuite.Web.Services.Email.EmailOutboxDispatcher>();
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHostedService<SentinelMfgSuite.Web.Services.Email.EmailOutboxHostedService>();
+}
 builder.Services.AddScoped<IAssessmentProvisioningService, AssessmentProvisioningService>();
 builder.Services.AddScoped<IAssessmentInvitationIssuanceService, AssessmentInvitationIssuanceService>();
 builder.Services.AddScoped<IAssessmentInvitationIssuanceTransactionParticipant, AssessmentInvitationIssuanceService>();

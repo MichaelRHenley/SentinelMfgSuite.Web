@@ -14,10 +14,18 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
     private readonly ApplicationDbContext _db;
     private readonly IAssessmentInvitationAccessService _accessService;
 
+    private readonly SentinelMfgSuite.Web.Services.Email.IEmailOutboxWriter? _outbox;
+
     public AssessmentQuestionnaireService(ApplicationDbContext db, IAssessmentInvitationAccessService accessService)
+        : this(db, accessService, null)
+    {
+    }
+
+    public AssessmentQuestionnaireService(ApplicationDbContext db, IAssessmentInvitationAccessService accessService, SentinelMfgSuite.Web.Services.Email.IEmailOutboxWriter? outbox)
     {
         _db = db;
         _accessService = accessService;
+        _outbox = outbox;
     }
 
     public async Task<AssessmentQuestionnaireLoadResult> LoadDraftAsync(Guid invitationId, string? invitationToken, CancellationToken ct = default)
@@ -318,6 +326,11 @@ public sealed class AssessmentQuestionnaireService : IAssessmentQuestionnaireSer
             {
                 await tx.RollbackAsync(ct);
                 return await TranslateAssessmentSubmissionFailureAsync(access.AssessmentId.Value, access.InvitationId.Value, ct);
+            }
+
+            if (_outbox is not null)
+            {
+                await _outbox.EnqueueSubmissionNotificationsAsync(access.AssessmentId.Value, access.InvitationId.Value, nowUtc, ct);
             }
 
             await tx.CommitAsync(ct);
