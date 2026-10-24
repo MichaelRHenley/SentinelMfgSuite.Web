@@ -221,6 +221,141 @@ public sealed class InternalAssessmentReportPageTests
         Assert.Contains("Executive Summary Draft saved.", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ExecutiveSummary_Save_Response_Renders_Refreshed_Revision_Stamp_In_Lifecycle_Forms()
+    {
+        var (factory, client, url, token, assessmentId, responseId, revisionId) = await SeedExecAsync();
+        await using var _ = factory;
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        var oldStamp = revision.ConcurrencyStamp;
+
+        var response = await client.PostAsync(url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["__RequestVerificationToken"] = token,
+            ["AssessmentId"] = assessmentId.ToString(),
+            ["SubmittedResponseId"] = responseId.ToString(),
+            ["RevisionId"] = revisionId.ToString(),
+            ["ExpectedConcurrencyStamp"] = oldStamp.ToString(),
+            ["Input.State"] = nameof(ReportAssessmentState.Assessed),
+            ["Input.Narrative"] = "Narrative"
+        }));
+        var html = await response.Content.ReadAsStringAsync();
+
+        var newStamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        Assert.NotEqual(oldStamp, newStamp);
+        Assert.Contains("Executive Summary Draft saved.", html, StringComparison.Ordinal);
+        Assert.Contains($"name=\"ExpectedConcurrencyStamp\" value=\"{newStamp}\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain($"value=\"{oldStamp}\"", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("SaveIndustrialData", "IndustrialInput")]
+    [InlineData("SaveAiOpportunities", "AiInput")]
+    [InlineData("SaveTechnicalGaps", "TechnicalInput")]
+    [InlineData("SaveRoadmap", "RoadmapInput")]
+    [InlineData("SaveExecutivePresentation", "PresentationInput")]
+    public async Task Content_Save_Handlers_Render_Refreshed_Stamp_And_Next_Save_Succeeds(string handler, string prefix)
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var oldStamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var form = ExecForm(seed, oldStamp);
+        form[$"{prefix}.State"] = nameof(ReportAssessmentState.NotAssessed);
+
+        var html = await (await seed.Client.PostAsync(seed.Url + "?handler=" + handler, new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+
+        var newStamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        Assert.NotEqual(oldStamp, newStamp);
+        Assert.Contains($"name=\"ExpectedConcurrencyStamp\" value=\"{newStamp}\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain($"value=\"{oldStamp}\"", html, StringComparison.Ordinal);
+
+        var second = ExecForm(seed, newStamp);
+        second[$"{prefix}.State"] = nameof(ReportAssessmentState.NotAssessed);
+        var secondHtml = await (await seed.Client.PostAsync(seed.Url + "?handler=" + handler, new FormUrlEncodedContent(second))).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("modified by another", secondHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(newStamp, (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp);
+    }
+
+    [Fact]
+    public async Task Save_Then_Lifecycle_Form_Posts_Rendered_Stamp_Without_Conflict()
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var oldStamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var form = ExecForm(seed, oldStamp);
+        form["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        form["Input.Narrative"] = "Narrative";
+        var html = await (await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+
+        var rendered = System.Text.RegularExpressions.Regex.Match(html,
+            "handler=SubmitForReview[\\s\\S]*?name=\"ExpectedConcurrencyStamp\" value=\"([0-9a-f-]{36})\"").Groups[1].Value;
+        var current = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        Assert.Equal(current.ToString(), rendered);
+
+        var submit = await seed.Client.PostAsync(seed.Url + "?handler=SubmitForReview", new FormUrlEncodedContent(ExecForm(seed, Guid.Parse(rendered))));
+        var message = await (await seed.Client.GetAsync(submit.Headers.Location)).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("modified", message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Genuinely_Stale_Stamp_Is_Rejected_After_Another_Save_And_Content_Is_Not_Overwritten()
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var staleStamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+
+        var first = ExecForm(seed, staleStamp);
+        first["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        first["Input.Narrative"] = "First save";
+        await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(first));
+        var afterFirst = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+
+        var stale = ExecForm(seed, staleStamp);
+        stale["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        stale["Input.Narrative"] = "Stale overwrite";
+        var html = await (await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(stale))).Content.ReadAsStringAsync();
+
+        Assert.DoesNotContain("Executive Summary Draft saved.", html, StringComparison.Ordinal);
+        var revision = (await factory.GetOnlyReportAsync()).Revisions.Single();
+        Assert.Equal(afterFirst, revision.ConcurrencyStamp);
+        Assert.Equal("First save", ConsultantReportContentSerializer.Deserialize(revision.ConsultantContentJson!).ExecutiveSummary.Narrative);
+    }
+
+    [Fact]
+    public async Task Invalid_Post_Redisplay_Keeps_Input_And_Renders_Current_Stamp()
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var stamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var form = ExecForm(seed, stamp);
+        form["Input.State"] = nameof(ReportAssessmentState.Assessed);
+        form["Input.Findings[0].Narrative"] = "Narrative without title";
+
+        var html = await (await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form))).Content.ReadAsStringAsync();
+
+        Assert.DoesNotContain("Executive Summary Draft saved.", html, StringComparison.Ordinal);
+        Assert.Contains("Narrative without title", html, StringComparison.Ordinal);
+        Assert.Contains($"name=\"ExpectedConcurrencyStamp\" value=\"{stamp}\"", html, StringComparison.Ordinal);
+        Assert.Equal(stamp, (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp);
+    }
+
+    [Fact]
+    public async Task Content_Save_Without_Antiforgery_Token_Is_Rejected_And_Anonymous_Is_Unauthorized()
+    {
+        var seed = await SeedExecAsync();
+        await using var factory = seed.Factory;
+        var stamp = (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp;
+        var form = ExecForm(seed, stamp);
+        form.Remove("__RequestVerificationToken");
+        form["Input.State"] = nameof(ReportAssessmentState.Assessed);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await seed.Client.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form))).StatusCode);
+        Assert.Equal(stamp, (await factory.GetOnlyReportAsync()).Revisions.Single().ConcurrencyStamp);
+
+        var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsync(seed.Url + "?handler=SaveExecutiveSummary", new FormUrlEncodedContent(form))).StatusCode);
+    }
+
     private async Task<(ReportPageFactory Factory, HttpClient Client, string Url, string Token, Guid AssessmentId, Guid ResponseId, Guid RevisionId)> SeedExecAsync(ConsultantReportContent? content = null)
     {
         var factory = new ReportPageFactory();

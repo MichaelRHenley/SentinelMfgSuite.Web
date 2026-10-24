@@ -656,6 +656,7 @@ public sealed class ReportModel : PageModel
 
     public override void OnPageHandlerExecuted(PageHandlerExecutedContext context)
     {
+        ModelState.Remove(nameof(ExpectedConcurrencyStamp));
         if (!_aiInputHandled && ReportContent is not null)
         {
             AiInput = AiOpportunitiesInput.From(ReportContent.AiOpportunitiesAndRoi);
