@@ -12,8 +12,19 @@ public enum AssessmentStatus : short
     Cancelled = 5
 }
 
+public enum AssessmentPaymentPolicy : short
+{
+    /// <summary>Created before payment enforcement. Invitations remain permitted without an order.</summary>
+    LegacyExempt = 0,
+
+    /// <summary>Requires a fully paid and verified order before any invitation is issued or sent.</summary>
+    Required = 1
+}
+
 public class Assessment
 {
+    public AssessmentPaymentPolicy PaymentPolicy { get; set; } = AssessmentPaymentPolicy.LegacyExempt;
+
     public Guid Id { get; set; }
 
     public string? Title { get; set; }

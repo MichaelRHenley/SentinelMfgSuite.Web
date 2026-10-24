@@ -82,6 +82,10 @@ if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHostedService<SentinelMfgSuite.Web.Services.Email.EmailOutboxHostedService>();
 }
+builder.Services.AddOptions<SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentPricingOptions>().Bind(builder.Configuration.GetSection(SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentPricingOptions.SectionName)).ValidateOnStart();
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentPricingOptions>, SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentPricingOptionsValidator>();
+builder.Services.AddScoped<SentinelMfgSuite.Web.Services.Assessments.Payments.IAssessmentOrderService, SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentOrderService>();
+builder.Services.AddScoped<SentinelMfgSuite.Web.Services.Assessments.Payments.IInvitationPaymentAuthorizer, SentinelMfgSuite.Web.Services.Assessments.Payments.InvitationPaymentAuthorizer>();
 builder.Services.AddScoped<IAssessmentProvisioningService, AssessmentProvisioningService>();
 builder.Services.AddScoped<IAssessmentInvitationIssuanceService, AssessmentInvitationIssuanceService>();
 builder.Services.AddScoped<IAssessmentInvitationIssuanceTransactionParticipant, AssessmentInvitationIssuanceService>();

@@ -44,6 +44,24 @@
                                 <span asp-validation-for="Input.CustomerContactEmail" class="text-danger"></span>
                             </div>
 
+                            <div class="mb-3">
+                                <label asp-for="Input.CustomerOrganization" class="form-label"></label>@if (Model.PaymentRequired) {<text> <span class="text-danger">*</span></text>}
+                                <input asp-for="Input.CustomerOrganization" class="form-control" autocomplete="off" />
+                                <span asp-validation-for="Input.CustomerOrganization" class="text-danger"></span>
+                            </div>
+
+                            <div class="mb-3">
+                                <label asp-for="Input.BillingContactName" class="form-label"></label>
+                                <input asp-for="Input.BillingContactName" class="form-control" autocomplete="off" />
+                                <span asp-validation-for="Input.BillingContactName" class="text-danger"></span>
+                            </div>
+
+                            <div class="mb-4">
+                                <label asp-for="Input.BillingContactEmail" class="form-label"></label>
+                                <input asp-for="Input.BillingContactEmail" class="form-control" autocomplete="off" />
+                                <span asp-validation-for="Input.BillingContactEmail" class="text-danger"></span>
+                            </div>
+
                             <div class="d-flex flex-wrap gap-2">
                                 <button type="submit" class="btn-sentinel-primary">Create Draft Assessment</button>
                                 <a href="/Internal/Assessments" class="btn btn-outline-light">Cancel</a>

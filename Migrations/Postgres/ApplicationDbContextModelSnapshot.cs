@@ -251,6 +251,11 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<short>("PaymentPolicy")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<string>("QuestionnaireVersion")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -345,6 +350,155 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                         .IsUnique();
 
                     b.ToTable("AssessmentInvitation");
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssessmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BillingContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("BillingContactName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("CustomerOrganization")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<short>("PaymentMethod")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("PaymentProvider")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PaymentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<short>("PaymentStatus")
+                        .HasColumnType("smallint");
+
+                    b.Property<bool>("PolicyReviewRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ProviderPaymentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("TaxAmount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("TaxLabel")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal>("TaxRate")
+                        .HasColumnType("numeric(7,5)");
+
+                    b.Property<short>("TaxTreatment")
+                        .HasColumnType("smallint");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerifiedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("VerifiedPaymentUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentId")
+                        .IsUnique();
+
+                    b.ToTable("AssessmentOrders");
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentPaymentEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<short>("ActorType")
+                        .HasColumnType("smallint");
+
+                    b.Property<short>("EventType")
+                        .HasColumnType("smallint");
+
+                    b.Property<short?>("FromStatus")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Metadata")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ProviderEventId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<short?>("ToStatus")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("Provider", "ProviderEventId")
+                        .IsUnique()
+                        .HasFilter("\"ProviderEventId\" IS NOT NULL");
+
+                    b.ToTable("AssessmentPaymentEvents");
                 });
 
             modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentReport", b =>
@@ -998,6 +1152,24 @@ namespace SentinelMfgSuite.Web.Migrations.Postgres
                     b.HasOne("SentinelMfgSuite.Web.Models.Assessments.Assessment", null)
                         .WithMany()
                         .HasForeignKey("AssessmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentOrder", b =>
+                {
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.Assessment", null)
+                        .WithMany()
+                        .HasForeignKey("AssessmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SentinelMfgSuite.Web.Models.Assessments.AssessmentPaymentEvent", b =>
+                {
+                    b.HasOne("SentinelMfgSuite.Web.Models.Assessments.AssessmentOrder", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

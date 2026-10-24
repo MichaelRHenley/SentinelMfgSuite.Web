@@ -26,10 +26,52 @@ public sealed class AssessmentProvisioningService : IAssessmentProvisioningServi
         ApplicationDbContext db,
         IAssessmentInvitationDeliveryService? deliveryService,
         IAssessmentInvitationIssuanceTransactionParticipant? issuanceParticipant)
+        : this(db, deliveryService, issuanceParticipant, null)
+    {
+    }
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public AssessmentProvisioningService(
+        ApplicationDbContext db,
+        IAssessmentInvitationDeliveryService? deliveryService,
+        IAssessmentInvitationIssuanceTransactionParticipant? issuanceParticipant,
+        Microsoft.Extensions.Options.IOptions<SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentPricingOptions>? pricing)
     {
         _db = db;
         _deliveryService = deliveryService;
         _issuanceParticipant = issuanceParticipant ?? new AssessmentInvitationIssuanceService(db);
+        _pricing = pricing?.Value;
+        _paymentPolicy = _pricing?.EnforcePayment == true ? AssessmentPaymentPolicy.Required : AssessmentPaymentPolicy.LegacyExempt;
+    }
+
+    private readonly AssessmentPaymentPolicy _paymentPolicy;
+    private readonly SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentPricingOptions? _pricing;
+
+    private AssessmentProvisioningResult? ValidatePricingIfRequired()
+    {
+        if (_paymentPolicy != AssessmentPaymentPolicy.Required) return null;
+        var error = _pricing!.Validate();
+        return error is null ? null : AssessmentProvisioningResult.Failure("PricingNotConfigured", error);
+    }
+
+    private AssessmentProvisioningResult? ValidateBillingIfRequired(AssessmentProvisioningRequest request)
+    {
+        if (_paymentPolicy != AssessmentPaymentPolicy.Required) return null;
+        var errors = SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentBillingValidator.Validate(
+            request.CustomerOrganization, request.BillingContactName, request.BillingContactEmail);
+        return errors.Count == 0 ? null : AssessmentProvisioningResult.Failure("BillingInformationInvalid", string.Join(" ", errors.Select(e => e.Message)));
+    }
+
+    private void StageOrderIfRequired(Assessment assessment, AssessmentProvisioningRequest request)
+    {
+        if (_paymentPolicy != AssessmentPaymentPolicy.Required) return;
+        SentinelMfgSuite.Web.Services.Assessments.Payments.AssessmentOrderService.StageOrder(
+            _db, _pricing!, assessment.Id,
+            request.CustomerOrganization!,
+            request.BillingContactName!,
+            request.BillingContactEmail!,
+            AssessmentPaymentMethod.BankTransfer,
+            request.OwnerUserId);
     }
 
     public async Task<AssessmentProvisioningResult> ProvisionAsync(AssessmentProvisioningRequest request, CancellationToken ct = default)
@@ -61,6 +103,11 @@ public sealed class AssessmentProvisioningService : IAssessmentProvisioningServi
         if (request.InitiationSource != AssessmentProvisioningInitiationSource.ManualAdmin)
         {
             return AssessmentProvisioningResult.Failure("UnsupportedInitiationSource", "The provisioning initiation source is not supported.");
+        }
+
+        if (_paymentPolicy == AssessmentPaymentPolicy.Required)
+        {
+            return await ProvisionInternalDraftAsync(request, ct);
         }
 
         if (_deliveryService is null)
@@ -99,6 +146,11 @@ public sealed class AssessmentProvisioningService : IAssessmentProvisioningServi
 
     private async Task<AssessmentProvisioningResult> ProvisionInternalDraftAsync(AssessmentProvisioningRequest request, CancellationToken ct)
     {
+        var pricingFailure = ValidatePricingIfRequired();
+        if (pricingFailure is not null) return pricingFailure;
+        var billingFailure = ValidateBillingIfRequired(request);
+        if (billingFailure is not null) return billingFailure;
+
         var nowUtc = DateTime.UtcNow;
 
         var assessment = new Assessment
@@ -108,6 +160,7 @@ public sealed class AssessmentProvisioningService : IAssessmentProvisioningServi
             SiteName = request.SiteName,
             ContactEmail = request.CustomerContactEmail,
             Status = AssessmentStatus.Draft,
+            PaymentPolicy = _paymentPolicy,
             CreatedUtc = nowUtc,
             UpdatedUtc = nowUtc,
             OwnerUserId = request.OwnerUserId,
@@ -115,6 +168,7 @@ public sealed class AssessmentProvisioningService : IAssessmentProvisioningServi
         };
 
         _db.Set<Assessment>().Add(assessment);
+        StageOrderIfRequired(assessment, request);
         await _db.SaveChangesAsync(ct);
 
         return AssessmentProvisioningResult.Success(assessment.Id);
@@ -148,6 +202,7 @@ public sealed class AssessmentProvisioningService : IAssessmentProvisioningServi
                 SiteName = request.SiteName,
                 ContactEmail = request.CustomerContactEmail,
                 Status = AssessmentStatus.Draft,
+                PaymentPolicy = _paymentPolicy,
                 CreatedUtc = nowUtc,
                 UpdatedUtc = nowUtc,
                 OwnerUserId = request.OwnerUserId,

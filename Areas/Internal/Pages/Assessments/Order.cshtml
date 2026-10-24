@@ -1,0 +1,86 @@
+@page "/Internal/Assessments/{assessmentId:guid}/Order"
+@model SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments.OrderModel
+@{
+    ViewData["Title"] = "Assessment Order";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<main class="sentinel-main">
+    <section class="container py-4 py-lg-5">
+        <div class="card sentinel-card border-0 rounded-4">
+            <div class="card-body p-3 p-md-4 p-lg-5">
+                <h1 class="h3 fw-semibold mb-3">Assessment Order</h1>
+
+                @if (Model.Message is not null)
+                {
+                    <div class="alert alert-info" role="status">@Model.Message</div>
+                }
+
+                <dl class="row mb-4">
+                    <dt class="col-sm-3">Assessment</dt>
+                    <dd class="col-sm-9">@Model.Assessment!.Title (@Model.Assessment.SiteName)</dd>
+                    <dt class="col-sm-3">Payment policy</dt>
+                    <dd class="col-sm-9">@Model.Assessment.PaymentPolicy</dd>
+                    <dt class="col-sm-3">Invitation eligibility</dt>
+                    <dd class="col-sm-9">@(Model.Eligibility.Allowed ? "Eligible" : "Not eligible") (@Model.Eligibility.Reason)</dd>
+                </dl>
+
+                @if (Model.Order is null)
+                {
+                    <div class="alert alert-secondary mb-0" role="status">No order exists for this assessment.</div>
+                }
+                else
+                {
+                    <dl class="row mb-4">
+                        <dt class="col-sm-3">Customer</dt>
+                        <dd class="col-sm-9">@Model.Order.CustomerOrganization</dd>
+                        <dt class="col-sm-3">Billing contact</dt>
+                        <dd class="col-sm-9">@Model.Order.BillingContactName (@Model.Order.BillingContactEmail)</dd>
+                        <dt class="col-sm-3">Price</dt>
+                        <dd class="col-sm-9">@Model.Order.UnitPrice.ToString("N2") @Model.Order.Currency</dd>
+                        <dt class="col-sm-3">Tax</dt>
+                        <dd class="col-sm-9">@Model.Order.TaxAmount.ToString("N2") @Model.Order.Currency (@Model.Order.TaxTreatment)</dd>
+                        <dt class="col-sm-3">Total</dt>
+                        <dd class="col-sm-9">@Model.Order.TotalAmount.ToString("N2") @Model.Order.Currency</dd>
+                        <dt class="col-sm-3">Payment status</dt>
+                        <dd class="col-sm-9">@Model.Order.PaymentStatus</dd>
+                        <dt class="col-sm-3">Payment method</dt>
+                        <dd class="col-sm-9">@Model.Order.PaymentMethod</dd>
+                        @if (Model.Order.PolicyReviewRequired)
+                        {
+                            <dt class="col-sm-3">Policy review</dt>
+                            <dd class="col-sm-9">Refund or dispute recorded: a business decision is required. Issued invitations and reports are unchanged.</dd>
+                        }
+                    </dl>
+
+                    @if (Model.Order.PaymentStatus == SentinelMfgSuite.Web.Models.Assessments.AssessmentPaymentStatus.Pending
+                        && Model.Order.PaymentMethod == SentinelMfgSuite.Web.Models.Assessments.AssessmentPaymentMethod.BankTransfer)
+                    {
+                        <form method="post" asp-page-handler="VerifyBankTransfer" asp-route-orderId="@Model.Order.Id" class="mb-4">
+                            <label class="form-label" for="PaymentReference">Bank transfer reference</label>
+                            <input class="form-control mb-2" id="PaymentReference" name="PaymentReference" maxlength="200" required />
+                            <button type="submit" class="btn-sentinel-primary">Verify bank transfer received</button>
+                        </form>
+                    }
+
+                    <h2 class="h5">Payment history</h2>
+                    <table class="table table-sm">
+                        <thead><tr><th>When (UTC)</th><th>Event</th><th>Status</th><th>Actor</th><th>Reference</th></tr></thead>
+                        <tbody>
+                        @foreach (var e in Model.Events)
+                        {
+                            <tr>
+                                <td>@e.OccurredUtc.ToString("u")</td>
+                                <td>@e.EventType</td>
+                                <td>@e.FromStatus → @e.ToStatus</td>
+                                <td>@e.ActorType @e.ActorId</td>
+                                <td>@e.PaymentReference</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </section>
+</main>

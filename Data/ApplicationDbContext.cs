@@ -19,6 +19,8 @@ namespace SentinelMfgSuite.Web.Data
         public DbSet<Tenant> Tenants { get; set; } = null!;
         public DbSet<TenantSubscription> TenantSubscriptions { get; set; } = null!;
         public DbSet<TenantUserRole> TenantUserRoles { get; set; } = null!;
+        public DbSet<AssessmentOrder> AssessmentOrders { get; set; } = null!;
+        public DbSet<AssessmentPaymentEvent> AssessmentPaymentEvents { get; set; } = null!;
         public DbSet<AssessmentReport> AssessmentReports { get; set; } = null!;
         public DbSet<AssessmentReportRevision> AssessmentReportRevisions { get; set; } = null!;
         public DbSet<AssessmentReportTransitionHistory> AssessmentReportTransitionHistory { get; set; } = null!;
@@ -94,6 +96,55 @@ namespace SentinelMfgSuite.Web.Data
                     .IsRequired()
                     .HasMaxLength(20)
                     .HasDefaultValue("1.0");
+            });
+
+            modelBuilder.Entity<Assessment>().Property(x => x.PaymentPolicy)
+                .HasColumnType("smallint").HasDefaultValue(AssessmentPaymentPolicy.LegacyExempt).IsRequired();
+
+            modelBuilder.Entity<AssessmentOrder>(b =>
+            {
+                b.HasKey(x => x.Id);
+                b.Property(x => x.CustomerOrganization).HasMaxLength(200).IsRequired();
+                b.Property(x => x.BillingContactName).HasMaxLength(200).IsRequired();
+                b.Property(x => x.BillingContactEmail).HasMaxLength(320).IsRequired();
+                b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+                b.Property(x => x.UnitPrice).HasColumnType("numeric(12,2)");
+                b.Property(x => x.TaxRate).HasColumnType("numeric(7,5)");
+                b.Property(x => x.TaxAmount).HasColumnType("numeric(12,2)");
+                b.Property(x => x.TotalAmount).HasColumnType("numeric(12,2)");
+                b.Property(x => x.TaxLabel).HasMaxLength(50);
+                b.Property(x => x.TaxTreatment).HasColumnType("smallint");
+                b.Property(x => x.PaymentStatus).HasColumnType("smallint");
+                b.Property(x => x.PaymentMethod).HasColumnType("smallint");
+                b.Property(x => x.PaymentProvider).HasMaxLength(50);
+                b.Property(x => x.ProviderPaymentReference).HasMaxLength(200);
+                b.Property(x => x.PaymentReference).HasMaxLength(200);
+                b.Property(x => x.VerifiedBy).HasMaxLength(200);
+                b.Property(x => x.CreatedBy).HasMaxLength(200);
+                b.Property(x => x.CreatedUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.UpdatedUtc).HasColumnType("timestamp with time zone");
+                b.Property(x => x.VerifiedPaymentUtc).HasColumnType("timestamp with time zone");
+                b.HasIndex(x => x.AssessmentId).IsUnique();
+                b.HasOne<Assessment>().WithMany().HasForeignKey(x => x.AssessmentId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<AssessmentPaymentEvent>(b =>
+            {
+                b.HasKey(x => x.Id);
+                b.Property(x => x.EventType).HasColumnType("smallint");
+                b.Property(x => x.FromStatus).HasColumnType("smallint");
+                b.Property(x => x.ToStatus).HasColumnType("smallint");
+                b.Property(x => x.ActorType).HasColumnType("smallint");
+                b.Property(x => x.ActorId).HasMaxLength(200);
+                b.Property(x => x.Provider).HasMaxLength(50);
+                b.Property(x => x.ProviderEventId).HasMaxLength(200);
+                b.Property(x => x.PaymentReference).HasMaxLength(200);
+                b.Property(x => x.Metadata).HasMaxLength(1000);
+                b.Property(x => x.OccurredUtc).HasColumnType("timestamp with time zone");
+                b.HasIndex(x => x.OrderId);
+                b.HasIndex(x => new { x.Provider, x.ProviderEventId }).IsUnique()
+                    .HasFilter("\"ProviderEventId\" IS NOT NULL");
+                b.HasOne<AssessmentOrder>().WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<AssessmentInvitation>(b =>

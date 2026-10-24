@@ -49,6 +49,9 @@ public sealed class AssessmentInvitationDeliveryService : IAssessmentInvitationD
                 && i.RevokedUtc == null
                 && i.ExpiresUtc > nowUtc
                 && _db.Set<Assessment>().Any(a => a.Id == i.AssessmentId
+                    && (a.PaymentPolicy == AssessmentPaymentPolicy.LegacyExempt
+                        || _db.Set<AssessmentOrder>().Any(o => o.AssessmentId == a.Id
+                            && o.PaymentStatus == AssessmentPaymentStatus.Paid && o.VerifiedPaymentUtc != null))
                     && (a.Status == AssessmentStatus.Invited
                         || a.Status == AssessmentStatus.InProgress
                         || a.Status == AssessmentStatus.Submitted

@@ -65,6 +65,9 @@ public sealed class AssessmentInvitationIssuanceService : IAssessmentInvitationI
         var assessmentRowsUpdated = await _db.Set<Assessment>()
             .Where(x => x.Id == assessmentId
                 && x.Status == AssessmentStatus.Draft
+                && (x.PaymentPolicy == AssessmentPaymentPolicy.LegacyExempt
+                    || _db.Set<AssessmentOrder>().Any(o => o.AssessmentId == x.Id
+                        && o.PaymentStatus == AssessmentPaymentStatus.Paid && o.VerifiedPaymentUtc != null))
                 && !_db.Set<AssessmentInvitation>().Any(i => i.AssessmentId == x.Id
                     && i.RevokedUtc == null
                     && i.ExpiresUtc > nowUtc))
@@ -81,6 +84,11 @@ public sealed class AssessmentInvitationIssuanceService : IAssessmentInvitationI
             if (assessment is null)
             {
                 return AssessmentInvitationIssuanceResult.Failure("AssessmentNotFound", "Assessment was not found.");
+            }
+
+            if (!await IsPaymentSatisfiedAsync(assessmentId, ct))
+            {
+                return AssessmentInvitationIssuanceResult.Failure("PaymentRequired", "A verified, fully paid order is required before an invitation can be issued.");
             }
 
             var hasActiveInvitation = await _db.Set<AssessmentInvitation>()
@@ -160,7 +168,10 @@ public sealed class AssessmentInvitationIssuanceService : IAssessmentInvitationI
                 && i.AccessCount == 0
                 && i.LastAccessUtc == null
                 && !_db.Set<AssessmentResponse>().Any(r => r.InvitationId == i.Id)
-                && _db.Set<Assessment>().Any(a => a.Id == assessmentId && a.Status == AssessmentStatus.Invited)
+                && _db.Set<Assessment>().Any(a => a.Id == assessmentId && a.Status == AssessmentStatus.Invited
+                    && (a.PaymentPolicy == AssessmentPaymentPolicy.LegacyExempt
+                        || _db.Set<AssessmentOrder>().Any(o => o.AssessmentId == a.Id
+                            && o.PaymentStatus == AssessmentPaymentStatus.Paid && o.VerifiedPaymentUtc != null)))
                 && !_db.Set<AssessmentInvitation>().Any(other => other.AssessmentId == assessmentId
                     && other.Id != i.Id
                     && other.RevokedUtc == null
@@ -241,6 +252,11 @@ public sealed class AssessmentInvitationIssuanceService : IAssessmentInvitationI
             return AssessmentInvitationReplacementIssuanceResult.Failure("IneligibleAssessmentStatus", "Assessment is not eligible for invitation replacement.");
         }
 
+        if (!await IsPaymentSatisfiedAsync(assessmentId, ct))
+        {
+            return AssessmentInvitationReplacementIssuanceResult.Failure("PaymentRequired", "A verified, fully paid order is required before an invitation can be replaced.");
+        }
+
         var invitation = await _db.Set<AssessmentInvitation>()
             .AsNoTracking()
             .SingleOrDefaultAsync(i => i.Id == invitationId, ct);
@@ -300,6 +316,12 @@ public sealed class AssessmentInvitationIssuanceService : IAssessmentInvitationI
 
         return AssessmentInvitationReplacementIssuanceResult.Failure("ReplacementConflict", "Invitation replacement could not be completed due to a concurrent change.");
     }
+
+    private Task<bool> IsPaymentSatisfiedAsync(Guid assessmentId, CancellationToken ct)
+        => _db.Set<Assessment>().AsNoTracking().AnyAsync(a => a.Id == assessmentId
+            && (a.PaymentPolicy == AssessmentPaymentPolicy.LegacyExempt
+                || _db.Set<AssessmentOrder>().Any(o => o.AssessmentId == a.Id
+                    && o.PaymentStatus == AssessmentPaymentStatus.Paid && o.VerifiedPaymentUtc != null)), ct);
 
     private static string GenerateToken()
     {

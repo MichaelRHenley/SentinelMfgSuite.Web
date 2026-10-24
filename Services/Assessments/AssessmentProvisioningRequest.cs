@@ -48,4 +48,10 @@ public sealed record AssessmentProvisioningRequest
     public string? OwnerUserId { get; }
 
     public string? ExternalPurchaseReference { get; }
+
+    public string? CustomerOrganization { get; init; }
+
+    public string? BillingContactName { get; init; }
+
+    public string? BillingContactEmail { get; init; }
 }
