@@ -1,5 +1,6 @@
 using SentinelMfgSuite.Web.Data;
 using SentinelMfgSuite.Web.Models.Assessments;
+using SentinelMfgSuite.Web.Models.Assessments.Questionnaire;
 
 namespace SentinelMfgSuite.Web.Services.Assessments;
 
@@ -110,7 +111,7 @@ public sealed class AssessmentProvisioningService : IAssessmentProvisioningServi
             CreatedUtc = nowUtc,
             UpdatedUtc = nowUtc,
             OwnerUserId = request.OwnerUserId,
-            QuestionnaireVersion = "2.0"
+            QuestionnaireVersion = QuestionnaireDefinitionResolver.CurrentVersion
         };
 
         _db.Set<Assessment>().Add(assessment);
@@ -150,7 +151,7 @@ public sealed class AssessmentProvisioningService : IAssessmentProvisioningServi
                 CreatedUtc = nowUtc,
                 UpdatedUtc = nowUtc,
                 OwnerUserId = request.OwnerUserId,
-                QuestionnaireVersion = "2.0"
+                QuestionnaireVersion = QuestionnaireDefinitionResolver.CurrentVersion
             };
 
             _db.Set<Assessment>().Add(assessment);

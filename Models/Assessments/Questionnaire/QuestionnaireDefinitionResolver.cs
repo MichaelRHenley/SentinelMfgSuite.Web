@@ -10,6 +10,9 @@ namespace SentinelMfgSuite.Web.Models.Assessments.Questionnaire;
 /// </summary>
 public static class QuestionnaireDefinitionResolver
 {
+    /// <summary>The questionnaire version assigned to newly provisioned assessments.</summary>
+    public const string CurrentVersion = "3.0";
+
     /// <summary>
     /// Resolves the <see cref="QuestionnaireDefinition"/> for the given questionnaire version.
     /// </summary>

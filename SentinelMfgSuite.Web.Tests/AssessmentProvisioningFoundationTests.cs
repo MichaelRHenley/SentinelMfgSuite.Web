@@ -160,7 +160,7 @@ public class AssessmentProvisioningFoundationTests
         Assert.Equal("customer@example.com", savedAssessment.ContactEmail);
         Assert.Equal("admin-user-1", savedAssessment.OwnerUserId);
         Assert.Equal(AssessmentStatus.Invited, savedAssessment.Status);
-        Assert.Equal("2.0", savedAssessment.QuestionnaireVersion);
+        Assert.Equal("3.0", savedAssessment.QuestionnaireVersion);
         Assert.Equal(savedAssessment.Id, savedInvitation.AssessmentId);
         Assert.Equal(AssessmentInvitationDeliveryStatus.Accepted, savedInvitation.DeliveryStatus);
         Assert.NotEqual(Guid.Empty, savedAssessment.Id);

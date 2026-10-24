@@ -18,7 +18,7 @@ public class AssessmentQuestionnaireVersionPersistenceTests
     }
 
     [Fact]
-    public async Task ProvisionAsync_For_InternalDraftAdmin_Initializes_QuestionnaireVersion_To_2_0()
+    public async Task ProvisionAsync_For_InternalDraftAdmin_Initializes_QuestionnaireVersion_To_Current_3_0()
     {
         await using var fixture = await TestDbFixture.CreateAsync();
         var service = new AssessmentProvisioningService(fixture.Db);
@@ -38,11 +38,11 @@ public class AssessmentQuestionnaireVersionPersistenceTests
             .AsNoTracking()
             .SingleAsync(x => x.Id == result.AssessmentId!.Value);
 
-        Assert.Equal("2.0", saved.QuestionnaireVersion);
+        Assert.Equal("3.0", saved.QuestionnaireVersion);
     }
 
     [Fact]
-    public async Task ProvisionManualWithInvitationAtomicAsync_Initializes_QuestionnaireVersion_To_2_0()
+    public async Task ProvisionManualWithInvitationAtomicAsync_Initializes_QuestionnaireVersion_To_Current_3_0()
     {
         await using var fixture = await TestDbFixture.CreateAsync();
         var service = new AssessmentProvisioningService(fixture.Db);
@@ -62,7 +62,7 @@ public class AssessmentQuestionnaireVersionPersistenceTests
             .AsNoTracking()
             .SingleAsync(x => x.Id == result.AssessmentId!.Value);
 
-        Assert.Equal("2.0", saved.QuestionnaireVersion);
+        Assert.Equal("3.0", saved.QuestionnaireVersion);
     }
 
     [Fact]
