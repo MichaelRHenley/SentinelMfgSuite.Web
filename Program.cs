@@ -80,6 +80,7 @@ builder.Services.AddScoped<IAssessmentInvitationReplacementSendService, Assessme
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAssessmentReportService, AssessmentReportService>();
 builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfTemplate, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.SentinelAssessmentReportTemplateV1>();
+builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfTemplate, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.SentinelAssessmentReportTemplateV2>();
 builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfTemplateRegistry, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfTemplateRegistry>();
 builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfModelBuilder, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfModelBuilder>();
 builder.Services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfRenderer, SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfRenderer>();
