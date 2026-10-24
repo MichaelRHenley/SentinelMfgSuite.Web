@@ -377,7 +377,7 @@ public sealed class ReportPdfRenderingTests
     [Fact]
     public void Registry_Rejects_Unknown_Versions_Without_Fallback()
     {
-        var resolution = Registry.Resolve("sentinel-assessment-report/3");
+        var resolution = Registry.Resolve("sentinel-assessment-report/4");
 
         Assert.False(resolution.IsSupported);
         Assert.Null(resolution.Template);

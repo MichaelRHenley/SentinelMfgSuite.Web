@@ -35,6 +35,9 @@
     <EmbeddedResource Include="Resources\Reports\Fonts\Lato-Regular.ttf" />
     <EmbeddedResource Include="Resources\Reports\Fonts\Lato-Bold.ttf" />
     <EmbeddedResource Include="Resources\Reports\Fonts\Lato-Italic.ttf" />
+    <EmbeddedResource Include="Resources\Reports\Images\sentinel-logo-white.png" />
+    <EmbeddedResource Include="Resources\Reports\Images\sentinel-logo-dark.png" />
+    <EmbeddedResource Include="Resources\Reports\Images\sentinel-emblem-dark.png" />
     <None Include="Resources\Reports\Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

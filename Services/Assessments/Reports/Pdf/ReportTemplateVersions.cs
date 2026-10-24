@@ -8,6 +8,8 @@ public static class ReportTemplateVersions
     /// <summary>Adds scoring interpretation, readable evidence and business-case framing. V1 stays frozen.</summary>
     public const string V2 = "sentinel-assessment-report/2";
 
+    public const string V3 = "sentinel-assessment-report/3";
+
     /// <summary>The template assigned to newly created Draft revisions.</summary>
     public const string Current = V2;
 }
@@ -41,7 +43,7 @@ public sealed class ReportPdfTemplateRegistry : IReportPdfTemplateRegistry
     private readonly IReadOnlyDictionary<string, IReportPdfTemplate> _templates;
 
     public ReportPdfTemplateRegistry()
-        : this(new IReportPdfTemplate[] { new SentinelAssessmentReportTemplateV1(), new SentinelAssessmentReportTemplateV2() })
+        : this(new IReportPdfTemplate[] { new SentinelAssessmentReportTemplateV1(), new SentinelAssessmentReportTemplateV2(), new SentinelAssessmentReportTemplateV3() })
     {
     }
 
