@@ -84,6 +84,7 @@ namespace SentinelMfgSuite.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(SentinelMfgSuite.Web.Services.Security.PublicRateLimiting.AnonymousPostPolicy)]
         public async Task<IActionResult> LaunchList(LaunchListForm model)
         {
             if (!ModelState.IsValid)
@@ -139,6 +140,7 @@ namespace SentinelMfgSuite.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(SentinelMfgSuite.Web.Services.Security.PublicRateLimiting.ContactPolicy)]
         public async Task<IActionResult> Contact(CustomBuildForm model)
         {
             if (!ModelState.IsValid)

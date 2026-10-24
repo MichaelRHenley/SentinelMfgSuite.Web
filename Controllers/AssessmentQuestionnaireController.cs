@@ -21,6 +21,7 @@ public class AssessmentQuestionnaireController : Controller
     }
 
     [HttpGet("/assessment/questionnaire/{invitationId:guid}")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(SentinelMfgSuite.Web.Services.Security.PublicRateLimiting.InvitationAccessPolicy)]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public async Task<IActionResult> Entry(Guid invitationId, [FromQuery(Name = "token")] string? invitationToken, CancellationToken ct = default)
     {
@@ -43,6 +44,7 @@ public class AssessmentQuestionnaireController : Controller
     }
 
     [HttpGet("/assessment/questionnaire/{invitationId:guid}/form")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(SentinelMfgSuite.Web.Services.Security.PublicRateLimiting.InvitationAccessPolicy)]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public async Task<IActionResult> Questionnaire(Guid invitationId, [FromQuery(Name = "token")] string? invitationToken, CancellationToken ct = default)
     {
@@ -69,6 +71,7 @@ public class AssessmentQuestionnaireController : Controller
     }
 
     [HttpPost("/assessment/questionnaire/{invitationId:guid}/draft")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(SentinelMfgSuite.Web.Services.Security.PublicRateLimiting.QuestionnaireSavePolicy)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveDraft(Guid invitationId, [FromBody] SaveDraftRequest request, CancellationToken ct = default)
     {
@@ -140,6 +143,7 @@ public class AssessmentQuestionnaireController : Controller
     }
 
     [HttpPost("/assessment/questionnaire/{invitationId:guid}/submit")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(SentinelMfgSuite.Web.Services.Security.PublicRateLimiting.QuestionnaireSavePolicy)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Submit(Guid invitationId, [FromBody] SaveDraftRequest request, CancellationToken ct = default)
     {

@@ -18,6 +18,7 @@ using SentinelMfgSuite.Web.Models;
 
 namespace SentinelMfgSuite.Web.Areas.Identity.Pages.Account
 {
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(SentinelMfgSuite.Web.Services.Security.PublicRateLimiting.LoginPolicy)]
     public class LoginModel : PageModel
     {
         private readonly SignInManager<ApplicationUser> _signInManager;
@@ -110,9 +111,8 @@ namespace SentinelMfgSuite.Web.Areas.Identity.Pages.Account
 
             if (ModelState.IsValid)
             {
-                // This doesn't count login failures towards account lockout
-                // To enable password failures to trigger account lockout, set lockoutOnFailure: true
-                var result = await _signInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+                // Failed passwords count toward account lockout (Identity defaults: 5 attempts, 5 minute lockout).
+                var result = await _signInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
                 if (result.Succeeded)
                 {
                     _logger.LogInformation("User logged in.");

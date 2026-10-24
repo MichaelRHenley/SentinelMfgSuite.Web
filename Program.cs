@@ -9,6 +9,7 @@ using SentinelMfgSuite.Web.Services.Assessments.Reports;
 using SentinelMfgSuite.Web.Services.Provisioning;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
+using SentinelMfgSuite.Web.Services.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
 {
     options.SignIn.RequireConfirmedAccount = false; // fine for now
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+    options.Lockout.AllowedForNewUsers = true;
 })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
@@ -63,6 +67,8 @@ else
     builder.Services.AddScoped<IEmailSender, SesEmailSender>();
 }
 
+
+builder.Services.AddPublicRateLimiting(builder.Configuration);
 
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 
@@ -122,13 +128,15 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedProto,
+    ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor,
+        ForwardLimit = 1,
     KnownProxies = { IPAddress.Loopback, IPAddress.IPv6Loopback }
 });
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
+app.UseRateLimiter();
 
 // 🔐 Important: auth BEFORE authorization
 app.UseAuthentication();
@@ -142,7 +150,7 @@ app.MapControllerRoute(
 // Identity UI (Razor Pages)
 app.MapRazorPages();
 
-app.MapGet("/_routes", (IEnumerable<EndpointDataSource> sources) =>
+var routesEndpoint = app.MapGet("/_routes", (IEnumerable<EndpointDataSource> sources) =>
 {
     var endpoints = sources.SelectMany(s => s.Endpoints)
         .Select(e => e.DisplayName)
@@ -152,5 +160,10 @@ app.MapGet("/_routes", (IEnumerable<EndpointDataSource> sources) =>
 
     return Results.Json(endpoints);
 });
+
+if (!app.Environment.IsDevelopment())
+{
+    routesEndpoint.RequireAuthorization("SentinelAssessmentAdmin");
+}
 
 app.Run();
