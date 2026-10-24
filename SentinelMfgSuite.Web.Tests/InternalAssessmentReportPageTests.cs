@@ -852,7 +852,7 @@ public sealed class InternalAssessmentReportPageTests
 
         Assert.DoesNotContain("Editing, review, approval", html, StringComparison.Ordinal);
         Assert.Contains("Draft editing is available", html, StringComparison.Ordinal);
-        Assert.Contains("Approval, issuance, PDF generation, and customer delivery are not yet available", html, StringComparison.Ordinal);
+        Assert.Contains("Internal PDF generation is available for Issued revisions; customer delivery is not yet available", html, StringComparison.Ordinal);
         Assert.Contains("Edit the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, Implementation Roadmap, and Executive Presentation Drafts", html, StringComparison.Ordinal);
         Assert.Contains("id=\"executivePresentation\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("editor not yet available", html, StringComparison.Ordinal);
@@ -2590,6 +2590,233 @@ public sealed class InternalAssessmentReportPageTests
         Assert.Equal(AssessmentReportRevisionStatus.Draft, (await factory.GetRevisionAsync(rev.Id)).Status);
     }
 
+    internal sealed class FakePdfService : SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfFinalizationService
+    {
+        public SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState FinalizeState { get; set; } = SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState.Succeeded;
+        public SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadResult ReadResult { get; set; } = new(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState.Succeeded, new byte[] { 0x25, 0x50, 0x44, 0x46 });
+        public bool ThrowOnCall { get; set; }
+        public int FinalizeCalls;
+        public int ReadCalls;
+
+        public Task<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationResult> FinalizeAsync(Guid revisionId, ClaimsPrincipal caller, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref FinalizeCalls);
+            if (ThrowOnCall) throw new InvalidOperationException("secret internal detail /var/pdfs");
+            return Task.FromResult(new SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationResult(FinalizeState, revisionId));
+        }
+
+        public Task<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadResult> ReadAsync(Guid revisionId, ClaimsPrincipal caller, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref ReadCalls);
+            if (ThrowOnCall) throw new InvalidOperationException("secret internal detail /var/pdfs");
+            return Task.FromResult(ReadResult);
+        }
+    }
+
+    private const string FakeSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    [Theory]
+    [InlineData(AssessmentReportRevisionStatus.Draft, false, false, false)]
+    [InlineData(AssessmentReportRevisionStatus.InReview, false, false, false)]
+    [InlineData(AssessmentReportRevisionStatus.Approved, false, false, false)]
+    [InlineData(AssessmentReportRevisionStatus.Rejected, false, false, false)]
+    [InlineData(AssessmentReportRevisionStatus.Issued, false, true, false)]
+    [InlineData(AssessmentReportRevisionStatus.Issued, true, false, true)]
+    [InlineData(AssessmentReportRevisionStatus.Superseded, true, false, true)]
+    [InlineData(AssessmentReportRevisionStatus.Superseded, false, false, false)]
+    public async Task Pdf_Action_Visibility_Matches_Status(AssessmentReportRevisionStatus status, bool finalized, bool expectGenerate, bool expectDownload)
+    {
+        var (factory, a, r, rev) = await SeedAsync(status);
+        await using var _ = factory;
+        if (finalized) await factory.SetPdfAsync(rev.Id, "reports/x", FakeSha, 10);
+        var html = await GetHtmlAsync(factory, a, r);
+        Assert.Equal(expectGenerate, html.Contains("handler=GeneratePdf", StringComparison.Ordinal));
+        Assert.Equal(expectDownload, html.Contains("handler=DownloadPdf", StringComparison.Ordinal));
+        Assert.DoesNotContain("reports/x", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(FakeSha, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Pdf_Generate_Succeeds_Without_Lifecycle_Change()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        var before = await factory.GetRevisionAsync(rev.Id);
+        var client = factory.CreateAdminClient();
+        var response = await PostLifecycleAsync(factory, client, a, r, "GeneratePdf", rev.Id, Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal(1, factory.Pdf.FinalizeCalls);
+        var html = await (await client.GetAsync(response.Headers.Location)).Content.ReadAsStringAsync();
+        Assert.Contains("PDF generated.", html, StringComparison.Ordinal);
+        var after = await factory.GetRevisionAsync(rev.Id);
+        Assert.Equal(AssessmentReportRevisionStatus.Issued, after.Status);
+        Assert.Equal(before.ConsultantContentJson, after.ConsultantContentJson);
+        Assert.Equal(before.ScoringSnapshot, after.ScoringSnapshot);
+    }
+
+    [Theory]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState.AlreadyFinalized, "already exists")]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState.ConcurrencyConflict, "changed while")]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState.StorageFailure, "could not be stored")]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState.InconsistentMetadata, "inconsistent")]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState.NotIssued, "Issued revision")]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState.InvalidSourceData, "cannot be rendered")]
+    public async Task Pdf_Generate_Typed_Outcomes_Show_Clear_Feedback(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState state, string expected)
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        factory.Pdf.FinalizeState = state;
+        var client = factory.CreateAdminClient();
+        var response = await PostLifecycleAsync(factory, client, a, r, "GeneratePdf", rev.Id, Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var html = await (await client.GetAsync(response.Headers.Location)).Content.ReadAsStringAsync();
+        Assert.Contains(expected, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Pdf_Generate_Forbidden_And_Unexpected_Exceptions_Do_Not_Leak()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        var client = factory.CreateAdminClient();
+        factory.Pdf.FinalizeState = SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfFinalizationState.Forbidden;
+        Assert.Equal(HttpStatusCode.NotFound, (await PostLifecycleAsync(factory, client, a, r, "GeneratePdf", rev.Id, Guid.NewGuid())).StatusCode);
+        factory.Pdf.ThrowOnCall = true;
+        var response = await PostLifecycleAsync(factory, client, a, r, "GeneratePdf", rev.Id, Guid.NewGuid());
+        var html = await (await client.GetAsync(response.Headers.Location)).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("secret internal detail", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Pdf_Generate_Enforces_Auth_Antiforgery_Ownership_And_Revision_Scope()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        var admin = factory.CreateAdminClient();
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["AssessmentId"] = a.ToString(), ["SubmittedResponseId"] = r.ToString(), ["RevisionId"] = rev.Id.ToString()
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync(factory.PageUrl(a, r) + "?handler=GeneratePdf", form)).StatusCode);
+        var stale = await admin.GetAsync(factory.PageUrl(a, r));
+        Assert.Equal(HttpStatusCode.OK, stale.StatusCode);
+        var staleHtml = await stale.Content.ReadAsStringAsync();
+        var tokenMatch = System.Text.RegularExpressions.Regex.Match(staleHtml, "name=\"__RequestVerificationToken\"[^>]*value=\"(?<token>[^\"]+)\"");
+        Assert.True(tokenMatch.Success);
+        await factory.SetOwnerAsync(a, "someone-else");
+        var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["AssessmentId"] = a.ToString(), ["SubmittedResponseId"] = r.ToString(), ["RevisionId"] = rev.Id.ToString(),
+            ["__RequestVerificationToken"] = WebUtility.HtmlDecode(tokenMatch.Groups["token"].Value)
+        });
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PostAsync(factory.PageUrl(a, r) + "?handler=GeneratePdf", tokenForm)).StatusCode);
+        var anon = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.PostAsync(factory.PageUrl(a, r) + "?handler=GeneratePdf", form)).StatusCode);
+        var user = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        user.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "user");
+        Assert.Equal(HttpStatusCode.Forbidden, (await user.PostAsync(factory.PageUrl(a, r) + "?handler=GeneratePdf", form)).StatusCode);
+        Assert.Equal(0, factory.Pdf.FinalizeCalls);
+    }
+
+    [Fact]
+    public async Task Pdf_Generate_Rejects_Unknown_And_Cross_Report_Revision()
+    {
+        var (factory, a, r, _) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _f = factory;
+        var client = factory.CreateAdminClient();
+        Assert.Equal(HttpStatusCode.NotFound, (await PostLifecycleAsync(factory, client, a, r, "GeneratePdf", Guid.NewGuid(), Guid.NewGuid())).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostLifecycleAsync(factory, client, a, r, "GeneratePdf", null, Guid.NewGuid())).StatusCode);
+        Assert.Equal(0, factory.Pdf.FinalizeCalls);
+    }
+
+    [Fact]
+    public async Task Pdf_Download_Returns_Safe_Private_Pdf_For_Superseded_Revision()
+    {
+        var (factory, a, r, rev1) = await SeedAsync(AssessmentReportRevisionStatus.Superseded);
+        await using var _ = factory;
+        await factory.AddRevisionAsync(2, AssessmentReportRevisionStatus.Issued, rev1.Id);
+        await factory.SetPdfAsync(rev1.Id, "reports/x", FakeSha, 4);
+        var response = await factory.CreateAdminClient().GetAsync(factory.PageUrl(a, r) + "?handler=DownloadPdf&selectedRevisionId=" + rev1.Id);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/pdf", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("sentinel-assessment-report-revision-1.pdf", response.Content.Headers.ContentDisposition!.FileName);
+        var cache = response.Headers.CacheControl!;
+        Assert.True(cache.NoStore);
+        Assert.True(cache.NoCache);
+        Assert.True(cache.Private);
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Theory]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState.Forbidden, HttpStatusCode.NotFound)]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState.NotFound, HttpStatusCode.NotFound)]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState.NotFinalized, HttpStatusCode.Conflict)]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState.ObjectMissing, HttpStatusCode.InternalServerError)]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState.IntegrityFailure, HttpStatusCode.InternalServerError)]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState.InconsistentMetadata, HttpStatusCode.InternalServerError)]
+    [InlineData(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState.StorageFailure, HttpStatusCode.InternalServerError)]
+    public async Task Pdf_Download_Failure_States_Never_Return_Bytes(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportPdfReadState state, HttpStatusCode expected)
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        factory.Pdf.ReadResult = new(state, new byte[] { 1, 2, 3 });
+        var response = await factory.CreateAdminClient().GetAsync(factory.PageUrl(a, r) + "?handler=DownloadPdf&selectedRevisionId=" + rev.Id);
+        Assert.Equal(expected, response.StatusCode);
+        Assert.NotEqual("application/pdf", response.Content.Headers.ContentType?.MediaType);
+        Assert.True(response.Headers.CacheControl!.NoStore);
+    }
+
+    [Fact]
+    public async Task Pdf_Download_Enforces_Auth_Ownership_And_Revision_Scope()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Issued, owner: "someone-else");
+        await using var _ = factory;
+        var url = factory.PageUrl(a, r) + "?handler=DownloadPdf&selectedRevisionId=" + rev.Id;
+        Assert.Equal(HttpStatusCode.NotFound, (await factory.CreateAdminClient().GetAsync(url)).StatusCode);
+        var anon = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.GetAsync(url)).StatusCode);
+        var user = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        user.DefaultRequestHeaders.Add(TestAuthHandler.HeaderName, "user");
+        Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync(url)).StatusCode);
+        Assert.Equal(0, factory.Pdf.ReadCalls);
+    }
+
+    [Fact]
+    public async Task Pdf_Download_Rejects_Missing_Unknown_Revision_Without_Reading()
+    {
+        var (factory, a, r, _) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _f = factory;
+        var client = factory.CreateAdminClient();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(factory.PageUrl(a, r) + "?handler=DownloadPdf")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(factory.PageUrl(a, r) + "?handler=DownloadPdf&selectedRevisionId=" + Guid.NewGuid())).StatusCode);
+        Assert.Equal(0, factory.Pdf.ReadCalls);
+    }
+
+    [Fact]
+    public async Task Pdf_Rejected_Correction_Leaves_Issued_Revision_Downloadable()
+    {
+        var (factory, a, r, rev1) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        await factory.AddRevisionAsync(2, AssessmentReportRevisionStatus.Rejected, rev1.Id);
+        await factory.SetPdfAsync(rev1.Id, "reports/x", FakeSha, 4);
+        var html = await GetHtmlAsync(factory, a, r, rev1.Id);
+        Assert.Contains("handler=DownloadPdf", html, StringComparison.Ordinal);
+        Assert.Contains("handler=CreateCorrection", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Pdf_Partial_Metadata_Shows_Inconsistent_And_No_Actions()
+    {
+        var (factory, a, r, rev) = await SeedAsync(AssessmentReportRevisionStatus.Issued);
+        await using var _ = factory;
+        await factory.SetPdfAsync(rev.Id, "reports/x", null, null);
+        var html = await GetHtmlAsync(factory, a, r);
+        Assert.Contains("PDF record inconsistent", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("handler=GeneratePdf", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("handler=DownloadPdf", html, StringComparison.Ordinal);
+    }
+
     private sealed class AlwaysValidContentValidator : IAssessmentReportContentValidator
     {
         public AssessmentReportContentValidationResult Validate(ConsultantReportContent content, AssessmentReportContentValidationContext context)
@@ -2602,6 +2829,7 @@ public sealed class InternalAssessmentReportPageTests
         private readonly string _ownerUserId;
 
         private readonly bool _stubLifecycleValidator;
+        public FakePdfService Pdf { get; } = new();
 
         public ReportPageFactory(string ownerUserId = "test-user", bool stubLifecycleValidator = false)
         {
@@ -2619,6 +2847,8 @@ public sealed class InternalAssessmentReportPageTests
             {
                 services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
                 services.RemoveAll<ApplicationDbContext>();
+                services.RemoveAll<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfFinalizationService>();
+                services.AddSingleton<SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.IReportPdfFinalizationService>(Pdf);
                 if (_stubLifecycleValidator)
                 {
                     services.RemoveAll<IAssessmentReportContentValidator>();
@@ -2816,6 +3046,26 @@ public sealed class InternalAssessmentReportPageTests
         {
             using var scope = Services.CreateScope();
             return await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(item => item.Id == revisionId);
+        }
+
+        public async Task SetOwnerAsync(Guid assessmentId, string owner)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var assessment = await db.Set<Assessment>().SingleAsync(item => item.Id == assessmentId);
+            assessment.OwnerUserId = owner;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task SetPdfAsync(Guid revisionId, string? key, string? sha, long? length)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var revision = await db.Set<AssessmentReportRevision>().SingleAsync(item => item.Id == revisionId);
+            revision.PdfStorageKey = key;
+            revision.PdfSha256 = sha;
+            revision.PdfLengthBytes = length;
+            await db.SaveChangesAsync();
         }
 
         public async Task SetStatusAsync(Guid revisionId, AssessmentReportRevisionStatus status)

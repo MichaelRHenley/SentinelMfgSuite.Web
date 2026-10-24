@@ -30,7 +30,7 @@
 
     <section class="container pb-5">
         <div class="alert alert-warning" role="status">
-            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, Implementation Roadmap, and Executive Presentation sections. Approval, issuance, PDF generation, and customer delivery are not yet available.
+            Internal report workspace. This is not an approved customer report. Draft editing is available for the Executive Summary, Industrial Data &amp; Systems, AI Opportunities &amp; ROI, Technical Gaps &amp; Architecture, Implementation Roadmap, and Executive Presentation sections. Internal PDF generation is available for Issued revisions; customer delivery is not yet available.
         </div>
 
         @if (!Model.RevisionId.HasValue)
@@ -136,6 +136,26 @@
                             </form>
                         }
                     </div>
+                    @if (Model.RevisionStatus is SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Issued or SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Superseded)
+                    {
+                        <div class="border-top mt-3 pt-3" id="pdfSection">
+                            <h3 class="h6">PDF</h3>
+                            <p class="small mb-2" id="pdfStatus">@(Model.HasFinalizedPdf ? "PDF generated" : Model.HasInconsistentPdfMetadata ? "PDF record inconsistent" : "PDF not generated")</p>
+                            @if (Model.CanGeneratePdf)
+                            {
+                                <form method="post" asp-page-handler="GeneratePdf">
+                                    <input type="hidden" asp-for="AssessmentId" />
+                                    <input type="hidden" asp-for="SubmittedResponseId" />
+                                    <input type="hidden" asp-for="RevisionId" />
+                                    <button type="submit" class="btn-sentinel-primary">Generate PDF</button>
+                                </form>
+                            }
+                            @if (Model.CanDownloadPdf)
+                            {
+                                <a class="btn btn-outline-light btn-sm" asp-page="/Assessments/Report" asp-area="Internal" asp-page-handler="DownloadPdf" asp-route-assessmentId="@Model.AssessmentId" asp-route-submittedResponseId="@Model.SubmittedResponseId" asp-route-selectedRevisionId="@Model.RevisionId">Download PDF</a>
+                            }
+                        </div>
+                    }
                     @if (Model.RevisionStatus == SentinelMfgSuite.Web.Models.Assessments.AssessmentReportRevisionStatus.Issued && Model.ActiveCorrectionExists)
                     {
                         <p class="small text-secondary mt-2 mb-0">A correction is already in progress, so a new one cannot be created.</p>

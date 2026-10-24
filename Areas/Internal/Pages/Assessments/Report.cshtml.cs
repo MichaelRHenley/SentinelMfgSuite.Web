@@ -12,6 +12,7 @@ using SentinelMfgSuite.Web.Models.Assessments.Questionnaire;
 using SentinelMfgSuite.Web.Models.Assessments.Reports;
 using SentinelMfgSuite.Web.Services.Assessments;
 using SentinelMfgSuite.Web.Services.Assessments.Reports;
+using SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf;
 using SentinelMfgSuite.Web.Services.Assessments.Scoring;
 
 namespace SentinelMfgSuite.Web.Areas.Internal.Pages.Assessments;
@@ -24,13 +25,19 @@ public sealed class ReportModel : PageModel
     private readonly IAssessmentReportService _reportService;
     private readonly IAssessmentReportRevisionContentService _contentService;
     private readonly IAssessmentReportLifecycleService _lifecycleService;
+    private readonly IReportPdfFinalizationService _pdfService;
+    private readonly ILogger<ReportModel> _logger;
 
     public ReportModel(
         ApplicationDbContext db,
         IAssessmentReportService reportService,
         IAssessmentReportRevisionContentService contentService,
-        IAssessmentReportLifecycleService lifecycleService)
+        IAssessmentReportLifecycleService lifecycleService,
+        IReportPdfFinalizationService pdfService,
+        ILogger<ReportModel> logger)
     {
+        _pdfService = pdfService;
+        _logger = logger;
         _db = db;
         _reportService = reportService;
         _contentService = contentService;
@@ -71,6 +78,10 @@ public sealed class ReportModel : PageModel
     public bool ActiveCorrectionExists { get; private set; }
     public bool IsLatestRevision { get; private set; }
     public int? LatestRevisionNumber { get; private set; }
+    public bool HasFinalizedPdf { get; private set; }
+    public bool HasInconsistentPdfMetadata { get; private set; }
+    public bool CanGeneratePdf => RevisionStatus == AssessmentReportRevisionStatus.Issued && !HasFinalizedPdf && !HasInconsistentPdfMetadata;
+    public bool CanDownloadPdf => HasFinalizedPdf && RevisionStatus is AssessmentReportRevisionStatus.Issued or AssessmentReportRevisionStatus.Superseded;
 
     public bool IsActiveCorrectionRevision => RevisionStatus is AssessmentReportRevisionStatus.Draft
         or AssessmentReportRevisionStatus.InReview or AssessmentReportRevisionStatus.Approved;
@@ -203,6 +214,9 @@ public sealed class ReportModel : PageModel
     private void PopulateLifecycle(AssessmentReport report, AssessmentReportRevision selected, AssessmentReportRevision latest)
     {
         var byId = report.Revisions.ToDictionary(item => item.Id);        int? NumberOf(Guid? id) => id.HasValue && byId.TryGetValue(id.Value, out var found) ? found.RevisionNumber : null;
+        var pdfFieldCount = (selected.PdfStorageKey is null ? 0 : 1) + (selected.PdfSha256 is null ? 0 : 1) + (selected.PdfLengthBytes is null ? 0 : 1);
+        HasFinalizedPdf = pdfFieldCount == 3;
+        HasInconsistentPdfMetadata = pdfFieldCount is > 0 and < 3;
         IsLatestRevision = selected.Id == latest.Id;
         LatestRevisionNumber = latest.RevisionNumber;
         CurrentIssuedRevisionNumber = report.Revisions.Where(item => item.Status == AssessmentReportRevisionStatus.Issued)
@@ -259,6 +273,113 @@ public sealed class ReportModel : PageModel
             var result = await _lifecycleService.CreateCorrectionAsync(reportId, ExpectedConcurrencyStamp, LifecycleReason, User, ct);
             return (result.State, result.RevisionId);
         }, ct);
+
+    public async Task<IActionResult> OnPostGeneratePdfAsync(CancellationToken ct = default)
+    {
+        SetPrivateHeaders();
+        if (!RevisionId.HasValue || RevisionId.Value == Guid.Empty)
+        {
+            return BadRequest();
+        }
+        var report = await ResolveReportAsync(ct);
+        if (report is null || report.Revisions.All(item => item.Id != RevisionId.Value))
+        {
+            return NotFound();
+        }
+
+        ReportPdfFinalizationResult result;
+        try
+        {
+            result = await _pdfService.FinalizeAsync(RevisionId.Value, User, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Unexpected failure generating PDF for report revision {RevisionId}.", RevisionId.Value);
+            return await RedirectWithMessageAsync("The PDF could not be generated. Try again later.", isError: true);
+        }
+        if (result.State is ReportPdfFinalizationState.Forbidden or ReportPdfFinalizationState.NotFound)
+        {
+            return NotFound();
+        }
+        if (result.State is not (ReportPdfFinalizationState.Succeeded or ReportPdfFinalizationState.AlreadyFinalized or ReportPdfFinalizationState.NotIssued or ReportPdfFinalizationState.ConcurrencyConflict))
+        {
+            _logger.LogError("PDF generation for report revision {RevisionId} failed with state {State}.", RevisionId.Value, result.State);
+        }
+        return result.State switch
+        {
+            ReportPdfFinalizationState.Succeeded => await RedirectWithMessageAsync("PDF generated.", isError: false),
+            ReportPdfFinalizationState.AlreadyFinalized => await RedirectWithMessageAsync("A PDF already exists for this revision. It was not regenerated.", isError: false),
+            _ => await RedirectWithMessageAsync(PdfFinalizationErrorMessage(result.State), isError: true)
+        };
+    }
+
+    public async Task<IActionResult> OnGetDownloadPdfAsync(CancellationToken ct = default)
+    {
+        Response.OnStarting(() =>
+        {
+            Response.Headers["Cache-Control"] = "private, no-store, no-cache, max-age=0";
+            Response.Headers["Pragma"] = "no-cache";
+            Response.Headers["Expires"] = "0";
+            Response.Headers["X-Content-Type-Options"] = "nosniff";
+            Response.Headers["Referrer-Policy"] = "no-referrer";
+            return Task.CompletedTask;
+        });
+        if (!SelectedRevisionId.HasValue || SelectedRevisionId.Value == Guid.Empty)
+        {
+            return NotFound();
+        }
+        var report = await ResolveReportAsync(ct);
+        var revision = report?.Revisions.SingleOrDefault(item => item.Id == SelectedRevisionId.Value);
+        if (revision is null)
+        {
+            return NotFound();
+        }
+
+        ReportPdfReadResult result;
+        try
+        {
+            result = await _pdfService.ReadAsync(revision.Id, User, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Unexpected failure reading PDF for report revision {RevisionId}.", revision.Id);
+            return StatusCode(StatusCodes.Status500InternalServerError);
+        }
+        switch (result.State)
+        {
+            case ReportPdfReadState.Succeeded when result.Content is { } content:
+                return File(content, "application/pdf", $"sentinel-assessment-report-revision-{revision.RevisionNumber}.pdf");
+            case ReportPdfReadState.Forbidden:
+            case ReportPdfReadState.NotFound:
+                return NotFound();
+            case ReportPdfReadState.NotFinalized:
+                return StatusCode(StatusCodes.Status409Conflict);
+            default:
+                _logger.LogError("PDF read for report revision {RevisionId} failed with state {State}.", revision.Id, result.State);
+                return StatusCode(StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private async Task<AssessmentReport?> ResolveReportAsync(CancellationToken ct)
+    {
+        var source = await FindSubmittedResponseAsync(AssessmentId, SubmittedResponseId, ct);
+        if (source is null || !IsOwnerAllowed(source.Assessment))
+        {
+            return null;
+        }
+        var reportResult = await _reportService.GetBySubmittedResponseIdAsync(SubmittedResponseId, User, ct);
+        return reportResult.State == AssessmentReportServiceState.Retrieved ? reportResult.Report : null;
+    }
+
+    private static string PdfFinalizationErrorMessage(ReportPdfFinalizationState state) => state switch
+    {
+        ReportPdfFinalizationState.NotIssued => "A PDF can only be generated for an Issued revision.",
+        ReportPdfFinalizationState.ConcurrencyConflict => "This revision changed while the PDF was being generated. Nothing was applied. Review the latest state and try again.",
+        ReportPdfFinalizationState.InvalidSourceData or ReportPdfFinalizationState.TemplateUnsupported => "The report data cannot be rendered as a PDF.",
+        ReportPdfFinalizationState.InconsistentMetadata => "The PDF record for this revision is inconsistent. Contact an administrator.",
+        ReportPdfFinalizationState.StorageFailure or ReportPdfFinalizationState.DatabaseFailure => "The PDF could not be stored. Try again later.",
+        _ => "The PDF could not be generated."
+    };
 
     private Task<IActionResult> RedirectWithMessageAsync(string message, bool isError)
     {
