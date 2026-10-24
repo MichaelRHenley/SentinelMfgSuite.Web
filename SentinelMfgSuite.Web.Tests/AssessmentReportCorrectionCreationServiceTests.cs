@@ -63,6 +63,27 @@ public sealed class AssessmentReportCorrectionCreationServiceTests
         return await fresh.Set<AssessmentReportRevision>().AsNoTracking().SingleAsync(r => r.Id == id);
     }
 
+	[Theory]
+	[InlineData(null)]
+	[InlineData("sentinel-assessment-report/1")]
+	[InlineData("sentinel-assessment-report/2")]
+	[InlineData("sentinel-assessment-report/3")]
+	public async Task Correction_Retains_The_Source_Template_Version_Not_The_Current_Default(string? sourceTemplate)
+	{
+		await using var f = await IssuedFixtureAsync();
+		f.Revision.ReportTemplateVersion = sourceTemplate;
+		await f.Db.SaveChangesAsync();
+		var source = await LoadAsync(f, f.Revision.Id);
+
+		var result = await Create(f).CreateCorrectionAsync(f.Report.Id, source.ConcurrencyStamp, "fix typo", Caller());
+
+		Assert.True(result.Succeeded);
+		var created = await LoadAsync(f, result.RevisionId!.Value);
+		Assert.Equal(sourceTemplate, created.ReportTemplateVersion);
+		var original = await LoadAsync(f, source.Id);
+		Assert.Equal(sourceTemplate, original.ReportTemplateVersion);
+		Assert.Equal(source.PdfSha256, original.PdfSha256);
+	}
     [Fact]
     public async Task Creates_Draft_Correction_With_Lineage_Copied_Data_And_Reset_Stamps()
     {

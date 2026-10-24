@@ -21,14 +21,17 @@ public sealed class ReportTemplateV3Tests
     }
 
     [Fact]
-    public void V3_Is_Registered_But_Current_Remains_V2()
+    public void V3_Is_Registered_And_Is_The_Current_Template()
     {
         Assert.Equal("sentinel-assessment-report/3", ReportTemplateVersions.V3);
-        Assert.Equal(ReportTemplateVersions.V2, ReportTemplateVersions.Current);
+        Assert.Equal(ReportTemplateVersions.V3, ReportTemplateVersions.Current);
         Assert.Equal(ReportTemplateVersions.V3, Registry.Resolve(ReportTemplateVersions.V3).ResolvedVersion);
         Assert.Equal(ReportTemplateVersions.V1, Registry.Resolve(ReportTemplateVersions.V1).ResolvedVersion);
         Assert.Equal(ReportTemplateVersions.V2, Registry.Resolve(ReportTemplateVersions.V2).ResolvedVersion);
         Assert.False(Registry.Resolve("sentinel-assessment-report/4").IsSupported);
+		Assert.False(Registry.Resolve("sentinel-assessment-report/unknown").IsSupported);
+		Assert.Equal(ReportTemplateVersions.V1, Registry.Resolve(null).ResolvedVersion);
+		Assert.True(Registry.Resolve(null).IsLegacyNullCompatibility);
     }
 
     [Theory]

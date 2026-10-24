@@ -32,7 +32,7 @@ public sealed class AssessmentReportServiceTests
         Assert.NotNull(revision.ScoringSnapshot);
         Assert.Equal(ReadinessScoringSnapshotSerializer.PersistedSchemaVersion, revision.ScoringSnapshotSchemaVersion);
         Assert.Null(revision.ScoringContractVersion);
-        Assert.Equal("sentinel-assessment-report/2", revision.ReportTemplateVersion);
+        Assert.Equal(SentinelMfgSuite.Web.Services.Assessments.Reports.Pdf.ReportTemplateVersions.V3, revision.ReportTemplateVersion);
         Assert.Equal("owner-1", revision.CreatedByUserId);
         var snapshot = ReadinessScoringSnapshotSerializer.Deserialize(revision.ScoringSnapshot!);
         Assert.Equal(ReadinessScoringSnapshotSerializer.CurrentSchemaVersion, snapshot.SchemaVersion);

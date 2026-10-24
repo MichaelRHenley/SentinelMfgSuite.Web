@@ -11,7 +11,7 @@ public static class ReportTemplateVersions
     public const string V3 = "sentinel-assessment-report/3";
 
     /// <summary>The template assigned to newly created Draft revisions.</summary>
-    public const string Current = V2;
+    public const string Current = V3;
 }
 
 public interface IReportPdfTemplate
